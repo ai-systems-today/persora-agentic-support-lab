@@ -253,7 +253,10 @@ function LayerPanel({ layer }: { layer: EvidenceLayer }) {
         {layer.fields.map((item) => (
           <article className="evidence-row" key={item.label}>
             <div className="evidence-name"><span>{item.label}</span><small>{item.detail}</small></div>
-            <div className="evidence-value"><strong>{item.value}</strong><em className={`status ${item.status}`}>{statusLabel[item.status]}</em></div>
+            <div className="evidence-value">
+              {item.href ? <a href={item.href} target="_blank" rel="noreferrer">{item.value} ↗</a> : <strong>{item.value}</strong>}
+              <em className={`status ${item.status}`}>{statusLabel[item.status]}</em>
+            </div>
           </article>
         ))}
       </div>
@@ -267,6 +270,7 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
 
   const agentic = turn.runtime.mode === "agentic";
   const publishedExecuted = !agentic || Boolean(turn.runtime.nodeTrace?.some((entry) => entry.node === "published_netflix_agent"));
+  const langfuse = turn.runtime.integrations?.langfuse;
 
   const replace = (id: EvidenceLayer["id"], fields: EvidenceLayer["fields"]): EvidenceLayer[] =>
     item.layers.map((layer) => layer.id === id ? { ...layer, fields } : layer);
@@ -291,7 +295,7 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
     { label: "Trace identifier", value: turn.runtime.traceId, status: "runtime-proven", detail: "Generated for this request and sent as x-trace-id." },
     { label: "End-to-end latency", value: `${turn.runtime.totalMs} ms`, status: "runtime-proven", detail: "Measured in the browser from request start through stream completion." },
     { label: "Prompt version", value: turn.runtime.promptVersion ?? "Not captured", status: turn.runtime.promptVersion ? "runtime-proven" : "not-captured", detail: "Version returned by the server execution contract." },
-    { label: "Langfuse observation", value: turn.runtime.integrations?.langfuse.executed ? turn.runtime.integrations.langfuse.traceId ?? "Executed" : "Not executed", status: turn.runtime.integrations?.langfuse.executed ? "runtime-proven" : "not-executed", detail: "Only marked executed when a Langfuse trace identifier is returned." },
+    { label: "Langfuse observation", value: langfuse?.executed ? langfuse.traceId ?? "Executed" : langfuse?.configured ? "Export failed" : "Not configured", href: langfuse?.executed ? langfuse.traceUrl ?? undefined : undefined, status: langfuse?.executed ? "runtime-proven" : "not-executed", detail: langfuse?.executed ? "The server accepted an OTLP trace for this exact run; open it in Langfuse." : langfuse?.error ?? "Server-side Langfuse credentials are absent; no trace is claimed." },
   ] } : layer);
   return next.map((layer) => layer.id === "quality" ? { ...layer, fields: [
     { label: "Answer present", value: turn.answer.trim() ? "Passed" : "Failed", status: "runtime-proven", detail: "Programmatic validation checked that the live stream produced answer text." },

@@ -10,6 +10,7 @@ export type Pattern = "sequential" | "concurrent" | "group-chat" | "handoff" | "
 export type EvidenceField = {
   label: string;
   value: string;
+  href?: string;
   status: EvidenceStatus;
   detail: string;
 };
@@ -62,7 +63,13 @@ export type RuntimeEvidence = {
   protocolEvents?: Array<{ type: string; source: string; target: string }>;
   integrations?: {
     langGraph: { executed: boolean; version: string };
-    langfuse: { executed: boolean; traceId: string | null };
+    langfuse: {
+      configured: boolean;
+      executed: boolean;
+      traceId: string | null;
+      traceUrl: string | null;
+      error: string | null;
+    };
     ragas: { executed: boolean; scores: Record<string, number> | null };
     neo4j: { executed: boolean; records: number | null };
   };

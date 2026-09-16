@@ -70,9 +70,21 @@ Current execution truth:
 | Prompt version | Returned by every agentic run |
 | AG-UI-compatible lifecycle envelopes | Returned by every agentic run |
 | A2A | Not claimed; group coordination emits clearly labelled task-result envelopes, not a remote Agent Card exchange |
-| Langfuse | Not executed until credentials are configured and a trace ID is returned |
+| Langfuse | OTLP exporter implemented; executed only when server-side credentials are configured and Langfuse accepts the trace |
 | RAGAS | Not executed until an evaluator job runs and returns metric scores |
 | Neo4j GraphRAG | Not executed until a graph query returns records |
+
+### Enable Langfuse execution proof
+
+Configure these as Supabase Edge Function secrets—never as browser `VITE_*` variables:
+
+```text
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+```
+
+The function sends one OTLP root span plus one child span per executed LangGraph node to Langfuse's `/api/public/otel/v1/traces` endpoint. Session identifiers are SHA-256 hashed before export, and inputs rejected by the authorization guardrail are redacted. The evidence drawer marks Langfuse **Runtime-proven** only after the endpoint accepts that exact run and returns its real trace ID. Missing credentials or an export failure remain visibly non-executed.
 
 ## Five-minute interview flow
 

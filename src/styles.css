@@ -199,6 +199,7 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
 .evidence-name small { color: #7288a6; line-height: 1.45; display: block; margin-top: 6px; }
 .evidence-value { text-align: right; }
 .evidence-value strong { display: block; font-size: 11px; line-height: 1.45; }
+.evidence-value a { display: block; color: #8ec5ff; font-size: 11px; font-weight: 800; line-height: 1.45; overflow-wrap: anywhere; }
 .status { display: inline-block; font-style: normal; border-radius: 99px; padding: 5px 8px; margin-top: 7px; font-size: 8px; text-transform: uppercase; letter-spacing: .07em; font-weight: 900; }
 .status.runtime-proven { background: #123d34; color: #69e4bd; }
 .status.repo-defined { background: #18395e; color: #93c4ff; }

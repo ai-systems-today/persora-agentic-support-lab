@@ -14,6 +14,13 @@ const LANGGRAPH_VERSION = "1.4.15";
 type Pattern = "sequential" | "concurrent" | "group-chat" | "handoff" | "magentic";
 type TraceEntry = { node: string; status: "complete" | "blocked" | "failed"; durationMs: number };
 type ProtocolEvent = { type: string; source: string; target: string };
+type LangfuseEvidence = {
+  configured: boolean;
+  executed: boolean;
+  traceId: string | null;
+  traceUrl: string | null;
+  error: string | null;
+};
 
 const State = Annotation.Root({
   message: Annotation<string>,
@@ -106,6 +113,127 @@ async function callPublishedAgent(state: typeof State.State) {
   return { answer: stream.answer.trim(), citations: stream.citations, eventTypes: stream.eventTypes };
 }
 
+const randomHex = (bytes: number) => Array.from(crypto.getRandomValues(new Uint8Array(bytes)))
+  .map((value) => value.toString(16).padStart(2, "0"))
+  .join("");
+
+const sha256 = async (value: string) => Array.from(
+  new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))),
+).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+
+const otelAttribute = (key: string, value: string | number | boolean) => ({
+  key,
+  value: typeof value === "number"
+    ? { intValue: String(Math.round(value)) }
+    : typeof value === "boolean"
+      ? { boolValue: value }
+      : { stringValue: value },
+});
+
+async function emitLangfuseTrace(input: {
+  requestTraceId: string;
+  message: string;
+  answer: string;
+  sessionToken: string;
+  pattern: Pattern;
+  guardrailDecision: "allow" | "block";
+  citations: unknown[];
+  nodeTrace: TraceEntry[];
+  totalMs: number;
+}): Promise<LangfuseEvidence> {
+  const publicKey = Deno.env.get("LANGFUSE_PUBLIC_KEY")?.trim();
+  const secretKey = Deno.env.get("LANGFUSE_SECRET_KEY")?.trim();
+  const baseUrl = (
+    Deno.env.get("LANGFUSE_BASE_URL")?.trim() ||
+    Deno.env.get("LANGFUSE_HOST")?.trim() ||
+    "https://cloud.langfuse.com"
+  ).replace(/\/$/, "");
+  if (!publicKey || !secretKey) {
+    return { configured: false, executed: false, traceId: null, traceUrl: null, error: null };
+  }
+
+  const traceId = randomHex(16);
+  const rootSpanId = randomHex(8);
+  const sessionId = (await sha256(input.sessionToken)).slice(0, 32);
+  const traceInput = input.guardrailDecision === "block"
+    ? { question: "[REDACTED_BY_AUTHORIZATION_GUARDRAIL]" }
+    : { question: input.message };
+  const endNanos = BigInt(Date.now()) * 1_000_000n;
+  const startNanos = endNanos - BigInt(Math.max(input.totalMs, 1)) * 1_000_000n;
+  let cursorNanos = startNanos;
+  const childSpans = input.nodeTrace.map((entry) => {
+    const spanStart = cursorNanos;
+    const spanEnd = spanStart + BigInt(Math.max(entry.durationMs, 1)) * 1_000_000n;
+    cursorNanos = spanEnd;
+    return {
+      traceId,
+      spanId: randomHex(8),
+      parentSpanId: rootSpanId,
+      name: entry.node,
+      kind: 1,
+      startTimeUnixNano: String(spanStart),
+      endTimeUnixNano: String(spanEnd > endNanos ? endNanos : spanEnd),
+      attributes: [
+        otelAttribute("langfuse.observation.type", "span"),
+        otelAttribute("persora.node.status", entry.status),
+        otelAttribute("persora.node.duration_ms", entry.durationMs),
+      ],
+      status: { code: entry.status === "failed" ? 2 : 1 },
+    };
+  });
+  const rootSpan = {
+    traceId,
+    spanId: rootSpanId,
+    name: "persora-netflix-support",
+    kind: 1,
+    startTimeUnixNano: String(startNanos),
+    endTimeUnixNano: String(endNanos),
+    attributes: [
+      otelAttribute("langfuse.observation.type", "span"),
+      otelAttribute("langfuse.observation.input", JSON.stringify(traceInput)),
+      otelAttribute("langfuse.observation.output", JSON.stringify({ answer: input.answer })),
+      otelAttribute("langfuse.session.id", sessionId),
+      otelAttribute("langfuse.trace.name", "persora-netflix-support"),
+      otelAttribute("langfuse.trace.tags", JSON.stringify(["interview-demo", input.pattern])),
+      otelAttribute("langfuse.version", PROMPT_VERSION),
+      otelAttribute("persora.request.trace_id", input.requestTraceId),
+      otelAttribute("persora.pattern", input.pattern),
+      otelAttribute("persora.guardrail.decision", input.guardrailDecision),
+      otelAttribute("persora.citation_count", input.citations.length),
+    ],
+    status: { code: 1 },
+  };
+
+  try {
+    const response = await fetch(`${baseUrl}/api/public/otel/v1/traces`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${btoa(`${publicKey}:${secretKey}`)}`,
+        "Content-Type": "application/json",
+        "x-langfuse-ingestion-version": "4",
+      },
+      body: JSON.stringify({
+        resourceSpans: [{
+          resource: { attributes: [otelAttribute("service.name", "persora-agentic-support-lab")] },
+          scopeSpans: [{ scope: { name: "persora-agentic-support-demo", version: PROMPT_VERSION }, spans: [rootSpan, ...childSpans] }],
+        }],
+      }),
+    });
+    if (!response.ok) throw new Error(`Langfuse OTLP returned HTTP ${response.status}`);
+    return {
+      configured: true,
+      executed: true,
+      traceId,
+      traceUrl: `${baseUrl}/trace/${traceId}`,
+      error: null,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Langfuse export failed";
+    console.error(JSON.stringify({ requestTraceId: input.requestTraceId, integration: "langfuse", error: message }));
+    return { configured: true, executed: false, traceId, traceUrl: null, error: message };
+  }
+}
+
 const graph = new StateGraph(State)
   .addNode("intake", timed("intake", (state) => ({ pattern: classifyPattern(state.message) })))
   .addNode("authorization_guardrail", timed("authorization_guardrail", (state) => {
@@ -182,12 +310,24 @@ Deno.serve(async (req: Request) => {
       nodeTrace: [],
       protocolEvents: [{ type: "RUN_STARTED", source: "ui", target: "langgraph" }],
     });
+    const totalMs = Math.round(performance.now() - started);
+    const langfuse = await emitLangfuseTrace({
+      requestTraceId: traceId,
+      message,
+      answer: result.answer,
+      sessionToken: typeof body.sessionToken === "string" ? body.sessionToken : "anonymous-session",
+      pattern: result.pattern,
+      guardrailDecision: result.allowed ? "allow" : "block",
+      citations: result.citations,
+      nodeTrace: result.nodeTrace,
+      totalMs,
+    });
     return new Response(JSON.stringify({
       answer: result.answer,
       citations: result.citations,
       evidence: {
         traceId,
-        totalMs: Math.round(performance.now() - started),
+        totalMs,
         eventTypes: [...result.eventTypes, "RUN_FINISHED"],
         pattern: result.pattern,
         promptVersion: PROMPT_VERSION,
@@ -196,7 +336,7 @@ Deno.serve(async (req: Request) => {
         protocolEvents: [...result.protocolEvents, { type: "RUN_FINISHED", source: "langgraph", target: "ui" }],
         integrations: {
           langGraph: { executed: true, version: LANGGRAPH_VERSION },
-          langfuse: { executed: false, traceId: null },
+          langfuse,
           ragas: { executed: false, scores: null },
           neo4j: { executed: false, records: null },
         },
