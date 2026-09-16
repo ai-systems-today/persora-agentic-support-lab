@@ -26,12 +26,16 @@ npm run dev
 
 No provider registration or API key is required for fixture mode.
 
+The Vite base path is configured for this repository's GitHub Pages URL.
+
 ## Validate
 
 ```bash
 npm test
 npm run build
 ```
+
+Every push to `main` runs the evidence-contract tests, builds the production application and deploys the resulting `dist` directory through `.github/workflows/pages.yml`.
 
 ## Credentials and real integrations
 
@@ -60,4 +64,3 @@ Potential adapters are deliberately provider-neutral:
 ## Repository isolation
 
 This project is standalone. It must not be nested in, copied into, or used to modify the LibreChat repository. Reusing credentials means configuring them at runtime through ignored server-side environment variables—not copying secrets or `.env` files between repositories.
-
