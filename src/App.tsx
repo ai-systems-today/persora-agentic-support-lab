@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cases } from "./data";
 import { askPublishedAgent } from "./liveClient";
 import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern } from "./types";
@@ -18,6 +20,12 @@ const patternDescription: Record<Pattern, string> = {
   handoff: "Control transfers when authorization or human judgment is required.",
   magentic: "A planner selects and revises the next specialist step from state.",
 };
+
+function normalizeAssistantMarkdown(answer: string) {
+  return answer
+    .replace(/([^\n])\s+(#{1,6}\s+)/g, "$1\n\n$2")
+    .replace(/([^\n])\s+(\d+\.\s+\*\*)/g, "$1\n\n$2");
+}
 
 function Header({ liveMode, onModeChange }: { liveMode: boolean; onModeChange: (value: boolean) => void }) {
   return (
@@ -96,7 +104,16 @@ function Conversation({ turns, onAsk, onExplain, liveMode, onModeChange }: {
               <div className="message customer"><span>You</span><p>{turn.question}</p></div>
               <div className="message assistant">
                 <span>Persora</span>
-                <p>{turn.answer}</p>
+                <div className="answer-body">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      a: ({ children, ...props }) => <a {...props} target="_blank" rel="noreferrer">{children}</a>,
+                    }}
+                  >
+                    {normalizeAssistantMarkdown(turn.answer)}
+                  </ReactMarkdown>
+                </div>
                 {turn.runtime.citations.length > 0 && <div className="citations">
                   <strong>Sources used</strong>
                   <div>{turn.runtime.citations.map((citation, index) => citation.url
