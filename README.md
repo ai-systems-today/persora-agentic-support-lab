@@ -76,15 +76,17 @@ Current execution truth:
 
 ### Enable Langfuse execution proof
 
-Configure these as Supabase Edge Function secrets—never as browser `VITE_*` variables:
+The shared Supabase project has reached its Edge Function secret limit, so production credentials are read from encrypted Supabase Vault rows through a service-role-only RPC. Create these named Vault entries:
 
 ```text
-LANGFUSE_PUBLIC_KEY=pk-lf-...
-LANGFUSE_SECRET_KEY=sk-lf-...
-LANGFUSE_BASE_URL=https://cloud.langfuse.com
+persora_langfuse_public_key=pk-lf-...
+persora_langfuse_secret_key=sk-lf-...
+persora_langfuse_base_url=https://cloud.langfuse.com
 ```
 
-The function sends one OTLP root span plus one child span per executed LangGraph node to Langfuse's `/api/public/otel/v1/traces` endpoint. Session identifiers are SHA-256 hashed before export, and inputs rejected by the authorization guardrail are redacted. The evidence drawer marks Langfuse **Runtime-proven** only after the endpoint accepts that exact run and returns its real trace ID. Missing credentials or an export failure remain visibly non-executed.
+The migration grants `get_agentic_demo_secrets()` only to `service_role`, checks the JWT role again inside the function, and returns only the three allow-listed demo values. Local development may still use the `LANGFUSE_*` environment variables documented in `.env.example`.
+
+The Edge Function sends one OTLP root span plus one child span per executed LangGraph node to Langfuse's `/api/public/otel/v1/traces` endpoint. Session identifiers are SHA-256 hashed before export, and inputs rejected by the authorization guardrail are redacted. The evidence drawer marks Langfuse **Runtime-proven** only after the endpoint accepts that exact run and returns its real trace ID. Missing credentials, a denied Vault lookup, or an export failure remain visibly non-executed.
 
 ## Five-minute interview flow
 
