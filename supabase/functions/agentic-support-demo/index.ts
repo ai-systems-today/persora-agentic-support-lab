@@ -21,6 +21,11 @@ type LangfuseEvidence = {
   traceUrl: string | null;
   error: string | null;
 };
+type LangfuseConfig = {
+  publicKey: string;
+  secretKey: string;
+  baseUrl: string;
+};
 
 const State = Annotation.Root({
   message: Annotation<string>,
@@ -130,6 +135,64 @@ const otelAttribute = (key: string, value: string | number | boolean) => ({
       : { stringValue: value },
 });
 
+async function loadLangfuseConfig(): Promise<{ config: LangfuseConfig | null; error: string | null }> {
+  const environmentPublicKey = Deno.env.get("LANGFUSE_PUBLIC_KEY")?.trim();
+  const environmentSecretKey = Deno.env.get("LANGFUSE_SECRET_KEY")?.trim();
+  const environmentBaseUrl = (
+    Deno.env.get("LANGFUSE_BASE_URL")?.trim() ||
+    Deno.env.get("LANGFUSE_HOST")?.trim() ||
+    "https://cloud.langfuse.com"
+  ).replace(/\/$/, "");
+
+  if (environmentPublicKey && environmentSecretKey) {
+    return {
+      config: {
+        publicKey: environmentPublicKey,
+        secretKey: environmentSecretKey,
+        baseUrl: environmentBaseUrl,
+      },
+      error: null,
+    };
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+  if (!supabaseUrl || !serviceRoleKey) return { config: null, error: null };
+
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/get_agentic_demo_secrets`, {
+      method: "POST",
+      headers: {
+        "apikey": serviceRoleKey,
+        "Authorization": `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    if (!response.ok) throw new Error(`Vault RPC returned HTTP ${response.status}`);
+
+    const secrets = await response.json() as Record<string, unknown>;
+    const publicKey = typeof secrets.persora_langfuse_public_key === "string"
+      ? secrets.persora_langfuse_public_key.trim()
+      : "";
+    const secretKey = typeof secrets.persora_langfuse_secret_key === "string"
+      ? secrets.persora_langfuse_secret_key.trim()
+      : "";
+    const baseUrl = (
+      typeof secrets.persora_langfuse_base_url === "string"
+        ? secrets.persora_langfuse_base_url.trim()
+        : environmentBaseUrl
+    ).replace(/\/$/, "");
+
+    return publicKey && secretKey
+      ? { config: { publicKey, secretKey, baseUrl }, error: null }
+      : { config: null, error: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Vault lookup failed";
+    return { config: null, error: message };
+  }
+}
+
 async function emitLangfuseTrace(input: {
   requestTraceId: string;
   message: string;
@@ -141,16 +204,11 @@ async function emitLangfuseTrace(input: {
   nodeTrace: TraceEntry[];
   totalMs: number;
 }): Promise<LangfuseEvidence> {
-  const publicKey = Deno.env.get("LANGFUSE_PUBLIC_KEY")?.trim();
-  const secretKey = Deno.env.get("LANGFUSE_SECRET_KEY")?.trim();
-  const baseUrl = (
-    Deno.env.get("LANGFUSE_BASE_URL")?.trim() ||
-    Deno.env.get("LANGFUSE_HOST")?.trim() ||
-    "https://cloud.langfuse.com"
-  ).replace(/\/$/, "");
-  if (!publicKey || !secretKey) {
-    return { configured: false, executed: false, traceId: null, traceUrl: null, error: null };
+  const loaded = await loadLangfuseConfig();
+  if (!loaded.config) {
+    return { configured: false, executed: false, traceId: null, traceUrl: null, error: loaded.error };
   }
+  const { publicKey, secretKey, baseUrl } = loaded.config;
 
   const traceId = randomHex(16);
   const rootSpanId = randomHex(8);
