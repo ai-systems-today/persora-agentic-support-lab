@@ -35,4 +35,14 @@ describe("demo evidence", () => {
     expect(source).toContain("configured: false, executed: false");
     expect(source).toMatch(/configured:\s*true,\s*executed:\s*true/);
   });
+
+  it("retrieves Langfuse credentials through the allow-listed Vault RPC", () => {
+    const source = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    const migration = readFileSync(new URL("../supabase/migrations/20260916150545_add_agentic_demo_vault_reader.sql", import.meta.url), "utf8");
+    expect(source).toContain("/rest/v1/rpc/get_agentic_demo_secrets");
+    expect(source).toContain("SUPABASE_SERVICE_ROLE_KEY");
+    expect(migration).toContain("caller_role <> 'service_role'");
+    expect(migration).toContain("revoke all on function public.get_agentic_demo_secrets() from public");
+    expect(migration).toContain("grant execute on function public.get_agentic_demo_secrets() to service_role");
+  });
 });
