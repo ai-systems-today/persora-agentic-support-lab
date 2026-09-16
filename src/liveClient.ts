@@ -2,6 +2,9 @@ import type { Citation, RuntimeEvidence } from "./types";
 
 export const NETFLIX_WIDGET_ID = "6a01cc31-ee9e-4977-aa8c-031894a71851";
 export const PERSORA_CHAT_URL = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
+export const AGENTIC_DEMO_URL = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/agentic-support-demo";
+// Supabase's browser-safe legacy anon key. This is intentionally not a service-role secret.
+export const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pb3RrYmJ3cmllY2R2dG51ZmVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMDg3MjEsImV4cCI6MjA3MzY4NDcyMX0.dqpT-gmY4hT7zqxGAPHeJnx6xVugtiUnHXTUdtnoMDQ";
 
 export type StreamState = {
   answer: string;
@@ -34,6 +37,51 @@ function normaliseCitation(value: unknown, index: number): Citation {
     url,
     snippet: snippet ?? null,
     similarity,
+  };
+}
+
+export async function askAgenticDemo(question: string): Promise<{ answer: string; runtime: RuntimeEvidence }> {
+  const started = performance.now();
+  const traceId = crypto.randomUUID();
+  const response = await fetch(AGENTIC_DEMO_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-trace-id": traceId,
+      "apikey": SUPABASE_PUBLISHABLE_KEY,
+      "Authorization": `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({
+      widgetId: NETFLIX_WIDGET_ID,
+      message: question,
+      sessionToken: sessionValue("persora-agentic-demo-session"),
+      deviceId: sessionValue("persora-agentic-demo-device"),
+    }),
+  });
+  const payload = await response.json() as {
+    answer?: string;
+    citations?: unknown[];
+    evidence?: Omit<RuntimeEvidence, "mode" | "transport" | "totalMs" | "citations" | "error">;
+    error?: string;
+  };
+  if (!response.ok || !payload.answer) throw new Error(payload.error ?? `Agentic demo returned HTTP ${response.status}.`);
+  return {
+    answer: payload.answer,
+    runtime: {
+      mode: "agentic",
+      transport: "json",
+      traceId: payload.evidence?.traceId ?? traceId,
+      totalMs: Math.round(performance.now() - started),
+      eventTypes: payload.evidence?.eventTypes ?? [],
+      citations: (payload.citations ?? []).map(normaliseCitation),
+      error: null,
+      pattern: payload.evidence?.pattern,
+      promptVersion: payload.evidence?.promptVersion,
+      guardrail: payload.evidence?.guardrail,
+      nodeTrace: payload.evidence?.nodeTrace,
+      protocolEvents: payload.evidence?.protocolEvents,
+      integrations: payload.evidence?.integrations,
+    },
   };
 }
 
