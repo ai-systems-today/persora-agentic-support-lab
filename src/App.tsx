@@ -266,17 +266,18 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
   if (turn.runtime.mode === "fixture") return item.layers;
 
   const agentic = turn.runtime.mode === "agentic";
+  const publishedExecuted = !agentic || Boolean(turn.runtime.nodeTrace?.some((entry) => entry.node === "published_netflix_agent"));
 
   const replace = (id: EvidenceLayer["id"], fields: EvidenceLayer["fields"]): EvidenceLayer[] =>
     item.layers.map((layer) => layer.id === id ? { ...layer, fields } : layer);
 
   let next = replace("orchestration", [
     { label: agentic ? "Executed pattern" : "Demo pattern", value: turn.runtime.pattern ?? item.pattern, status: agentic ? "runtime-proven" : "fixture-replay", detail: agentic ? "Returned by the server-side LangGraph run for this request." : "The selected visual pattern remains an interview demonstration; it is not relabelled as the published agent's internal graph." },
-    { label: "Published execution", value: "Persora orchestrate-chat", status: "runtime-proven", detail: "This answer was received from the published agent endpoint." },
+    { label: "Published execution", value: publishedExecuted ? "Persora orchestrate-chat" : "Skipped by guardrail", status: publishedExecuted ? "runtime-proven" : "not-executed", detail: publishedExecuted ? "This answer was received from the published agent endpoint." : "The deterministic authorization decision ended the graph before retrieval or model execution." },
     { label: "LangGraph node trace", value: agentic ? `${turn.runtime.nodeTrace?.length ?? 0} completed nodes` : "Not executed", status: agentic ? "runtime-proven" : "not-executed", detail: agentic ? `Server runtime: ${turn.runtime.integrations?.langGraph.version ?? "version not returned"}.` : "A LangGraph server adapter has not supplied node events for this run." },
   ]);
   next = next.map((layer) => layer.id === "content" ? { ...layer, fields: [
-    { label: "Knowledge source", value: "help.netflix.com Website Knowledge", status: "runtime-proven", detail: "The signed-in agent configuration shows this Domain Library knowledge base selected." },
+    { label: "Knowledge source", value: publishedExecuted ? "help.netflix.com Website Knowledge" : "Not queried", status: publishedExecuted ? "runtime-proven" : "not-executed", detail: publishedExecuted ? "The signed-in agent configuration shows this Domain Library knowledge base selected." : "The guardrail prevented retrieval." },
     { label: "Returned citations", value: `${turn.runtime.citations.length}`, status: "runtime-proven", detail: "Counted from citation events in this answer's stream." },
     { label: "Vector store", value: "Supabase/Postgres vector retrieval", status: "repo-defined", detail: "The inspected Persora implementation calls search_kb_chunks; this browser run does not expose the SQL payload." },
     { label: "Neo4j / GraphRAG", value: "Not executed", status: "not-executed", detail: "No graph database event was present in this run." },
@@ -415,13 +416,14 @@ export default function App() {
       }
     }
 
+    const resolvedDemoCase = demoCase ?? (runtime.mode === "agentic" ? cases.find((item) => item.pattern === runtime.pattern) ?? cases[0] : null);
     const turn: ChatTurn = {
       id: `turn-${sequence}`,
       question,
       answer,
-      runId: demoCase ? `${runtime.mode === "agentic" ? "agentic" : runtime.mode === "live" ? "live" : "fx"}-${demoCase.id}-${String(sequence).padStart(3, "0")}` : null,
+      runId: resolvedDemoCase ? `${runtime.mode === "agentic" ? "agentic" : runtime.mode === "live" ? "live" : "fx"}-${resolvedDemoCase.id}-${String(sequence).padStart(3, "0")}` : null,
       createdAt: new Date().toISOString(),
-      demoCase,
+      demoCase: resolvedDemoCase,
       runtime,
     };
     setTurns((current) => [...current, turn]);
