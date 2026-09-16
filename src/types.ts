@@ -48,13 +48,24 @@ export type Citation = {
 };
 
 export type RuntimeEvidence = {
-  mode: "live" | "fixture";
-  transport: "sse" | "local";
+  mode: "agentic" | "live" | "fixture";
+  transport: "json" | "sse" | "local";
   traceId: string;
   totalMs: number;
   eventTypes: string[];
   citations: Citation[];
   error: string | null;
+  pattern?: Pattern;
+  promptVersion?: string;
+  guardrail?: { decision: "allow" | "block"; reason: string };
+  nodeTrace?: Array<{ node: string; status: string; durationMs: number }>;
+  protocolEvents?: Array<{ type: string; source: string; target: string }>;
+  integrations?: {
+    langGraph: { executed: boolean; version: string };
+    langfuse: { executed: boolean; traceId: string | null };
+    ragas: { executed: boolean; scores: Record<string, number> | null };
+    neo4j: { executed: boolean; records: number | null };
+  };
 };
 
 export type ChatTurn = {
