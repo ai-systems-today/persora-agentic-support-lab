@@ -68,7 +68,18 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
 .citations > div { display: flex; flex-wrap: wrap; gap: 7px; }
 .citations a, .citations span { color: #a9cfff; text-decoration: none; border: 1px solid #2f5279; border-radius: 99px; padding: 6px 9px; font-size: 10px; }
 .citations a:hover { background: #132e4d; }
-.composer { display: grid; grid-template-columns: 1fr 42px; gap: 10px; position: sticky; bottom: 18px; padding: 12px; border: 1px solid #2a4262; background: rgba(8, 18, 31, .93); backdrop-filter: blur(18px); border-radius: 16px; box-shadow: 0 24px 70px #0009; margin-top: 34px; }
+.composer-dock { position: sticky; bottom: 18px; z-index: 8; margin-top: 34px; border: 1px solid #2a4262; background: rgba(8, 18, 31, .96); backdrop-filter: blur(18px); border-radius: 16px; box-shadow: 0 24px 70px #0009; overflow: hidden; }
+.answer-source-bar { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 12px 14px; border-bottom: 1px solid #203753; background: #0a192b; }
+.composer-dock.live .answer-source-bar { background: linear-gradient(90deg, #0a1f26, #0a192b 58%); box-shadow: inset 3px 0 var(--mint); }
+.answer-source-copy { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 9px; }
+.answer-source-copy span { color: #7188a6; text-transform: uppercase; letter-spacing: .1em; font-size: 9px; font-weight: 850; }
+.answer-source-copy strong { color: #e3efff; font-size: 12px; }
+.answer-source-copy small { grid-column: 1 / -1; color: #7890ae; font-size: 9px; margin-top: 4px; }
+.answer-source-switch { display: flex; flex: 0 0 auto; padding: 3px; border: 1px solid #2b4667; border-radius: 10px; background: #06111f; }
+.answer-source-switch button { border: 0; background: transparent; color: #7e93ae; border-radius: 7px; padding: 7px 10px; font-size: 10px; cursor: pointer; font-weight: 750; }
+.answer-source-switch button.active { color: #eafff8; background: #145241; box-shadow: 0 0 15px #3ee6ad24; }
+.composer-dock.fixture .answer-source-switch button.active { color: #e1edff; background: #173554; box-shadow: none; }
+.composer { display: grid; grid-template-columns: 1fr 42px; gap: 10px; padding: 12px; }
 .composer input { background: transparent; border: 0; color: var(--ink); outline: none; padding: 0 8px; }
 .composer button { border: 0; border-radius: 11px; background: var(--mint); color: #052018; font-weight: 900; cursor: pointer; }
 
@@ -188,6 +199,9 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
   .chat-shell { width: min(100% - 24px, 920px); padding-top: 42px; }
   .starter-grid { grid-template-columns: 1fr; }
   .message, .message.assistant { max-width: 96%; }
+  .answer-source-bar { align-items: stretch; flex-direction: column; gap: 10px; }
+  .answer-source-switch { width: 100%; }
+  .answer-source-switch button { flex: 1; }
   .drawer { width: 100vw; }
   .drawer-header, .drawer-scroll { padding-left: 16px; padding-right: 16px; }
   .run-hero, .card-heading, .section-title { align-items: flex-start; flex-direction: column; }
