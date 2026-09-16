@@ -24,7 +24,11 @@ button { color: inherit; }
 .brand-copy { display: flex; align-items: center; gap: 13px; margin-left: 12px; }
 .brand-copy strong { font-size: 15px; }
 .brand-copy span { color: var(--muted); padding-left: 13px; border-left: 1px solid var(--line); font-size: 13px; }
+.mode-switch { margin-left: auto; display: flex; border: 1px solid #29435f; border-radius: 10px; padding: 3px; background: #071322; }
+.mode-switch button { border: 0; background: transparent; color: #7890ad; border-radius: 7px; padding: 6px 9px; font-size: 10px; cursor: pointer; }
+.mode-switch button.active { background: #173554; color: #dbeaff; }
 .mode { margin-left: auto; font-size: 12px; color: #8ff4d1; display: flex; gap: 8px; align-items: center; }
+.mode-switch + .mode { margin-left: 12px; }
 .mode i, .answer-footer i { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 12px var(--mint); }
 
 .chat-shell { width: min(920px, calc(100% - 40px)); margin: 0 auto; padding: 74px 0 42px; }
@@ -59,6 +63,11 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
 .answer-footer div { color: #7388a5; font-size: 11px; display: flex; gap: 8px; align-items: center; }
 .answer-footer button { border: 1px solid #345980; background: #102944; color: #b7d6ff; border-radius: 10px; padding: 9px 12px; cursor: pointer; font-weight: 750; font-size: 12px; }
 .answer-footer button:hover { background: #173858; }
+.citations { margin-top: 10px; border: 1px solid #233c5a; background: #0a1829; border-radius: 12px; padding: 12px 14px; }
+.citations > strong { display: block; color: #7890ad; text-transform: uppercase; letter-spacing: .1em; font-size: 9px; margin-bottom: 8px; }
+.citations > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.citations a, .citations span { color: #a9cfff; text-decoration: none; border: 1px solid #2f5279; border-radius: 99px; padding: 6px 9px; font-size: 10px; }
+.citations a:hover { background: #132e4d; }
 .composer { display: grid; grid-template-columns: 1fr 42px; gap: 10px; position: sticky; bottom: 18px; padding: 12px; border: 1px solid #2a4262; background: rgba(8, 18, 31, .93); backdrop-filter: blur(18px); border-radius: 16px; box-shadow: 0 24px 70px #0009; margin-top: 34px; }
 .composer input { background: transparent; border: 0; color: var(--ink); outline: none; padding: 0 8px; }
 .composer button { border: 0; border-radius: 11px; background: var(--mint); color: #052018; font-weight: 900; cursor: pointer; }
@@ -174,7 +183,8 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
 @media (max-width: 760px) {
   .app-header { padding: 0 16px; }
   .brand-copy span { display: none; }
-  .mode { font-size: 10px; }
+  .mode { display: none; }
+  .mode-switch { margin-left: auto; }
   .chat-shell { width: min(100% - 24px, 920px); padding-top: 42px; }
   .starter-grid { grid-template-columns: 1fr; }
   .message, .message.assistant { max-width: 96%; }

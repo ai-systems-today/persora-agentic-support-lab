@@ -40,6 +40,23 @@ export type DemoCase = {
   layers: EvidenceLayer[];
 };
 
+export type Citation = {
+  label: string;
+  url: string | null;
+  snippet: string | null;
+  similarity: number | null;
+};
+
+export type RuntimeEvidence = {
+  mode: "live" | "fixture";
+  transport: "sse" | "local";
+  traceId: string;
+  totalMs: number;
+  eventTypes: string[];
+  citations: Citation[];
+  error: string | null;
+};
+
 export type ChatTurn = {
   id: string;
   question: string;
@@ -47,4 +64,5 @@ export type ChatTurn = {
   runId: string | null;
   createdAt: string;
   demoCase: DemoCase | null;
+  runtime: RuntimeEvidence;
 };

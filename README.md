@@ -16,6 +16,7 @@ An interview-ready, evidence-first Netflix support demonstration. The applicatio
   4. Observability
   5. Quality
 - Explicit evidence labels: Runtime-proven, Repo-defined, Fixture replay, Not captured and Not executed.
+- An opt-in **Live agent** mode that streams the published Netflix Support Assistant response and renders the citations returned by that exact run.
 
 The labels are the central design rule: an optional technology is never presented as live merely because the UI has a field for it.
 
@@ -27,6 +28,8 @@ npm run dev
 ```
 
 No provider registration or API key is required for fixture mode.
+
+Live mode calls the already-published Persora widget endpoint using its public widget identifier. No Azure OpenAI or Supabase service-role secret is placed in the browser. The deployment origin must be allowed by the published widget; if it is not, the UI shows the failure and does not silently substitute a fixture answer.
 
 The Vite base path is configured for this repository's GitHub Pages URL.
 
@@ -48,6 +51,7 @@ Potential adapters are deliberately provider-neutral:
 | Layer | Target technology | Proof required before the UI may claim it ran |
 |---|---|---|
 | Orchestration | LangChain / LangGraph | Node events or a serialized run trace |
+| Content & data | Persora KB / Supabase vector retrieval | Citation events from the published run |
 | Content & data | Pinecone / Milvus / Neo4j | Query, source IDs and returned records/chunks |
 | Interaction | AG-UI / A2A | Captured protocol event/transport envelope |
 | Observability | Langfuse | Trace and observation identifiers |
@@ -63,6 +67,8 @@ Potential adapters are deliberately provider-neutral:
 6. Run the group-chat case to show a shared conversation state and bounded specialist roles.
 7. Run the failed-path case to show recovery and preserved context.
 8. Switch between graph, timeline and evidence flow, then close with the stack map: the contracts remain stable while adapters supply real LangGraph, retrieval, A2A/AG-UI, Langfuse and RAGAS evidence.
+
+For live proof, switch to **Live agent**, submit one grounded question, open **Explain this answer**, and show the returned citations, SSE event types, trace identifier and measured latency. The selected orchestration topology remains labelled as fixture replay until a LangGraph adapter emits a genuine node trace.
 
 ## Repository isolation
 

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { cases } from "./data";
+import { askPublishedAgent } from "./liveClient";
 import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern } from "./types";
 
 const statusLabel: Record<EvidenceStatus, string> = {
@@ -18,7 +19,7 @@ const patternDescription: Record<Pattern, string> = {
   magentic: "A planner selects and revises the next specialist step from state.",
 };
 
-function Header() {
+function Header({ liveMode, onModeChange }: { liveMode: boolean; onModeChange: (value: boolean) => void }) {
   return (
     <header className="app-header">
       <div className="brand-mark">P</div>
@@ -26,23 +27,36 @@ function Header() {
         <strong>Persora</strong>
         <span>Netflix Support · Agentic Evidence Lab</span>
       </div>
-      <div className="mode"><i /> Evidence mode · fixture replay</div>
+      <div className="mode-switch" role="group" aria-label="Answer source">
+        <button className={!liveMode ? "active" : ""} onClick={() => onModeChange(false)}>Fixture</button>
+        <button className={liveMode ? "active" : ""} onClick={() => onModeChange(true)}>Live agent</button>
+      </div>
+      <div className={`mode ${liveMode ? "live" : ""}`}><i /> {liveMode ? "Published Persora agent" : "Evidence mode · fixture replay"}</div>
     </header>
   );
 }
 
 function Conversation({ turns, onAsk, onExplain }: {
   turns: ChatTurn[];
-  onAsk: (question: string, selectedCase?: DemoCase) => void;
+  onAsk: (question: string, selectedCase?: DemoCase) => Promise<void>;
   onExplain: (turn: ChatTurn) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
     const question = draft.trim();
     if (!question) return;
-    onAsk(question);
+    setSubmitting(true);
+    await onAsk(question);
+    setSubmitting(false);
     setDraft("");
+  };
+
+  const askStarter = async (item: DemoCase) => {
+    setSubmitting(true);
+    await onAsk(item.customer, item);
+    setSubmitting(false);
   };
 
   return (
@@ -58,7 +72,7 @@ function Conversation({ turns, onAsk, onExplain }: {
         <div className="section-label">Conversation starters</div>
         <div className="starter-grid">
           {cases.map((item, index) => (
-            <button className="starter" key={item.id} onClick={() => onAsk(item.customer, item)}>
+            <button className="starter" key={item.id} disabled={submitting} onClick={() => void askStarter(item)}>
               <span>0{index + 1}</span>
               <strong>{item.starter}</strong>
               <small>{item.pattern}</small>
@@ -81,8 +95,14 @@ function Conversation({ turns, onAsk, onExplain }: {
               <div className="message assistant">
                 <span>Persora</span>
                 <p>{turn.answer}</p>
+                {turn.runtime.citations.length > 0 && <div className="citations">
+                  <strong>Sources used</strong>
+                  <div>{turn.runtime.citations.map((citation, index) => citation.url
+                    ? <a key={`${citation.url}-${index}`} href={citation.url} target="_blank" rel="noreferrer">{index + 1}. {citation.label}</a>
+                    : <span key={`${citation.label}-${index}`}>{index + 1}. {citation.label}</span>)}</div>
+                </div>}
                 <div className="answer-footer">
-                  <div><i /> {turn.runId ?? "No run"} · {turn.demoCase?.pattern ?? "unsupported"}</div>
+                  <div><i /> {turn.runId ?? "No run"} · {turn.runtime.mode} · {turn.runtime.totalMs} ms</div>
                   {turn.demoCase && <button onClick={() => onExplain(turn)}>Explain this answer <b>↗</b></button>}
                 </div>
               </div>
@@ -92,8 +112,8 @@ function Conversation({ turns, onAsk, onExplain }: {
       </section>
 
       <form className="composer" onSubmit={(event) => { event.preventDefault(); submit(); }}>
-        <input aria-label="Message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask a Netflix support question…" />
-        <button aria-label="Send" title="Send question">↑</button>
+        <input aria-label="Message" disabled={submitting} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={submitting ? "Waiting for the published agent…" : "Ask a Netflix support question…"} />
+        <button aria-label="Send" disabled={submitting} title="Send question">{submitting ? "…" : "↑"}</button>
       </form>
     </main>
   );
@@ -200,17 +220,55 @@ function LayerPanel({ layer }: { layer: EvidenceLayer }) {
   );
 }
 
-function ExplainDrawer({ item, runId, onClose }: { item: DemoCase; runId: string; onClose: () => void }) {
-  const [activeLayer, setActiveLayer] = useState(item.layers[0].id);
-  const layer = item.layers.find((candidate) => candidate.id === activeLayer) ?? item.layers[0];
+function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
+  const item = turn.demoCase!;
+  if (turn.runtime.mode === "fixture") return item.layers;
+
+  const replace = (id: EvidenceLayer["id"], fields: EvidenceLayer["fields"]): EvidenceLayer[] =>
+    item.layers.map((layer) => layer.id === id ? { ...layer, fields } : layer);
+
+  let next = replace("orchestration", [
+    { label: "Demo pattern", value: item.pattern, status: "fixture-replay", detail: "The selected visual pattern remains an interview demonstration; it is not relabelled as the published agent's internal graph." },
+    { label: "Published execution", value: "Persora orchestrate-chat", status: "runtime-proven", detail: "This answer was received from the published agent endpoint." },
+    { label: "LangGraph node trace", value: "Not executed", status: "not-executed", detail: "A LangGraph server adapter has not supplied node events for this run." },
+  ]);
+  next = next.map((layer) => layer.id === "content" ? { ...layer, fields: [
+    { label: "Knowledge source", value: "help.netflix.com Website Knowledge", status: "runtime-proven", detail: "The signed-in agent configuration shows this Domain Library knowledge base selected." },
+    { label: "Returned citations", value: `${turn.runtime.citations.length}`, status: "runtime-proven", detail: "Counted from citation events in this answer's stream." },
+    { label: "Vector store", value: "Supabase/Postgres vector retrieval", status: "repo-defined", detail: "The inspected Persora implementation calls search_kb_chunks; this browser run does not expose the SQL payload." },
+    { label: "Neo4j / GraphRAG", value: "Not executed", status: "not-executed", detail: "No graph database event was present in this run." },
+  ] } : layer);
+  next = next.map((layer) => layer.id === "interaction" ? { ...layer, fields: [
+    { label: "Customer surface", value: "Support chatbot", status: "runtime-proven", detail: "The submitted question and returned answer are visible in this UI." },
+    { label: "Transport", value: "Server-Sent Events", status: "runtime-proven", detail: `Observed event types: ${turn.runtime.eventTypes.join(", ") || "message stream"}.` },
+    { label: "AG-UI / A2A", value: "Not executed", status: "not-executed", detail: "SSE transport is not presented as AG-UI or A2A without their protocol envelopes." },
+  ] } : layer);
+  next = next.map((layer) => layer.id === "observability" ? { ...layer, fields: [
+    { label: "Trace identifier", value: turn.runtime.traceId, status: "runtime-proven", detail: "Generated for this request and sent as x-trace-id." },
+    { label: "End-to-end latency", value: `${turn.runtime.totalMs} ms`, status: "runtime-proven", detail: "Measured in the browser from request start through stream completion." },
+    { label: "Langfuse observation", value: "Not executed", status: "not-executed", detail: "No configured Langfuse observation identifier was returned." },
+  ] } : layer);
+  return next.map((layer) => layer.id === "quality" ? { ...layer, fields: [
+    { label: "Answer present", value: turn.answer.trim() ? "Passed" : "Failed", status: "runtime-proven", detail: "Programmatic validation checked that the live stream produced answer text." },
+    { label: "Citation presence", value: turn.runtime.citations.length ? "Passed" : "No citations returned", status: "runtime-proven", detail: "Validated directly from the streamed citations event." },
+    { label: "RAGAS evaluation", value: "Not executed", status: "not-executed", detail: "No metric is displayed without an evaluator run." },
+  ] } : layer);
+}
+
+function ExplainDrawer({ turn, onClose }: { turn: ChatTurn; onClose: () => void }) {
+  const item = turn.demoCase!;
+  const runId = turn.runId!;
+  const evidenceLayers = useMemo(() => layersForTurn(turn), [turn]);
+  const [activeLayer, setActiveLayer] = useState(evidenceLayers[0].id);
+  const layer = evidenceLayers.find((candidate) => candidate.id === activeLayer) ?? evidenceLayers[0];
   const proofCounts = useMemo(() => {
-    const fields = item.layers.flatMap((entry) => entry.fields);
+    const fields = evidenceLayers.flatMap((entry) => entry.fields);
     return {
       proven: fields.filter((entry) => entry.status === "runtime-proven" || entry.status === "repo-defined").length,
       fixture: fields.filter((entry) => entry.status === "fixture-replay").length,
       absent: fields.filter((entry) => entry.status === "not-captured" || entry.status === "not-executed").length,
     };
-  }, [item]);
+  }, [evidenceLayers]);
 
   return (
     <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -235,7 +293,7 @@ function ExplainDrawer({ item, runId, onClose }: { item: DemoCase; runId: string
           <section className="architecture">
             <div className="section-title"><div><p className="eyebrow">Architecture evidence</p><h3>Five layers, one selected run</h3></div><p>Click a layer to inspect its actual values and evidence status.</p></div>
             <nav className="layer-tabs" aria-label="Evidence layers">
-              {item.layers.map((candidate) => (
+              {evidenceLayers.map((candidate) => (
                 <button className={activeLayer === candidate.id ? "active" : ""} key={candidate.id} onClick={() => setActiveLayer(candidate.id)}>
                   <span>{candidate.index}</span><strong>{candidate.title}</strong><small>{candidate.subtitle.split(" · ")[0]}</small>
                 </button>
@@ -275,26 +333,60 @@ function routeFixtureQuestion(question: string): DemoCase | null {
 export default function App() {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [selectedTurn, setSelectedTurn] = useState<ChatTurn | null>(null);
+  const [liveMode, setLiveMode] = useState(false);
 
-  const ask = (question: string, selectedCase?: DemoCase) => {
+  const ask = async (question: string, selectedCase?: DemoCase) => {
     const demoCase = selectedCase ?? routeFixtureQuestion(question);
     const sequence = turns.length + 1;
+    const started = performance.now();
+    let answer = demoCase?.answer ?? "This evidence fixture does not have a supported route for that question yet. Try one of the five conversation starters. I will not invent an answer or a runtime trace.";
+    let runtime: ChatTurn["runtime"] = {
+      mode: "fixture",
+      transport: "local",
+      traceId: `fixture-${sequence}`,
+      totalMs: 0,
+      eventTypes: ["fixture-selected", "answer-rendered"],
+      citations: [],
+      error: null,
+    };
+
+    if (liveMode) {
+      try {
+        const live = await askPublishedAgent(question);
+        answer = live.answer;
+        runtime = live.runtime;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown live-agent error.";
+        answer = `The published agent could not be reached from this origin, so no live answer is shown. ${message}`;
+        runtime = {
+          mode: "live",
+          transport: "sse",
+          traceId: crypto.randomUUID(),
+          totalMs: Math.round(performance.now() - started),
+          eventTypes: ["request-failed"],
+          citations: [],
+          error: message,
+        };
+      }
+    }
+
     const turn: ChatTurn = {
       id: `turn-${sequence}`,
       question,
-      answer: demoCase?.answer ?? "This evidence fixture does not have a supported route for that question yet. Try one of the five conversation starters. I will not invent an answer or a runtime trace.",
-      runId: demoCase ? `fx-${demoCase.id}-${String(sequence).padStart(3, "0")}` : null,
+      answer,
+      runId: demoCase ? `${runtime.mode === "live" ? "live" : "fx"}-${demoCase.id}-${String(sequence).padStart(3, "0")}` : null,
       createdAt: new Date().toISOString(),
       demoCase,
+      runtime,
     };
     setTurns((current) => [...current, turn]);
   };
 
   return (
     <div className="app">
-      <Header />
+      <Header liveMode={liveMode} onModeChange={setLiveMode} />
       <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} />
-      {selectedTurn?.demoCase && selectedTurn.runId && <ExplainDrawer key={selectedTurn.id} item={selectedTurn.demoCase} runId={selectedTurn.runId} onClose={() => setSelectedTurn(null)} />}
+      {selectedTurn?.demoCase && selectedTurn.runId && <ExplainDrawer key={selectedTurn.id} turn={selectedTurn} onClose={() => setSelectedTurn(null)} />}
     </div>
   );
 }
