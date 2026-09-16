@@ -36,10 +36,12 @@ function Header({ liveMode, onModeChange }: { liveMode: boolean; onModeChange: (
   );
 }
 
-function Conversation({ turns, onAsk, onExplain }: {
+function Conversation({ turns, onAsk, onExplain, liveMode, onModeChange }: {
   turns: ChatTurn[];
   onAsk: (question: string, selectedCase?: DemoCase) => Promise<void>;
   onExplain: (turn: ChatTurn) => void;
+  liveMode: boolean;
+  onModeChange: (value: boolean) => void;
 }) {
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -86,7 +88,7 @@ function Conversation({ turns, onAsk, onExplain }: {
           <div className="empty-state">
             <div className="empty-orbit"><span /></div>
             <strong>Select a starter or type a supported Netflix question.</strong>
-            <p>Every submitted answer receives an independent fixture run.</p>
+            <p>{liveMode ? "Questions are sent to the published Netflix Support agent." : "Questions use the local, deterministic evidence fixture."}</p>
           </div>
         ) : (
           turns.map((turn) => (
@@ -111,10 +113,23 @@ function Conversation({ turns, onAsk, onExplain }: {
         )}
       </section>
 
-      <form className="composer" onSubmit={(event) => { event.preventDefault(); submit(); }}>
-        <input aria-label="Message" disabled={submitting} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={submitting ? "Waiting for the published agent…" : "Ask a Netflix support question…"} />
-        <button aria-label="Send" disabled={submitting} title="Send question">{submitting ? "…" : "↑"}</button>
-      </form>
+      <div className={`composer-dock ${liveMode ? "live" : "fixture"}`}>
+        <div className="answer-source-bar">
+          <div className="answer-source-copy">
+            <span>Answer source</span>
+            <strong>{liveMode ? "Live Netflix KB" : "Demo fixture"}</strong>
+            <small>{liveMode ? "Published Persora agent · streamed response · returned citations" : "Local deterministic replay · no network request"}</small>
+          </div>
+          <div className="answer-source-switch" role="group" aria-label="Choose answer source">
+            <button type="button" aria-pressed={!liveMode} className={!liveMode ? "active" : ""} onClick={() => onModeChange(false)}>Fixture</button>
+            <button type="button" aria-pressed={liveMode} className={liveMode ? "active" : ""} onClick={() => onModeChange(true)}>Live Netflix KB</button>
+          </div>
+        </div>
+        <form className="composer" onSubmit={(event) => { event.preventDefault(); submit(); }}>
+          <input aria-label="Message" disabled={submitting} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={submitting ? "Waiting for the published agent…" : "Ask a Netflix support question…"} />
+          <button aria-label="Send" disabled={submitting} title="Send question">{submitting ? "…" : "↑"}</button>
+        </form>
+      </div>
     </main>
   );
 }
@@ -333,7 +348,7 @@ function routeFixtureQuestion(question: string): DemoCase | null {
 export default function App() {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [selectedTurn, setSelectedTurn] = useState<ChatTurn | null>(null);
-  const [liveMode, setLiveMode] = useState(false);
+  const [liveMode, setLiveMode] = useState(true);
 
   const ask = async (question: string, selectedCase?: DemoCase) => {
     const demoCase = selectedCase ?? routeFixtureQuestion(question);
@@ -385,7 +400,7 @@ export default function App() {
   return (
     <div className="app">
       <Header liveMode={liveMode} onModeChange={setLiveMode} />
-      <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} />
+      <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} liveMode={liveMode} onModeChange={setLiveMode} />
       {selectedTurn?.demoCase && selectedTurn.runId && <ExplainDrawer key={selectedTurn.id} turn={selectedTurn} onClose={() => setSelectedTurn(null)} />}
     </div>
   );
