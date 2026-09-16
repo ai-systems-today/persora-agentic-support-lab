@@ -17,6 +17,7 @@ An interview-ready, evidence-first Netflix support demonstration. The applicatio
   5. Quality
 - Explicit evidence labels: Runtime-proven, Repo-defined, Fixture replay, Not captured and Not executed.
 - An opt-in **Live agent** mode that streams the published Netflix Support Assistant response and renders the citations returned by that exact run.
+- An additive **Agentic run** mode backed by a JWT-protected Supabase Edge Function. It executes a real LangGraph graph, runs a deterministic authorization guardrail before retrieval, calls the published Netflix agent, and returns node timings, lifecycle events, prompt version, KB citations and integration execution flags.
 
 The labels are the central design rule: an optional technology is never presented as live merely because the UI has a field for it.
 
@@ -30,6 +31,8 @@ npm run dev
 No provider registration or API key is required for fixture mode.
 
 Live mode calls the already-published Persora widget endpoint using its public widget identifier. No Azure OpenAI or Supabase service-role secret is placed in the browser. The deployment origin must be allowed by the published widget; if it is not, the UI shows the failure and does not silently substitute a fixture answer.
+
+Agentic mode calls `agentic-support-demo`, which requires the project’s browser-safe publishable/anon JWT and independently enforces the GitHub Pages/localhost origin allow-list. The function is isolated from LibreChat and from the existing Persora orchestration functions.
 
 The Vite base path is configured for this repository's GitHub Pages URL.
 
@@ -56,6 +59,20 @@ Potential adapters are deliberately provider-neutral:
 | Interaction | AG-UI / A2A | Captured protocol event/transport envelope |
 | Observability | Langfuse | Trace and observation identifiers |
 | Quality | RAGAS | Metric name, input set, score and evaluator run |
+
+Current execution truth:
+
+| Capability | Current state |
+|---|---|
+| Azure OpenAI + Netflix KB + citations | Executed through the published Persora agent |
+| LangGraph | Executed in `supabase/functions/agentic-support-demo/index.ts` |
+| Deterministic authorization guardrail | Executed before the KB/model path |
+| Prompt version | Returned by every agentic run |
+| AG-UI-compatible lifecycle envelopes | Returned by every agentic run |
+| A2A | Not claimed; group coordination emits clearly labelled task-result envelopes, not a remote Agent Card exchange |
+| Langfuse | Not executed until credentials are configured and a trace ID is returned |
+| RAGAS | Not executed until an evaluator job runs and returns metric scores |
+| Neo4j GraphRAG | Not executed until a graph query returns records |
 
 ## Five-minute interview flow
 
