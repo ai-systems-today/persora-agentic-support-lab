@@ -4,10 +4,12 @@ An interview-ready, evidence-first Netflix support demonstration. The applicatio
 
 ## What the demo shows
 
-- A fixed support chatbot with four conversational starters.
-- Case-specific answers for grounding, access control, approval/handoff and recovery.
+- A working support chatbot with five conversational starters and multi-turn history.
+- Case-specific answers for grounding, access control, approval/handoff, group chat and recovery.
 - An additive **Explain this answer** drawer.
-- An execution graph, evidence inspector and five architecture layers:
+- A separate fixture run for every supported answer.
+- Topology-specific orchestration graphs for sequential, concurrent, group-chat, handoff and Magentic/planner patterns.
+- Graph, timeline and evidence-flow visualisations plus five architecture layers:
   1. Orchestration
   2. Content & data
   3. Interaction
@@ -53,13 +55,14 @@ Potential adapters are deliberately provider-neutral:
 
 ## Five-minute interview flow
 
-1. Start with **Why can’t I stream while travelling?** and show the answer.
+1. Start with **Why can’t I stream while travelling?** and show the answer and its unique run ID.
 2. Open **Explain this answer**. Point out the execution graph and evidence-status legend.
 3. Click all five layers and distinguish what the browser proves from what fixture mode replays.
 4. Run **Can you reveal another account’s billing?** to show an authorization boundary.
 5. Run **Cancel my subscription and refund me.** to show an approval-gated human handoff.
-6. Run the failed-path case to show recovery and preserved context.
-7. Close with the stack map: the contracts remain stable while adapters supply real LangGraph, retrieval, A2A/AG-UI, Langfuse and RAGAS evidence.
+6. Run the group-chat case to show a shared conversation state and bounded specialist roles.
+7. Run the failed-path case to show recovery and preserved context.
+8. Switch between graph, timeline and evidence flow, then close with the stack map: the contracts remain stable while adapters supply real LangGraph, retrieval, A2A/AG-UI, Langfuse and RAGAS evidence.
 
 ## Repository isolation
 

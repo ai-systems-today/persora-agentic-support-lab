@@ -40,3 +40,11 @@ export type DemoCase = {
   layers: EvidenceLayer[];
 };
 
+export type ChatTurn = {
+  id: string;
+  question: string;
+  answer: string;
+  runId: string | null;
+  createdAt: string;
+  demoCase: DemoCase | null;
+};

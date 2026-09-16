@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { cases } from "./data";
-import type { DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern } from "./types";
+import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern } from "./types";
 
 const statusLabel: Record<EvidenceStatus, string> = {
   "runtime-proven": "Runtime-proven",
@@ -31,25 +31,34 @@ function Header() {
   );
 }
 
-function Conversation({ selected, onSelect, onExplain }: {
-  selected: DemoCase | null;
-  onSelect: (item: DemoCase) => void;
-  onExplain: () => void;
+function Conversation({ turns, onAsk, onExplain }: {
+  turns: ChatTurn[];
+  onAsk: (question: string, selectedCase?: DemoCase) => void;
+  onExplain: (turn: ChatTurn) => void;
 }) {
+  const [draft, setDraft] = useState("");
+
+  const submit = () => {
+    const question = draft.trim();
+    if (!question) return;
+    onAsk(question);
+    setDraft("");
+  };
+
   return (
     <main className="chat-shell">
       <section className="intro">
         <div className="assistant-avatar">N</div>
         <p className="eyebrow">Netflix support demonstration</p>
         <h1>Ask naturally. Inspect exactly what happened.</h1>
-        <p className="lede">Four cases demonstrate grounding, access control, approval and recovery. Every explanation distinguishes visible runtime proof from fixture data and integrations that did not run.</p>
+        <p className="lede">Five cases demonstrate grounding, access control, approval, recovery and specialist group chat. Every answer has its own inspectable run and distinguishes fixture evidence from integrations that did not run.</p>
       </section>
 
       <section className="starters" aria-label="Conversation starters">
         <div className="section-label">Conversation starters</div>
         <div className="starter-grid">
           {cases.map((item, index) => (
-            <button className={selected?.id === item.id ? "starter active" : "starter"} key={item.id} onClick={() => onSelect(item)}>
+            <button className="starter" key={item.id} onClick={() => onAsk(item.customer, item)}>
               <span>0{index + 1}</span>
               <strong>{item.starter}</strong>
               <small>{item.pattern}</small>
@@ -59,60 +68,115 @@ function Conversation({ selected, onSelect, onExplain }: {
       </section>
 
       <section className="conversation" aria-live="polite">
-        {!selected ? (
+        {turns.length === 0 ? (
           <div className="empty-state">
             <div className="empty-orbit"><span /></div>
-            <strong>Select a starter to run a deterministic demo case.</strong>
-            <p>No provider key is required in fixture mode.</p>
+            <strong>Select a starter or type a supported Netflix question.</strong>
+            <p>Every submitted answer receives an independent fixture run.</p>
           </div>
         ) : (
-          <>
-            <div className="message customer"><span>You</span><p>{selected.customer}</p></div>
-            <div className="message assistant">
-              <span>Persora</span>
-              <p>{selected.answer}</p>
-              <div className="answer-footer">
-                <div><i /> Fixture response · {selected.pattern}</div>
-                <button onClick={onExplain}>Explain this answer <b>↗</b></button>
+          turns.map((turn) => (
+            <div className="turn" key={turn.id}>
+              <div className="message customer"><span>You</span><p>{turn.question}</p></div>
+              <div className="message assistant">
+                <span>Persora</span>
+                <p>{turn.answer}</p>
+                <div className="answer-footer">
+                  <div><i /> {turn.runId ?? "No run"} · {turn.demoCase?.pattern ?? "unsupported"}</div>
+                  {turn.demoCase && <button onClick={() => onExplain(turn)}>Explain this answer <b>↗</b></button>}
+                </div>
               </div>
             </div>
-          </>
+          ))
         )}
       </section>
 
-      <form className="composer" onSubmit={(event) => event.preventDefault()}>
-        <input aria-label="Message" placeholder="Ask a Netflix support question…" />
-        <button aria-label="Send" title="Fixture mode uses the starters">↑</button>
+      <form className="composer" onSubmit={(event) => { event.preventDefault(); submit(); }}>
+        <input aria-label="Message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask a Netflix support question…" />
+        <button aria-label="Send" title="Send question">↑</button>
       </form>
     </main>
   );
 }
 
 function PatternGraph({ nodes, pattern }: { nodes: GraphNode[]; pattern: Pattern }) {
+  const renderNode = (node: GraphNode, index: number) => (
+    <div className={`graph-node ${node.state}`} key={`${node.id}-${index}`}>
+      <span>{index + 1}</span><strong>{node.label}</strong><small>{node.role}</small>
+    </div>
+  );
+
+  const topology = (() => {
+    if (pattern === "concurrent") {
+      return <div className="topology concurrent-topology">
+        {renderNode(nodes[0], 0)}<div className="fork">split</div><div className="parallel-stack">{nodes.slice(1, -1).map((node, index) => renderNode(node, index + 1))}</div><div className="join">join</div>{renderNode(nodes.at(-1)!, nodes.length - 1)}
+      </div>;
+    }
+    if (pattern === "group-chat") {
+      return <div className="topology group-topology">
+        <div className="group-coordinator">{renderNode(nodes[0], 0)}</div>
+        <div className="shared-state">shared conversation state</div>
+        <div className="specialist-ring">{nodes.slice(1, -1).map((node, index) => renderNode(node, index + 1))}</div>
+        <div className="group-result">{renderNode(nodes.at(-1)!, nodes.length - 1)}</div>
+      </div>;
+    }
+    if (pattern === "handoff") {
+      return <div className="topology handoff-topology">
+        <div className="lane"><b>AI lane</b>{nodes.slice(0, 2).map(renderNode)}</div>
+        <div className="handoff-gate">authorization<br />handoff →</div>
+        <div className="lane human"><b>Human lane</b>{nodes.slice(2).map((node, index) => renderNode(node, index + 2))}</div>
+      </div>;
+    }
+    if (pattern === "magentic") {
+      return <div className="topology planner-topology">
+        {renderNode(nodes[0], 0)}<div className="loop-arrow">plan ↓</div>{renderNode(nodes[1], 1)}<div className="worker-row">{nodes.slice(2).map((node, index) => renderNode(node, index + 2))}</div><div className="loop-label">↶ revise when result is insufficient</div>
+      </div>;
+    }
+    return <div className="topology sequential-topology">{nodes.map((node, index) => <div className="graph-unit" key={node.id}>{renderNode(node, index)}{index < nodes.length - 1 && <div className="connector"><i /></div>}</div>)}</div>;
+  })();
+
   return (
     <div className="graph-card">
       <div className="card-heading">
         <div><span>Execution graph</span><strong>{pattern}</strong></div>
         <p>{patternDescription[pattern]}</p>
       </div>
-      <div className={`graph pattern-${pattern}`}>
-        {nodes.map((node, index) => (
-          <div className="graph-unit" key={node.id}>
-            <div className={`graph-node ${node.state}`}>
-              <span>{index + 1}</span>
-              <strong>{node.label}</strong>
-              <small>{node.role}</small>
-            </div>
-            {index < nodes.length - 1 && <div className="connector"><i /></div>}
-          </div>
-        ))}
-      </div>
+      <div className={`graph pattern-${pattern}`}>{topology}</div>
       <div className="legend">
         <span><i className="complete" /> complete</span>
         <span><i className="active" /> active</span>
         <span><i className="waiting" /> waiting</span>
       </div>
     </div>
+  );
+}
+
+function ExecutionVisuals({ item }: { item: DemoCase }) {
+  const [view, setView] = useState<"graph" | "timeline" | "evidence">("graph");
+  const source = item.layers.find((layer) => layer.id === "content")?.fields[0]?.value ?? "Fixture source";
+
+  return (
+    <section className="execution-visuals">
+      <nav className="visual-tabs" aria-label="Run visualisations">
+        <button className={view === "graph" ? "active" : ""} onClick={() => setView("graph")}>Execution graph</button>
+        <button className={view === "timeline" ? "active" : ""} onClick={() => setView("timeline")}>Run timeline</button>
+        <button className={view === "evidence" ? "active" : ""} onClick={() => setView("evidence")}>Evidence flow</button>
+      </nav>
+      {view === "graph" && <PatternGraph nodes={item.graph} pattern={item.pattern} />}
+      {view === "timeline" && <div className="visual-card timeline-card">
+        <div className="card-heading"><div><span>Fixture event sequence</span><strong>Ordered run events</strong></div><p>Relative ordering is proven by the fixture; no synthetic latency is displayed.</p></div>
+        <div className="timeline-list">{item.graph.map((node, index) => <div className="timeline-row" key={node.id}><span>0{index + 1}</span><strong>{node.label}</strong><div className="timeline-track"><i style={{ width: `${32 + index * 14}%` }} /></div><em>{node.state}</em></div>)}</div>
+      </div>}
+      {view === "evidence" && <div className="visual-card evidence-flow-card">
+        <div className="card-heading"><div><span>Evidence lineage</span><strong>Source to answer</strong></div><p>Every stage retains its evidence classification.</p></div>
+        <div className="flow-line">
+          <article><span>01</span><strong>{source}</strong><small>Fixture replay</small></article><i>→</i>
+          <article><span>02</span><strong>{item.pattern} route</strong><small>Fixture replay</small></article><i>→</i>
+          <article><span>03</span><strong>Case response</strong><small>Fixture replay</small></article><i>→</i>
+          <article><span>04</span><strong>Required-field check</strong><small>Runtime-proven</small></article>
+        </div>
+      </div>}
+    </section>
   );
 }
 
@@ -136,7 +200,7 @@ function LayerPanel({ layer }: { layer: EvidenceLayer }) {
   );
 }
 
-function ExplainDrawer({ item, onClose }: { item: DemoCase; onClose: () => void }) {
+function ExplainDrawer({ item, runId, onClose }: { item: DemoCase; runId: string; onClose: () => void }) {
   const [activeLayer, setActiveLayer] = useState(item.layers[0].id);
   const layer = item.layers.find((candidate) => candidate.id === activeLayer) ?? item.layers[0];
   const proofCounts = useMemo(() => {
@@ -158,7 +222,7 @@ function ExplainDrawer({ item, onClose }: { item: DemoCase; onClose: () => void 
 
         <div className="drawer-scroll">
           <section className="run-hero">
-            <div><span className="run-chip">CASE · {item.id}</span><h3>{item.summary}</h3></div>
+            <div><span className="run-chip">RUN · {runId}</span><h3>{item.summary}</h3></div>
             <div className="proof-meter">
               <div><strong>{proofCounts.proven}</strong><span>proven</span></div>
               <div><strong>{proofCounts.fixture}</strong><span>fixture</span></div>
@@ -166,7 +230,7 @@ function ExplainDrawer({ item, onClose }: { item: DemoCase; onClose: () => void 
             </div>
           </section>
 
-          <PatternGraph nodes={item.graph} pattern={item.pattern} />
+          <ExecutionVisuals item={item} />
 
           <section className="architecture">
             <div className="section-title"><div><p className="eyebrow">Architecture evidence</p><h3>Five layers, one selected run</h3></div><p>Click a layer to inspect its actual values and evidence status.</p></div>
@@ -196,16 +260,41 @@ function ExplainDrawer({ item, onClose }: { item: DemoCase; onClose: () => void 
   );
 }
 
+function routeFixtureQuestion(question: string): DemoCase | null {
+  const text = question.toLowerCase();
+  const has = (...terms: string[]) => terms.some((term) => text.includes(term));
+  const issueCount = [has("billing", "payment", "country"), has("household", "device"), has("email", "sign in", "access")].filter(Boolean).length;
+  if (issueCount >= 2) return cases.find((item) => item.id === "group-chat") ?? null;
+  if (has("cancel", "refund")) return cases.find((item) => item.id === "approval-required") ?? null;
+  if (has("another account", "other account", "reveal", "payment card")) return cases.find((item) => item.id === "access-blocked") ?? null;
+  if (has("tried", "failed", "still does not", "temporary code")) return cases.find((item) => item.id === "recovery") ?? null;
+  if (has("travel", "household", "stream")) return cases.find((item) => item.id === "grounded-answer") ?? null;
+  return null;
+}
+
 export default function App() {
-  const [selected, setSelected] = useState<DemoCase | null>(null);
-  const [explainOpen, setExplainOpen] = useState(false);
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [selectedTurn, setSelectedTurn] = useState<ChatTurn | null>(null);
+
+  const ask = (question: string, selectedCase?: DemoCase) => {
+    const demoCase = selectedCase ?? routeFixtureQuestion(question);
+    const sequence = turns.length + 1;
+    const turn: ChatTurn = {
+      id: `turn-${sequence}`,
+      question,
+      answer: demoCase?.answer ?? "This evidence fixture does not have a supported route for that question yet. Try one of the five conversation starters. I will not invent an answer or a runtime trace.",
+      runId: demoCase ? `fx-${demoCase.id}-${String(sequence).padStart(3, "0")}` : null,
+      createdAt: new Date().toISOString(),
+      demoCase,
+    };
+    setTurns((current) => [...current, turn]);
+  };
 
   return (
     <div className="app">
       <Header />
-      <Conversation selected={selected} onSelect={(item) => { setSelected(item); setExplainOpen(false); }} onExplain={() => setExplainOpen(true)} />
-      {selected && explainOpen && <ExplainDrawer key={selected.id} item={selected} onClose={() => setExplainOpen(false)} />}
+      <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} />
+      {selectedTurn?.demoCase && selectedTurn.runId && <ExplainDrawer key={selectedTurn.id} item={selectedTurn.demoCase} runId={selectedTurn.runId} onClose={() => setSelectedTurn(null)} />}
     </div>
   );
 }
-

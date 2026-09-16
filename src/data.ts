@@ -136,6 +136,28 @@ export const cases: DemoCase[] = [
     }),
   },
   {
+    id: "group-chat",
+    starter: "I have billing, household and email-access problems.",
+    customer: "My account is billed in another country, household verification fails, and I cannot access my original email. What should I do?",
+    answer: "Treat this as a linked account-recovery case rather than three isolated fixes. First secure access to the account through Netflix’s sign-in or account-recovery path. Then confirm the billing country and payment method with an authenticated billing specialist. Finally, resolve the household verification from the primary location or through support. Because identity and billing changes are involved, the fixture prepares a coordinated specialist handoff instead of claiming that any account data was changed.",
+    summary: "Several specialists contribute bounded findings to a shared case before the coordinator produces a safe response.",
+    pattern: "group-chat",
+    graph: [
+      { id: "coordinator", label: "Coordinator", role: "Frame shared case", state: "complete" },
+      { id: "account", label: "Account", role: "Recovery constraints", state: "complete" },
+      { id: "billing", label: "Billing", role: "Country and payment", state: "complete" },
+      { id: "device", label: "Household", role: "Device verification", state: "complete" },
+      { id: "synthesis", label: "Coordinator", role: "Synthesize handoff", state: "active" },
+    ],
+    layers: layers({
+      pattern: "group-chat",
+      path: "Coordinator → shared specialist discussion → coordinated handoff",
+      source: "Multi-issue account support fixture",
+      handoff: "Coordinated specialist handoff required",
+      validation: "No identity, billing or household mutation claimed",
+    }),
+  },
+  {
     id: "recovery",
     starter: "The first support path failed—what next?",
     customer: "I tried the temporary travel code twice and it still does not work.",
@@ -157,4 +179,3 @@ export const cases: DemoCase[] = [
     }),
   },
 ];
-
