@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cases } from "./data";
-import { askPublishedAgent } from "./liveClient";
+import { askAgenticDemo, askPublishedAgent } from "./liveClient";
 import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern } from "./types";
 
 const statusLabel: Record<EvidenceStatus, string> = {
@@ -21,13 +21,15 @@ const patternDescription: Record<Pattern, string> = {
   magentic: "A planner selects and revises the next specialist step from state.",
 };
 
+type AnswerSource = "fixture" | "live" | "agentic";
+
 function normalizeAssistantMarkdown(answer: string) {
   return answer
     .replace(/([^\n])\s+(#{1,6}\s+)/g, "$1\n\n$2")
     .replace(/([^\n])\s+(\d+\.\s+\*\*)/g, "$1\n\n$2");
 }
 
-function Header({ liveMode, onModeChange }: { liveMode: boolean; onModeChange: (value: boolean) => void }) {
+function Header({ source, onSourceChange }: { source: AnswerSource; onSourceChange: (value: AnswerSource) => void }) {
   return (
     <header className="app-header">
       <div className="brand-mark">P</div>
@@ -36,20 +38,21 @@ function Header({ liveMode, onModeChange }: { liveMode: boolean; onModeChange: (
         <span>Netflix Support · Agentic Evidence Lab</span>
       </div>
       <div className="mode-switch" role="group" aria-label="Answer source">
-        <button className={!liveMode ? "active" : ""} onClick={() => onModeChange(false)}>Fixture</button>
-        <button className={liveMode ? "active" : ""} onClick={() => onModeChange(true)}>Live agent</button>
+        <button className={source === "fixture" ? "active" : ""} onClick={() => onSourceChange("fixture")}>Fixture</button>
+        <button className={source === "live" ? "active" : ""} onClick={() => onSourceChange("live")}>Live KB</button>
+        <button className={source === "agentic" ? "active" : ""} onClick={() => onSourceChange("agentic")}>Agentic run</button>
       </div>
-      <div className={`mode ${liveMode ? "live" : ""}`}><i /> {liveMode ? "Published Persora agent" : "Evidence mode · fixture replay"}</div>
+      <div className={`mode ${source !== "fixture" ? "live" : ""}`}><i /> {source === "agentic" ? "LangGraph + published Persora agent" : source === "live" ? "Published Persora agent" : "Evidence mode · fixture replay"}</div>
     </header>
   );
 }
 
-function Conversation({ turns, onAsk, onExplain, liveMode, onModeChange }: {
+function Conversation({ turns, onAsk, onExplain, source, onSourceChange }: {
   turns: ChatTurn[];
   onAsk: (question: string, selectedCase?: DemoCase) => Promise<void>;
   onExplain: (turn: ChatTurn) => void;
-  liveMode: boolean;
-  onModeChange: (value: boolean) => void;
+  source: AnswerSource;
+  onSourceChange: (value: AnswerSource) => void;
 }) {
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -96,7 +99,7 @@ function Conversation({ turns, onAsk, onExplain, liveMode, onModeChange }: {
           <div className="empty-state">
             <div className="empty-orbit"><span /></div>
             <strong>Select a starter or type a supported Netflix question.</strong>
-            <p>{liveMode ? "Questions are sent to the published Netflix Support agent." : "Questions use the local, deterministic evidence fixture."}</p>
+            <p>{source === "agentic" ? "Questions run through the evidence-producing LangGraph path and published Netflix agent." : source === "live" ? "Questions are sent directly to the published Netflix Support agent." : "Questions use the local, deterministic evidence fixture."}</p>
           </div>
         ) : (
           turns.map((turn) => (
@@ -130,20 +133,21 @@ function Conversation({ turns, onAsk, onExplain, liveMode, onModeChange }: {
         )}
       </section>
 
-      <div className={`composer-dock ${liveMode ? "live" : "fixture"}`}>
+      <div className={`composer-dock ${source !== "fixture" ? "live" : "fixture"}`}>
         <div className="answer-source-bar">
           <div className="answer-source-copy">
             <span>Answer source</span>
-            <strong>{liveMode ? "Live Netflix KB" : "Demo fixture"}</strong>
-            <small>{liveMode ? "Published Persora agent · streamed response · returned citations" : "Local deterministic replay · no network request"}</small>
+            <strong>{source === "agentic" ? "Agentic evidence run" : source === "live" ? "Live Netflix KB" : "Demo fixture"}</strong>
+            <small>{source === "agentic" ? "LangGraph trace · deterministic guardrail · real KB answer and citations" : source === "live" ? "Published Persora agent · streamed response · returned citations" : "Local deterministic replay · no network request"}</small>
           </div>
           <div className="answer-source-switch" role="group" aria-label="Choose answer source">
-            <button type="button" aria-pressed={!liveMode} className={!liveMode ? "active" : ""} onClick={() => onModeChange(false)}>Fixture</button>
-            <button type="button" aria-pressed={liveMode} className={liveMode ? "active" : ""} onClick={() => onModeChange(true)}>Live Netflix KB</button>
+            <button type="button" aria-pressed={source === "fixture"} className={source === "fixture" ? "active" : ""} onClick={() => onSourceChange("fixture")}>Fixture</button>
+            <button type="button" aria-pressed={source === "live"} className={source === "live" ? "active" : ""} onClick={() => onSourceChange("live")}>Live Netflix KB</button>
+            <button type="button" aria-pressed={source === "agentic"} className={source === "agentic" ? "active" : ""} onClick={() => onSourceChange("agentic")}>Agentic run</button>
           </div>
         </div>
         <form className="composer" onSubmit={(event) => { event.preventDefault(); submit(); }}>
-          <input aria-label="Message" disabled={submitting} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={submitting ? "Waiting for the published agent…" : "Ask a Netflix support question…"} />
+          <input aria-label="Message" disabled={submitting} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={submitting ? "Running the selected answer path…" : "Ask a Netflix support question…"} />
           <button aria-label="Send" disabled={submitting} title="Send question">{submitting ? "…" : "↑"}</button>
         </form>
       </div>
@@ -203,9 +207,14 @@ function PatternGraph({ nodes, pattern }: { nodes: GraphNode[]; pattern: Pattern
   );
 }
 
-function ExecutionVisuals({ item }: { item: DemoCase }) {
+function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
+  const item = turn.demoCase!;
   const [view, setView] = useState<"graph" | "timeline" | "evidence">("graph");
   const source = item.layers.find((layer) => layer.id === "content")?.fields[0]?.value ?? "Fixture source";
+  const pattern = turn.runtime.pattern ?? item.pattern;
+  const runtimeNodes: GraphNode[] = turn.runtime.nodeTrace?.map((entry) => ({ id: entry.node, label: entry.node.replaceAll("_", " "), role: `${entry.durationMs} ms`, state: entry.status === "complete" ? "complete" : entry.status === "blocked" ? "waiting" : "active" })) ?? [];
+  const nodes = runtimeNodes.length ? runtimeNodes : item.graph;
+  const evidenceLabel = turn.runtime.mode === "agentic" ? "Runtime-proven" : "Fixture replay";
 
   return (
     <section className="execution-visuals">
@@ -214,17 +223,17 @@ function ExecutionVisuals({ item }: { item: DemoCase }) {
         <button className={view === "timeline" ? "active" : ""} onClick={() => setView("timeline")}>Run timeline</button>
         <button className={view === "evidence" ? "active" : ""} onClick={() => setView("evidence")}>Evidence flow</button>
       </nav>
-      {view === "graph" && <PatternGraph nodes={item.graph} pattern={item.pattern} />}
+      {view === "graph" && <PatternGraph nodes={nodes} pattern={pattern} />}
       {view === "timeline" && <div className="visual-card timeline-card">
         <div className="card-heading"><div><span>Fixture event sequence</span><strong>Ordered run events</strong></div><p>Relative ordering is proven by the fixture; no synthetic latency is displayed.</p></div>
-        <div className="timeline-list">{item.graph.map((node, index) => <div className="timeline-row" key={node.id}><span>0{index + 1}</span><strong>{node.label}</strong><div className="timeline-track"><i style={{ width: `${32 + index * 14}%` }} /></div><em>{node.state}</em></div>)}</div>
+        <div className="timeline-list">{nodes.map((node, index) => <div className="timeline-row" key={node.id}><span>0{index + 1}</span><strong>{node.label}</strong><div className="timeline-track"><i style={{ width: `${32 + index * 14}%` }} /></div><em>{turn.runtime.nodeTrace?.[index] ? `${turn.runtime.nodeTrace[index].durationMs} ms` : node.state}</em></div>)}</div>
       </div>}
       {view === "evidence" && <div className="visual-card evidence-flow-card">
         <div className="card-heading"><div><span>Evidence lineage</span><strong>Source to answer</strong></div><p>Every stage retains its evidence classification.</p></div>
         <div className="flow-line">
-          <article><span>01</span><strong>{source}</strong><small>Fixture replay</small></article><i>→</i>
-          <article><span>02</span><strong>{item.pattern} route</strong><small>Fixture replay</small></article><i>→</i>
-          <article><span>03</span><strong>Case response</strong><small>Fixture replay</small></article><i>→</i>
+          <article><span>01</span><strong>{turn.runtime.mode === "agentic" ? "Published Netflix KB" : source}</strong><small>{evidenceLabel}</small></article><i>→</i>
+          <article><span>02</span><strong>{pattern} route</strong><small>{evidenceLabel}</small></article><i>→</i>
+          <article><span>03</span><strong>Case response</strong><small>{evidenceLabel}</small></article><i>→</i>
           <article><span>04</span><strong>Required-field check</strong><small>Runtime-proven</small></article>
         </div>
       </div>}
@@ -256,13 +265,15 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
   const item = turn.demoCase!;
   if (turn.runtime.mode === "fixture") return item.layers;
 
+  const agentic = turn.runtime.mode === "agentic";
+
   const replace = (id: EvidenceLayer["id"], fields: EvidenceLayer["fields"]): EvidenceLayer[] =>
     item.layers.map((layer) => layer.id === id ? { ...layer, fields } : layer);
 
   let next = replace("orchestration", [
-    { label: "Demo pattern", value: item.pattern, status: "fixture-replay", detail: "The selected visual pattern remains an interview demonstration; it is not relabelled as the published agent's internal graph." },
+    { label: agentic ? "Executed pattern" : "Demo pattern", value: turn.runtime.pattern ?? item.pattern, status: agentic ? "runtime-proven" : "fixture-replay", detail: agentic ? "Returned by the server-side LangGraph run for this request." : "The selected visual pattern remains an interview demonstration; it is not relabelled as the published agent's internal graph." },
     { label: "Published execution", value: "Persora orchestrate-chat", status: "runtime-proven", detail: "This answer was received from the published agent endpoint." },
-    { label: "LangGraph node trace", value: "Not executed", status: "not-executed", detail: "A LangGraph server adapter has not supplied node events for this run." },
+    { label: "LangGraph node trace", value: agentic ? `${turn.runtime.nodeTrace?.length ?? 0} completed nodes` : "Not executed", status: agentic ? "runtime-proven" : "not-executed", detail: agentic ? `Server runtime: ${turn.runtime.integrations?.langGraph.version ?? "version not returned"}.` : "A LangGraph server adapter has not supplied node events for this run." },
   ]);
   next = next.map((layer) => layer.id === "content" ? { ...layer, fields: [
     { label: "Knowledge source", value: "help.netflix.com Website Knowledge", status: "runtime-proven", detail: "The signed-in agent configuration shows this Domain Library knowledge base selected." },
@@ -273,17 +284,19 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
   next = next.map((layer) => layer.id === "interaction" ? { ...layer, fields: [
     { label: "Customer surface", value: "Support chatbot", status: "runtime-proven", detail: "The submitted question and returned answer are visible in this UI." },
     { label: "Transport", value: "Server-Sent Events", status: "runtime-proven", detail: `Observed event types: ${turn.runtime.eventTypes.join(", ") || "message stream"}.` },
-    { label: "AG-UI / A2A", value: "Not executed", status: "not-executed", detail: "SSE transport is not presented as AG-UI or A2A without their protocol envelopes." },
+    { label: "Protocol events", value: agentic ? `${turn.runtime.protocolEvents?.length ?? 0} AG-UI-compatible events` : "Not executed", status: agentic ? "runtime-proven" : "not-executed", detail: agentic ? "The demo function returned typed run lifecycle envelopes; A2A remains unclaimed until a remote Agent Card exchange runs." : "SSE transport is not presented as AG-UI or A2A without their protocol envelopes." },
   ] } : layer);
   next = next.map((layer) => layer.id === "observability" ? { ...layer, fields: [
     { label: "Trace identifier", value: turn.runtime.traceId, status: "runtime-proven", detail: "Generated for this request and sent as x-trace-id." },
     { label: "End-to-end latency", value: `${turn.runtime.totalMs} ms`, status: "runtime-proven", detail: "Measured in the browser from request start through stream completion." },
-    { label: "Langfuse observation", value: "Not executed", status: "not-executed", detail: "No configured Langfuse observation identifier was returned." },
+    { label: "Prompt version", value: turn.runtime.promptVersion ?? "Not captured", status: turn.runtime.promptVersion ? "runtime-proven" : "not-captured", detail: "Version returned by the server execution contract." },
+    { label: "Langfuse observation", value: turn.runtime.integrations?.langfuse.executed ? turn.runtime.integrations.langfuse.traceId ?? "Executed" : "Not executed", status: turn.runtime.integrations?.langfuse.executed ? "runtime-proven" : "not-executed", detail: "Only marked executed when a Langfuse trace identifier is returned." },
   ] } : layer);
   return next.map((layer) => layer.id === "quality" ? { ...layer, fields: [
     { label: "Answer present", value: turn.answer.trim() ? "Passed" : "Failed", status: "runtime-proven", detail: "Programmatic validation checked that the live stream produced answer text." },
     { label: "Citation presence", value: turn.runtime.citations.length ? "Passed" : "No citations returned", status: "runtime-proven", detail: "Validated directly from the streamed citations event." },
-    { label: "RAGAS evaluation", value: "Not executed", status: "not-executed", detail: "No metric is displayed without an evaluator run." },
+    { label: "Authorization guardrail", value: turn.runtime.guardrail ? `${turn.runtime.guardrail.decision}: ${turn.runtime.guardrail.reason}` : "Not captured", status: turn.runtime.guardrail ? "runtime-proven" : "not-captured", detail: "A deterministic server-side decision runs before retrieval." },
+    { label: "RAGAS evaluation", value: turn.runtime.integrations?.ragas.executed ? JSON.stringify(turn.runtime.integrations.ragas.scores) : "Not executed", status: turn.runtime.integrations?.ragas.executed ? "runtime-proven" : "not-executed", detail: "No metric is displayed without an evaluator run." },
   ] } : layer);
 }
 
@@ -320,7 +333,7 @@ function ExplainDrawer({ turn, onClose }: { turn: ChatTurn; onClose: () => void 
             </div>
           </section>
 
-          <ExecutionVisuals item={item} />
+          <ExecutionVisuals turn={turn} />
 
           <section className="architecture">
             <div className="section-title"><div><p className="eyebrow">Architecture evidence</p><h3>Five layers, one selected run</h3></div><p>Click a layer to inspect its actual values and evidence status.</p></div>
@@ -365,7 +378,7 @@ function routeFixtureQuestion(question: string): DemoCase | null {
 export default function App() {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [selectedTurn, setSelectedTurn] = useState<ChatTurn | null>(null);
-  const [liveMode, setLiveMode] = useState(true);
+  const [source, setSource] = useState<AnswerSource>("agentic");
 
   const ask = async (question: string, selectedCase?: DemoCase) => {
     const demoCase = selectedCase ?? routeFixtureQuestion(question);
@@ -382,17 +395,17 @@ export default function App() {
       error: null,
     };
 
-    if (liveMode) {
+    if (source !== "fixture") {
       try {
-        const live = await askPublishedAgent(question);
+        const live = source === "agentic" ? await askAgenticDemo(question) : await askPublishedAgent(question);
         answer = live.answer;
         runtime = live.runtime;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown live-agent error.";
         answer = `The published agent could not be reached from this origin, so no live answer is shown. ${message}`;
         runtime = {
-          mode: "live",
-          transport: "sse",
+          mode: source,
+          transport: source === "agentic" ? "json" : "sse",
           traceId: crypto.randomUUID(),
           totalMs: Math.round(performance.now() - started),
           eventTypes: ["request-failed"],
@@ -406,7 +419,7 @@ export default function App() {
       id: `turn-${sequence}`,
       question,
       answer,
-      runId: demoCase ? `${runtime.mode === "live" ? "live" : "fx"}-${demoCase.id}-${String(sequence).padStart(3, "0")}` : null,
+      runId: demoCase ? `${runtime.mode === "agentic" ? "agentic" : runtime.mode === "live" ? "live" : "fx"}-${demoCase.id}-${String(sequence).padStart(3, "0")}` : null,
       createdAt: new Date().toISOString(),
       demoCase,
       runtime,
@@ -416,8 +429,8 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header liveMode={liveMode} onModeChange={setLiveMode} />
-      <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} liveMode={liveMode} onModeChange={setLiveMode} />
+      <Header source={source} onSourceChange={setSource} />
+      <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} source={source} onSourceChange={setSource} />
       {selectedTurn?.demoCase && selectedTurn.runId && <ExplainDrawer key={selectedTurn.id} turn={selectedTurn} onClose={() => setSelectedTurn(null)} />}
     </div>
   );
