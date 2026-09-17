@@ -140,6 +140,53 @@ const sha256 = async (value: string) => Array.from(
   new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))),
 ).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
+type ApprovalDecision = "approve" | "reject";
+type ApprovalRecord = { id: string; status: "pending" | "approved" | "rejected"; decided_at: string | null; decision_message: string | null; summary: string };
+
+const adminHeaders = () => {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+  if (!serviceRoleKey) throw new Error("Service-role credential unavailable");
+  return {
+    apikey: serviceRoleKey,
+    Authorization: `Bearer ${serviceRoleKey}`,
+    "Content-Type": "application/json",
+    Prefer: "return=representation",
+  };
+};
+
+async function createApproval(input: { traceId: string; threadId: string; message: string; summary: string }): Promise<ApprovalRecord> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  if (!supabaseUrl) throw new Error("Supabase URL unavailable");
+  const response = await fetch(`${supabaseUrl}/rest/v1/agentic_demo_approvals`, {
+    method: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify({ trace_id: input.traceId, thread_id: input.threadId, request_message: input.message, summary: input.summary }),
+  });
+  if (!response.ok) throw new Error(`Approval persistence returned HTTP ${response.status}`);
+  const rows = await response.json() as ApprovalRecord[];
+  if (!rows[0]?.id) throw new Error("Approval persistence returned no record");
+  return rows[0];
+}
+
+async function decideApproval(input: { approvalId: string; threadId: string; decision: ApprovalDecision }): Promise<ApprovalRecord> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  if (!supabaseUrl) throw new Error("Supabase URL unavailable");
+  const status = input.decision === "approve" ? "approved" : "rejected";
+  const decisionMessage = input.decision === "approve"
+    ? "Demo approval recorded. The case may continue to authenticated Netflix support; no account was cancelled and no refund was issued."
+    : "Demo rejection recorded. The workflow ended without changing the Netflix account or issuing a refund.";
+  const query = new URLSearchParams({ id: `eq.${input.approvalId}`, thread_id: `eq.${input.threadId}`, status: "eq.pending" });
+  const response = await fetch(`${supabaseUrl}/rest/v1/agentic_demo_approvals?${query}`, {
+    method: "PATCH",
+    headers: adminHeaders(),
+    body: JSON.stringify({ status, decision_message: decisionMessage, decided_at: new Date().toISOString() }),
+  });
+  if (!response.ok) throw new Error(`Approval decision returned HTTP ${response.status}`);
+  const rows = await response.json() as ApprovalRecord[];
+  if (!rows[0]?.id) throw new Error("Approval is missing, belongs to another demo session, or was already decided");
+  return rows[0];
+}
+
 const otelAttribute = (key: string, value: string | number | boolean) => ({
   key,
   value: typeof value === "number"
@@ -501,10 +548,46 @@ Deno.serve(async (req: Request) => {
   const traceId = req.headers.get("x-trace-id") ?? crypto.randomUUID();
   try {
     const body = await req.json();
-    const message = typeof body.message === "string" ? body.message.trim() : "";
-    if (!message || message.length > 2000) return new Response(JSON.stringify({ error: "Message must contain 1-2000 characters" }), { status: 400, headers: { ...cors(origin), "Content-Type": "application/json" } });
     const sessionToken = typeof body.sessionToken === "string" ? body.sessionToken : crypto.randomUUID();
     const threadId = (await sha256(sessionToken)).slice(0, 32);
+    const approvalId = typeof body.approvalId === "string" ? body.approvalId : "";
+    const decision = body.decision === "approve" || body.decision === "reject" ? body.decision as ApprovalDecision : null;
+
+    if (approvalId && decision) {
+      const record = await decideApproval({ approvalId, threadId, decision });
+      const nodeTrace: TraceEntry[] = [
+        { node: "human_decision", status: "complete", durationMs: Math.round(performance.now() - started) },
+        { node: decision === "approve" ? "safe_continuation" : "workflow_closed", status: "complete", durationMs: 0 },
+      ];
+      const graphEvents: ProtocolEvent[] = [
+        { type: "STEP_STARTED", stepName: "human_decision", timestamp: new Date().toISOString() },
+        { type: "CUSTOM", name: "persora.handoff.decision", value: { approvalId: record.id, status: record.status }, timestamp: new Date().toISOString() },
+        { type: "STEP_FINISHED", stepName: "human_decision", timestamp: new Date().toISOString() },
+      ];
+      const evidence = {
+        traceId,
+        totalMs: Math.round(performance.now() - started),
+        eventTypes: ["human_decision_recorded", "RUN_FINISHED"],
+        pattern: "handoff",
+        promptVersion: PROMPT_VERSION,
+        guardrail: { decision: "allow", reason: "session-bound-demo-decision" },
+        handoff: { required: true, status: record.status, summary: record.summary, approvalId: record.id, decidedAt: record.decided_at, decisionMessage: record.decision_message },
+        nodeTrace,
+        protocolEvents: graphEvents,
+        integrations: {
+          langGraph: { executed: false, version: LANGGRAPH_VERSION },
+          langfuse: { configured: false, executed: false, traceId: null, traceUrl: null, error: "Decision continuation is persisted separately from the original observed run" },
+          ragas: { executed: false, scope: null, version: null, sampleCount: null, scores: null },
+          agUi: { executed: true, version: "1.0", eventCount: graphEvents.length + 6 },
+          a2a: emptyA2A(),
+          neo4j: { executed: false, records: null },
+        },
+      };
+      return sseResponse(agUiEvents({ threadId, runId: traceId, answer: record.decision_message ?? "Decision recorded.", graphEvents, evidence, citations: [], handoffRequired: false }), origin);
+    }
+
+    const message = typeof body.message === "string" ? body.message.trim() : "";
+    if (!message || message.length > 2000) return new Response(JSON.stringify({ error: "Message must contain 1-2000 characters" }), { status: 400, headers: { ...cors(origin), "Content-Type": "application/json" } });
     const result = await graph.invoke({
       message,
       widgetId: typeof body.widgetId === "string" ? body.widgetId : DEFAULT_WIDGET,
@@ -526,6 +609,9 @@ Deno.serve(async (req: Request) => {
       a2a: emptyA2A(),
     });
     const totalMs = Math.round(performance.now() - started);
+    const approval = result.handoffRequired
+      ? await createApproval({ traceId, threadId, message, summary: result.handoffSummary })
+      : null;
     const langfuse = await emitLangfuseTrace({
       requestTraceId: traceId,
       message,
@@ -548,6 +634,9 @@ Deno.serve(async (req: Request) => {
         required: result.handoffRequired,
         status: result.handoffRequired ? "awaiting-human" : "not-required",
         summary: result.handoffSummary || null,
+        approvalId: approval?.id ?? null,
+        decidedAt: null,
+        decisionMessage: null,
       },
       nodeTrace: result.nodeTrace,
       protocolEvents: result.protocolEvents,
