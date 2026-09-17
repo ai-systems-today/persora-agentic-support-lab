@@ -81,4 +81,17 @@ describe("demo evidence", () => {
     expect(migration).toContain("enable row level security");
     expect(migration).toContain("revoke all on table public.agentic_demo_approvals from public, anon, authenticated");
   });
+
+  it("streams graph progress and preserves truthful evidence labels", () => {
+    const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    expect(orchestrator).toContain('graph.stream(input, { streamMode: "updates" })');
+    expect(orchestrator).toContain('"persora.followups"');
+    expect(orchestrator).toContain("retrievalEvidence(result.citations)");
+    expect(orchestrator).toContain('entry.node === "published_netflix_agent"');
+    expect(app).toContain("LIVE ORCHESTRATION");
+    expect(app).toContain("Selected execution node");
+    expect(app).toContain("retrieval-only latency not captured");
+    expect(app).toContain("Continue this conversation");
+  });
 });

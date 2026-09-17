@@ -29,6 +29,7 @@ export type GraphNode = {
   label: string;
   role: string;
   state: "complete" | "active" | "waiting" | "skipped";
+  kind?: "customer" | "orchestrator" | "agent" | "knowledge" | "human" | "quality";
 };
 
 export type DemoCase = {
@@ -62,6 +63,19 @@ export type RuntimeEvidence = {
   guardrail?: { decision: "allow" | "block"; reason: string };
   nodeTrace?: Array<{ node: string; status: string; durationMs: number }>;
   protocolEvents?: Array<Record<string, unknown> & { type: string }>;
+  followUps?: string[];
+  retrieval?: {
+    provider: string;
+    returnedCount: number;
+    durationMs: number | null;
+    results: Array<{
+      rank: number;
+      label: string;
+      url: string | null;
+      snippet: string | null;
+      similarity: number | null;
+    }>;
+  };
   handoff?: {
     required: boolean;
     status: "not-required" | "awaiting-human" | "approved" | "rejected";
@@ -106,4 +120,13 @@ export type ChatTurn = {
   createdAt: string;
   demoCase: DemoCase | null;
   runtime: RuntimeEvidence;
+};
+
+export type RunProgress = {
+  traceId: string;
+  stage: string;
+  label: string;
+  status: "running" | "complete";
+  startedAt: number;
+  events: Array<Record<string, unknown> & { type: string }>;
 };

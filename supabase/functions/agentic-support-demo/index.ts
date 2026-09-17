@@ -68,6 +68,58 @@ const classifyPattern = (message: string): Pattern => {
   return "sequential";
 };
 
+const buildFollowUps = (pattern: Pattern, citations: unknown[]): string[] => {
+  const cited = citations.length > 0;
+  const questions: Record<Pattern, string[]> = {
+    sequential: [
+      "How do I update my Netflix Household from the primary TV?",
+      "What can I do if temporary travel access is unavailable?",
+      cited ? "Which cited Netflix article should I follow first?" : "When should I contact authenticated support?",
+    ],
+    concurrent: [
+      "How can the account owner view their own billing history?",
+      "What information should I prepare for authenticated support?",
+      "Why was retrieval skipped for this request?",
+    ],
+    "group-chat": [
+      "Which issue should I resolve first: email access, billing country, or household verification?",
+      "What did the A2A specialist contribute to this answer?",
+      cited ? "Which sources support the recommended recovery sequence?" : "When is a human specialist required?",
+    ],
+    handoff: [
+      "What exactly requires human approval?",
+      "What information is included in the handoff summary?",
+      "What happens if the approval is rejected?",
+    ],
+    magentic: [
+      "Which recovery step should I try next?",
+      "What details should I include when escalating to support?",
+      cited ? "Which cited source explains the alternative route?" : "Why should I stop repeating the failed code?",
+    ],
+  };
+  return questions[pattern];
+};
+
+const retrievalEvidence = (citations: unknown[]) => ({
+  provider: "Persora KB · Supabase/Postgres vectors",
+  returnedCount: citations.length,
+  durationMs: null,
+  results: citations.map((value, index) => {
+    const citation = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+    const url = typeof citation.url === "string"
+      ? citation.url
+      : typeof citation.source_url === "string" ? citation.source_url : null;
+    const label = [citation.title, citation.source, citation.filename]
+      .find((candidate) => typeof candidate === "string") as string | undefined;
+    const snippet = [citation.snippet, citation.content, citation.text]
+      .find((candidate) => typeof candidate === "string") as string | undefined;
+    const similarity = typeof citation.similarity === "number"
+      ? citation.similarity
+      : typeof citation.score === "number" ? citation.score : null;
+    return { rank: index + 1, label: label ?? `Source ${index + 1}`, url, snippet: snippet ?? null, similarity };
+  }),
+});
+
 const timed = <T extends Record<string, unknown>>(
   node: string,
   run: (state: typeof State.State) => Promise<T> | T,
@@ -281,6 +333,7 @@ async function emitLangfuseTrace(input: {
   const startNanos = endNanos - BigInt(Math.max(input.totalMs, 1)) * 1_000_000n;
   let cursorNanos = startNanos;
   const childSpans = input.nodeTrace.map((entry) => {
+    const isGeneration = entry.node === "published_netflix_agent" || entry.node === "group_a2a_specialist";
     const spanStart = cursorNanos;
     const spanEnd = spanStart + BigInt(Math.max(entry.durationMs, 1)) * 1_000_000n;
     cursorNanos = spanEnd;
@@ -293,9 +346,15 @@ async function emitLangfuseTrace(input: {
       startTimeUnixNano: String(spanStart),
       endTimeUnixNano: String(spanEnd > endNanos ? endNanos : spanEnd),
       attributes: [
-        otelAttribute("langfuse.observation.type", "span"),
+        otelAttribute("langfuse.observation.type", isGeneration ? "generation" : "span"),
         otelAttribute("persora.node.status", entry.status),
         otelAttribute("persora.node.duration_ms", entry.durationMs),
+        ...(isGeneration ? [
+          otelAttribute("langfuse.observation.input", JSON.stringify(traceInput)),
+          otelAttribute("langfuse.observation.output", JSON.stringify({
+            answer: entry.node === "published_netflix_agent" ? input.answer : "A2A task artifact returned",
+          })),
+        ] : []),
       ],
       status: { code: entry.status === "failed" ? 2 : 1 },
     };
@@ -503,6 +562,7 @@ function agUiEvents(input: {
   evidence: Record<string, unknown>;
   citations: unknown[];
   handoffRequired: boolean;
+  followUps?: string[];
 }): ProtocolEvent[] {
   const messageId = `${input.runId}-assistant`;
   const now = new Date().toISOString();
@@ -512,11 +572,131 @@ function agUiEvents(input: {
     { type: "TEXT_MESSAGE_START", messageId, role: "assistant", timestamp: now },
     { type: "TEXT_MESSAGE_CONTENT", messageId, delta: input.answer, timestamp: now },
     { type: "TEXT_MESSAGE_END", messageId, timestamp: now },
+    ...(input.followUps?.length ? [{ type: "CUSTOM", name: "persora.followups", value: { questions: input.followUps }, timestamp: now }] : []),
     { type: "CUSTOM", name: "persora.evidence", value: { evidence: input.evidence, citations: input.citations }, timestamp: now },
     input.handoffRequired
       ? { type: "RUN_FINISHED", threadId: input.threadId, runId: input.runId, outcome: { type: "interrupt", interrupts: [{ id: `${input.runId}-human-approval`, reason: "human_approval" }] }, timestamp: now }
       : { type: "RUN_FINISHED", threadId: input.threadId, runId: input.runId, outcome: { type: "success" }, timestamp: now },
   ];
+}
+
+const encodeEvent = (event: ProtocolEvent) => new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`);
+
+const nextNodeFor = (node: string, state: typeof State.State): string | null => {
+  if (node === "intake") return "authorization_guardrail";
+  if (node === "authorization_guardrail") {
+    if (!state.allowed) return "concurrent_privacy_checks";
+    if (state.pattern === "handoff") return "human_handoff";
+    if (state.pattern === "group-chat") return "group_a2a_specialist";
+    if (state.pattern === "magentic") return "recovery_planner";
+    return "published_netflix_agent";
+  }
+  if (node === "group_a2a_specialist" || node === "recovery_planner") return "published_netflix_agent";
+  if (node === "concurrent_privacy_checks" || node === "human_handoff" || node === "published_netflix_agent") return "response_validation";
+  return null;
+};
+
+const mergeGraphUpdate = (
+  state: typeof State.State,
+  update: Partial<typeof State.State>,
+): typeof State.State => ({
+  ...state,
+  ...update,
+  citations: update.citations ? [...state.citations, ...update.citations] : state.citations,
+  eventTypes: update.eventTypes ? [...state.eventTypes, ...update.eventTypes] : state.eventTypes,
+  nodeTrace: update.nodeTrace ? [...state.nodeTrace, ...update.nodeTrace] : state.nodeTrace,
+  protocolEvents: update.protocolEvents ? [...state.protocolEvents, ...update.protocolEvents] : state.protocolEvents,
+});
+
+function streamAgenticRun(input: typeof State.State, origin: string, started: number) {
+  const stream = new ReadableStream({
+    async start(controller) {
+      const emit = (event: ProtocolEvent) => controller.enqueue(encodeEvent({ ...event, timestamp: event.timestamp ?? new Date().toISOString() }));
+      const messageId = `${input.traceId}-assistant`;
+      let result = input;
+      try {
+        emit({ type: "RUN_STARTED", threadId: input.threadId, runId: input.traceId });
+        emit({ type: "STEP_STARTED", stepName: "intake" });
+        const execution = await graph.stream(input, { streamMode: "updates" });
+        for await (const chunk of execution as AsyncIterable<Record<string, Partial<typeof State.State>>>) {
+          for (const [node, update] of Object.entries(chunk)) {
+            result = mergeGraphUpdate(result, update);
+            for (const event of update.protocolEvents ?? []) {
+              if (event.type !== "STEP_STARTED" && event.type !== "STEP_FINISHED") emit(event);
+            }
+            emit({ type: "STEP_FINISHED", stepName: node });
+            const next = nextNodeFor(node, result);
+            if (next) emit({ type: "STEP_STARTED", stepName: next });
+          }
+        }
+
+        const totalMs = Math.round(performance.now() - started);
+        const approval = result.handoffRequired
+          ? await createApproval({ traceId: input.traceId, threadId: input.threadId, message: input.message, summary: result.handoffSummary })
+          : null;
+        const langfuse = await emitLangfuseTrace({
+          requestTraceId: input.traceId,
+          message: input.message,
+          answer: result.answer,
+          sessionToken: input.sessionToken,
+          pattern: result.pattern,
+          guardrailDecision: result.allowed ? "allow" : "block",
+          citations: result.citations,
+          nodeTrace: result.nodeTrace,
+          totalMs,
+        });
+        const followUps = buildFollowUps(result.pattern, result.citations);
+        const evidence = {
+          traceId: input.traceId,
+          totalMs,
+          eventTypes: [...result.eventTypes, "RUN_FINISHED"],
+          pattern: result.pattern,
+          promptVersion: PROMPT_VERSION,
+          guardrail: { decision: result.allowed ? "allow" : "block", reason: result.guardrailReason },
+          handoff: {
+            required: result.handoffRequired,
+            status: result.handoffRequired ? "awaiting-human" : "not-required",
+            summary: result.handoffSummary || null,
+            approvalId: approval?.id ?? null,
+            decidedAt: null,
+            decisionMessage: null,
+          },
+          nodeTrace: result.nodeTrace,
+          protocolEvents: result.protocolEvents,
+          followUps,
+          retrieval: retrievalEvidence(result.citations),
+          integrations: {
+            langGraph: { executed: true, version: LANGGRAPH_VERSION },
+            langfuse,
+            ragas: { executed: false, scope: null, version: null, sampleCount: null, scores: null },
+            agUi: { executed: true, version: "1.0", eventCount: result.protocolEvents.length + 7 },
+            a2a: result.a2a,
+            neo4j: { executed: false, records: null },
+          },
+        };
+        emit({ type: "TEXT_MESSAGE_START", messageId, role: "assistant" });
+        emit({ type: "TEXT_MESSAGE_CONTENT", messageId, delta: result.answer });
+        emit({ type: "TEXT_MESSAGE_END", messageId });
+        emit({ type: "CUSTOM", name: "persora.followups", value: { questions: followUps } });
+        emit({ type: "CUSTOM", name: "persora.evidence", value: { evidence, citations: result.citations } });
+        emit(result.handoffRequired
+          ? { type: "RUN_FINISHED", threadId: input.threadId, runId: input.traceId, outcome: { type: "interrupt", interrupts: [{ id: `${input.traceId}-human-approval`, reason: "human_approval" }] } }
+          : { type: "RUN_FINISHED", threadId: input.threadId, runId: input.traceId, outcome: { type: "success" } });
+      } catch (error) {
+        emit({ type: "RUN_ERROR", threadId: input.threadId, runId: input.traceId, message: error instanceof Error ? error.message : "Agentic run failed" });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      ...cors(origin),
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }
 
 function sseResponse(events: ProtocolEvent[], origin: string) {
@@ -588,7 +768,7 @@ Deno.serve(async (req: Request) => {
 
     const message = typeof body.message === "string" ? body.message.trim() : "";
     if (!message || message.length > 2000) return new Response(JSON.stringify({ error: "Message must contain 1-2000 characters" }), { status: 400, headers: { ...cors(origin), "Content-Type": "application/json" } });
-    const result = await graph.invoke({
+    const initialState = {
       message,
       widgetId: typeof body.widgetId === "string" ? body.widgetId : DEFAULT_WIDGET,
       sessionToken,
@@ -607,7 +787,11 @@ Deno.serve(async (req: Request) => {
       handoffRequired: false,
       handoffSummary: "",
       a2a: emptyA2A(),
-    });
+    };
+    if (req.headers.get("accept")?.includes("text/event-stream")) {
+      return streamAgenticRun(initialState, origin, started);
+    }
+    const result = await graph.invoke(initialState);
     const totalMs = Math.round(performance.now() - started);
     const approval = result.handoffRequired
       ? await createApproval({ traceId, threadId, message, summary: result.handoffSummary })
@@ -640,6 +824,8 @@ Deno.serve(async (req: Request) => {
       },
       nodeTrace: result.nodeTrace,
       protocolEvents: result.protocolEvents,
+      followUps: buildFollowUps(result.pattern, result.citations),
+      retrieval: retrievalEvidence(result.citations),
       integrations: {
         langGraph: { executed: true, version: LANGGRAPH_VERSION },
         langfuse,
@@ -654,17 +840,6 @@ Deno.serve(async (req: Request) => {
       citations: result.citations,
       evidence,
     };
-    if (req.headers.get("accept")?.includes("text/event-stream")) {
-      return sseResponse(agUiEvents({
-        threadId,
-        runId: traceId,
-        answer: result.answer,
-        graphEvents: result.protocolEvents,
-        evidence,
-        citations: result.citations,
-        handoffRequired: result.handoffRequired,
-      }), origin);
-    }
     return new Response(JSON.stringify(payload), { headers: { ...cors(origin), "Content-Type": "application/json" } });
   } catch (error) {
     console.error(JSON.stringify({ traceId, function: "agentic-support-demo", error: error instanceof Error ? error.message : "unknown" }));

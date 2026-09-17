@@ -44,6 +44,14 @@ jobs:
       - name: Run evidence-contract tests
         run: npm test
 
+      - name: Set up Deno for Edge Function validation
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check Supabase Edge Functions
+        run: deno check supabase/functions/agentic-support-demo/index.ts supabase/functions/netflix-specialist-a2a/index.ts
+
       - name: Build production application
         run: npm run build
 
