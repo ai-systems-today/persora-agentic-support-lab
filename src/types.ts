@@ -13,6 +13,7 @@ export type EvidenceField = {
   href?: string;
   status: EvidenceStatus;
   detail: string;
+  metrics?: Array<{ label: string; value: string }>;
 };
 
 export type EvidenceLayer = {
@@ -63,8 +64,11 @@ export type RuntimeEvidence = {
   protocolEvents?: Array<Record<string, unknown> & { type: string }>;
   handoff?: {
     required: boolean;
-    status: "not-required" | "awaiting-human";
+    status: "not-required" | "awaiting-human" | "approved" | "rejected";
     summary: string | null;
+    approvalId?: string | null;
+    decidedAt?: string | null;
+    decisionMessage?: string | null;
   };
   integrations?: {
     langGraph: { executed: boolean; version: string };
