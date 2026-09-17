@@ -1,4 +1,4 @@
-import type { Citation, RuntimeEvidence } from "./types";
+import type { Citation, RunProgress, RuntimeEvidence } from "./types";
 import ragasBenchmark from "./generated/ragas-evaluation.json";
 
 export const NETFLIX_WIDGET_ID = "6a01cc31-ee9e-4977-aa8c-031894a71851";
@@ -13,6 +13,8 @@ export type StreamState = {
   eventTypes: string[];
   protocolEvents?: Array<Record<string, unknown> & { type: string }>;
   evidence?: Omit<RuntimeEvidence, "mode" | "transport" | "totalMs" | "citations" | "error">;
+  followUps?: string[];
+  streamError?: string;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -43,7 +45,22 @@ function normaliseCitation(value: unknown, index: number): Citation {
   };
 }
 
-async function requestAgenticDemo(body: Record<string, unknown>): Promise<{ answer: string; runtime: RuntimeEvidence }> {
+const stageLabel = (stage: string) => ({
+  intake: "Understanding the request",
+  authorization_guardrail: "Checking authorization",
+  concurrent_privacy_checks: "Running privacy checks",
+  human_handoff: "Preparing human approval",
+  group_a2a_specialist: "A2A specialist is investigating",
+  recovery_planner: "Planning a recovery route",
+  published_netflix_agent: "Grounding the answer in the Netflix KB",
+  response_validation: "Validating answer and evidence",
+  complete: "Run complete",
+}[stage] ?? stage.replaceAll("_", " "));
+
+async function requestAgenticDemo(
+  body: Record<string, unknown>,
+  onProgress?: (progress: RunProgress) => void,
+): Promise<{ answer: string; runtime: RuntimeEvidence }> {
   const started = performance.now();
   const traceId = crypto.randomUUID();
   const response = await fetch(AGENTIC_DEMO_URL, {
@@ -75,10 +92,27 @@ async function requestAgenticDemo(body: Record<string, unknown>): Promise<{ answ
     buffer += decoder.decode(value, { stream: !done });
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() ?? "";
-    for (const line of lines) if (line.startsWith("data:")) state = applyAgUiPayload(state, line.slice(5).trim());
+    for (const line of lines) if (line.startsWith("data:")) {
+      state = applyAgUiPayload(state, line.slice(5).trim());
+      const last = state.protocolEvents?.at(-1);
+      if (last) {
+        const stage = typeof last.stepName === "string"
+          ? last.stepName
+          : last.type === "RUN_FINISHED" ? "complete" : "intake";
+        onProgress?.({
+          traceId,
+          stage,
+          label: stageLabel(stage),
+          status: last.type === "RUN_FINISHED" ? "complete" : "running",
+          startedAt: started,
+          events: state.protocolEvents ?? [],
+        });
+      }
+    }
     if (done) break;
   }
   if (buffer.startsWith("data:")) state = applyAgUiPayload(state, buffer.slice(5).trim());
+  if (state.streamError) throw new Error(state.streamError);
   if (!state.answer.trim() || !state.evidence) throw new Error("AG-UI stream completed without answer or runtime evidence.");
   const integrations = state.evidence.integrations
     ? { ...state.evidence.integrations, ragas: ragasBenchmark as NonNullable<RuntimeEvidence["integrations"]>["ragas"] }
@@ -99,13 +133,18 @@ async function requestAgenticDemo(body: Record<string, unknown>): Promise<{ answ
       handoff: state.evidence.handoff,
       nodeTrace: state.evidence.nodeTrace,
       protocolEvents: state.protocolEvents,
+      followUps: state.followUps,
+      retrieval: state.evidence.retrieval,
       integrations,
     },
   };
 }
 
-export async function askAgenticDemo(question: string): Promise<{ answer: string; runtime: RuntimeEvidence }> {
-  return requestAgenticDemo({ widgetId: NETFLIX_WIDGET_ID, message: question });
+export async function askAgenticDemo(
+  question: string,
+  onProgress?: (progress: RunProgress) => void,
+): Promise<{ answer: string; runtime: RuntimeEvidence }> {
+  return requestAgenticDemo({ widgetId: NETFLIX_WIDGET_ID, message: question }, onProgress);
 }
 
 export async function resolveAgenticHandoff(approvalId: string, decision: "approve" | "reject") {
@@ -129,6 +168,21 @@ export function applyAgUiPayload(state: StreamState, payload: string): StreamSta
     const evidence = asRecord(value?.evidence) as StreamState["evidence"];
     const citations = Array.isArray(value?.citations) ? value.citations.map(normaliseCitation) : state.citations;
     return { ...state, evidence, citations, eventTypes, protocolEvents };
+  }
+  if (event.type === "CUSTOM" && event.name === "persora.followups") {
+    const value = asRecord(event.value);
+    const questions = Array.isArray(value?.questions)
+      ? value.questions.filter((question): question is string => typeof question === "string")
+      : [];
+    return { ...state, followUps: questions, eventTypes, protocolEvents };
+  }
+  if (event.type === "RUN_ERROR") {
+    return {
+      ...state,
+      streamError: typeof event.message === "string" ? event.message : "Agentic run failed.",
+      eventTypes,
+      protocolEvents,
+    };
   }
   return { ...state, eventTypes, protocolEvents };
 }

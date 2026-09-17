@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cases } from "./data";
 import { askAgenticDemo, askPublishedAgent, resolveAgenticHandoff } from "./liveClient";
-import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern } from "./types";
+import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern, RunProgress } from "./types";
 
 const statusLabel: Record<EvidenceStatus, string> = {
   "runtime-proven": "Runtime-proven",
@@ -47,12 +47,13 @@ function Header({ source, onSourceChange }: { source: AnswerSource; onSourceChan
   );
 }
 
-function Conversation({ turns, onAsk, onExplain, source, onSourceChange }: {
+function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progress }: {
   turns: ChatTurn[];
   onAsk: (question: string, selectedCase?: DemoCase) => Promise<void>;
   onExplain: (turn: ChatTurn) => void;
   source: AnswerSource;
   onSourceChange: (value: AnswerSource) => void;
+  progress: RunProgress | null;
 }) {
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -127,10 +128,18 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange }: {
                   <div><i /> {turn.runId ?? "No run"} · {turn.runtime.mode} · {turn.runtime.totalMs} ms</div>
                   {turn.demoCase && <button onClick={() => onExplain(turn)}>Explain this answer <b>↗</b></button>}
                 </div>
+                {turn.runtime.followUps && turn.runtime.followUps.length > 0 && <div className="follow-ups">
+                  <strong>Continue this conversation</strong>
+                  <div>{turn.runtime.followUps.map((question) => <button key={question} disabled={submitting} onClick={() => void onAsk(question)}>{question}<span>↗</span></button>)}</div>
+                </div>}
               </div>
             </div>
           ))
         )}
+        {submitting && progress && <div className="live-progress" role="status">
+          <div className="progress-pulse"><i /></div>
+          <div><span>LIVE ORCHESTRATION</span><strong>{progress.label}</strong><small>{progress.events.length} protocol events received · trace {progress.traceId.slice(0, 8)}</small></div>
+        </div>}
       </section>
 
       <div className={`composer-dock ${source !== "fixture" ? "live" : "fixture"}`}>
@@ -155,11 +164,33 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange }: {
   );
 }
 
-function PatternGraph({ nodes, pattern }: { nodes: GraphNode[]; pattern: Pattern }) {
+const nodeKind = (id: string): NonNullable<GraphNode["kind"]> => {
+  if (/published_netflix_agent|group_a2a_specialist|specialist|synthesis/.test(id)) return "agent";
+  if (/knowledge|retrieval|kb/.test(id)) return "knowledge";
+  if (/human|handoff|approval|decision/.test(id)) return "human";
+  if (/validation|quality/.test(id)) return "quality";
+  return "orchestrator";
+};
+
+const nodeKindLabel: Record<NonNullable<GraphNode["kind"]>, string> = {
+  customer: "Customer",
+  orchestrator: "LangGraph",
+  agent: "Agent",
+  knowledge: "Knowledge/tool",
+  human: "Human",
+  quality: "Quality",
+};
+
+function PatternGraph({ nodes, pattern, selectedNode, onSelect }: {
+  nodes: GraphNode[];
+  pattern: Pattern;
+  selectedNode: string;
+  onSelect: (node: GraphNode) => void;
+}) {
   const renderNode = (node: GraphNode, index: number) => (
-    <div className={`graph-node ${node.state}`} key={`${node.id}-${index}`}>
-      <span>{index + 1}</span><strong>{node.label}</strong><small>{node.role}</small>
-    </div>
+    <button className={`graph-node ${node.state} ${selectedNode === node.id ? "selected" : ""}`} key={`${node.id}-${index}`} onClick={() => onSelect(node)}>
+      <span>{index + 1}</span><em className={`node-kind ${node.kind ?? nodeKind(node.id)}`}>{nodeKindLabel[node.kind ?? nodeKind(node.id)]}</em><strong>{node.label}</strong><small>{node.role}</small>
+    </button>
   );
 
   const topology = (() => {
@@ -192,6 +223,9 @@ function PatternGraph({ nodes, pattern }: { nodes: GraphNode[]; pattern: Pattern
         <div><span>Execution graph</span><strong>{pattern}</strong></div>
         <p>{patternDescription[pattern]}</p>
       </div>
+      <div className="actor-lanes">
+        {(["customer", "orchestrator", "agent", "knowledge", "human", "quality"] as const).map((kind) => <span className={kind} key={kind}>{nodeKindLabel[kind]}</span>)}
+      </div>
       <div className={`graph pattern-${pattern}`}>{topology}</div>
       <div className="legend">
         <span><i className="complete" /> complete</span>
@@ -207,18 +241,47 @@ function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
   const [view, setView] = useState<"graph" | "timeline" | "evidence">("graph");
   const source = item.layers.find((layer) => layer.id === "content")?.fields[0]?.value ?? "Fixture source";
   const pattern = turn.runtime.pattern ?? item.pattern;
-  const runtimeNodes: GraphNode[] = turn.runtime.nodeTrace?.map((entry) => ({ id: entry.node, label: entry.node.replaceAll("_", " "), role: `${entry.durationMs} ms`, state: entry.status === "complete" ? "complete" : entry.status === "blocked" ? "waiting" : "active" })) ?? [];
+  const runtimeNodes: GraphNode[] = turn.runtime.nodeTrace?.map((entry) => ({ id: entry.node, label: entry.node.replaceAll("_", " "), role: `${entry.durationMs} ms`, state: entry.status === "complete" ? "complete" : entry.status === "blocked" ? "waiting" : "active", kind: nodeKind(entry.node) })) ?? [];
   const nodes = runtimeNodes.length ? runtimeNodes : item.graph;
   const evidenceLabel = turn.runtime.mode === "agentic" ? "Runtime-proven" : "Fixture replay";
+  const [selectedNodeId, setSelectedNodeId] = useState(nodes[0]?.id ?? "");
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? nodes[0];
+  const nodeEvents = turn.runtime.protocolEvents?.filter((event) =>
+    event.stepName === selectedNode?.id || event.subagentRunId && selectedNode?.id.includes("specialist"),
+  ) ?? [];
+  const agentCount = nodes.filter((node) => (node.kind ?? nodeKind(node.id)) === "agent").length;
 
   return (
     <section className="execution-visuals">
+      <div className="run-summary">
+        <div><span>Pattern</span><strong>{pattern}</strong></div>
+        <div><span>Outcome</span><strong>{turn.runtime.error ? "Failed" : "Completed"}</strong></div>
+        <div><span>Agents</span><strong>{agentCount}</strong></div>
+        <div><span>Citations</span><strong>{turn.runtime.citations.length}</strong></div>
+        <div><span>Guardrail</span><strong>{turn.runtime.guardrail?.decision ?? "n/a"}</strong></div>
+        <div><span>Latency</span><strong>{(turn.runtime.totalMs / 1000).toFixed(2)} s</strong></div>
+      </div>
       <nav className="visual-tabs" aria-label="Run visualisations">
         <button className={view === "graph" ? "active" : ""} onClick={() => setView("graph")}>Execution graph</button>
         <button className={view === "timeline" ? "active" : ""} onClick={() => setView("timeline")}>Run timeline</button>
         <button className={view === "evidence" ? "active" : ""} onClick={() => setView("evidence")}>Evidence flow</button>
       </nav>
-      {view === "graph" && <PatternGraph nodes={nodes} pattern={pattern} />}
+      {view === "graph" && <div className="graph-inspector-layout">
+        <PatternGraph nodes={nodes} pattern={pattern} selectedNode={selectedNodeId} onSelect={(node) => setSelectedNodeId(node.id)} />
+        {selectedNode && <aside className="node-inspector">
+          <p className="eyebrow">Selected execution node</p>
+          <h4>{selectedNode.label}</h4>
+          <div className="inspector-grid">
+            <div><span>Type</span><strong>{nodeKindLabel[selectedNode.kind ?? nodeKind(selectedNode.id)]}</strong></div>
+            <div><span>Status</span><strong>{selectedNode.state}</strong></div>
+            <div><span>Duration</span><strong>{selectedNode.role}</strong></div>
+            <div><span>Events</span><strong>{nodeEvents.length}</strong></div>
+          </div>
+          <p>{nodeEvents.length ? nodeEvents.map((event) => event.type).join(" → ") : "No node-specific protocol envelope was returned for this view."}</p>
+          {selectedNode.id.includes("specialist") && turn.runtime.integrations?.a2a.executed && <div className="artifact-proof"><span>A2A task artifact</span><strong>{turn.runtime.integrations.a2a.agentName}</strong><small>Task {turn.runtime.integrations.a2a.taskId}</small></div>}
+          {selectedNode.id === "published_netflix_agent" && <div className="artifact-proof"><span>Evidence consumed</span><strong>{turn.runtime.citations.length} returned citations</strong><small>Persora KB · Supabase/Postgres vectors</small></div>}
+        </aside>}
+      </div>}
       {view === "timeline" && <div className="visual-card timeline-card">
         <div className="card-heading"><div><span>{turn.runtime.mode === "agentic" ? "Runtime event sequence" : "Fixture event sequence"}</span><strong>Ordered run events</strong></div><p>{turn.runtime.mode === "agentic" ? "Node order and durations were returned by this server-side LangGraph run." : "Relative ordering is proven by the fixture; no synthetic latency is displayed."}</p></div>
         <div className="timeline-list">{nodes.map((node, index) => <div className="timeline-row" key={node.id}><span>0{index + 1}</span><strong>{node.label}</strong><div className="timeline-track"><i style={{ width: `${32 + index * 14}%` }} /></div><em>{turn.runtime.nodeTrace?.[index] ? `${turn.runtime.nodeTrace[index].durationMs} ms` : node.state}</em></div>)}</div>
@@ -231,6 +294,12 @@ function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
           <article><span>03</span><strong>Case response</strong><small>{evidenceLabel}</small></article><i>→</i>
           <article><span>04</span><strong>Required-field check</strong><small>Runtime-proven</small></article>
         </div>
+        {turn.runtime.retrieval && <div className="retrieval-results">
+          <div><span>Retrieval provider</span><strong>{turn.runtime.retrieval.provider}</strong><small>{turn.runtime.retrieval.returnedCount} ranked sources · retrieval-only latency not captured</small></div>
+          {turn.runtime.retrieval.results.map((result) => <article key={`${result.rank}-${result.label}`}>
+            <b>#{result.rank}</b><div><strong>{result.label}</strong>{result.snippet && <p>{result.snippet.slice(0, 180)}</p>}</div><em>{result.similarity == null ? "score not returned" : `${(result.similarity * 100).toFixed(1)}%`}</em>
+          </article>)}
+        </div>}
       </div>}
     </section>
   );
@@ -408,6 +477,7 @@ export default function App() {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [selectedTurn, setSelectedTurn] = useState<ChatTurn | null>(null);
   const [source, setSource] = useState<AnswerSource>("agentic");
+  const [progress, setProgress] = useState<RunProgress | null>(null);
 
   const ask = async (question: string, selectedCase?: DemoCase) => {
     const demoCase = selectedCase ?? routeFixtureQuestion(question);
@@ -426,7 +496,8 @@ export default function App() {
 
     if (source !== "fixture") {
       try {
-        const live = source === "agentic" ? await askAgenticDemo(question) : await askPublishedAgent(question);
+        setProgress(source === "agentic" ? { traceId: "starting", stage: "intake", label: "Starting the LangGraph run", status: "running", startedAt: performance.now(), events: [] } : null);
+        const live = source === "agentic" ? await askAgenticDemo(question, setProgress) : await askPublishedAgent(question);
         answer = live.answer;
         runtime = live.runtime;
       } catch (error) {
@@ -443,6 +514,7 @@ export default function App() {
         };
       }
     }
+    setProgress(null);
 
     const resolvedDemoCase = demoCase ?? (runtime.mode === "agentic" ? cases.find((item) => item.pattern === runtime.pattern) ?? cases[0] : null);
     const turn: ChatTurn = {
@@ -478,7 +550,7 @@ export default function App() {
   return (
     <div className="app">
       <Header source={source} onSourceChange={setSource} />
-      <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} source={source} onSourceChange={setSource} />
+      <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} source={source} onSourceChange={setSource} progress={progress} />
       {selectedTurn?.demoCase && selectedTurn.runId && <ExplainDrawer key={`${selectedTurn.id}-${selectedTurn.runtime.handoff?.status ?? "none"}`} turn={selectedTurn} onClose={() => setSelectedTurn(null)} onHandoffDecision={decideHandoff} />}
     </div>
   );

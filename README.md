@@ -20,6 +20,8 @@ An interview-ready, evidence-first Netflix support demonstration. The applicatio
 - An additive **Agentic run** mode backed by JWT-protected Supabase Edge Functions. It executes a real LangGraph graph, streams standards-based AG-UI events, runs a deterministic authorization guardrail before retrieval, pauses mutation requests for human approval, and calls the published Netflix agent with its returned citations.
 - Distinct sequential, concurrent privacy-check, A2A group-specialist, human-handoff, and bounded-recovery execution paths.
 - A pinned, server-side RAGAS contract benchmark that is explicitly separated from per-answer evidence.
+- Progressive run status while LangGraph nodes execute, contextual follow-up questions, a selectable orchestration canvas, and a node inspector backed by that run's trace.
+- Ranked retrieval evidence derived from the exact citations returned by the existing Persora KB path; no second vector database is implied.
 
 The labels are the central design rule: an optional technology is never presented as live merely because the UI has a field for it.
 
@@ -70,15 +72,16 @@ Current execution truth:
 | LangGraph | Executed in `supabase/functions/agentic-support-demo/index.ts` |
 | Deterministic authorization guardrail | Executed before the KB/model path |
 | Prompt version | Returned by every agentic run |
-| AG-UI lifecycle, step, text, subagent and custom evidence events | Streamed by every agentic run |
+| AG-UI lifecycle, step, text, subagent and custom evidence events | Progressively streamed by every agentic run; upstream answer text arrives as one delta after the graph completes |
 | A2A | Agent Card discovery and `message:send` execute on the group-chat route through `netflix-specialist-a2a` |
-| Langfuse | OTLP exporter implemented; executed only when server-side credentials are configured and Langfuse accepts the trace |
+| Langfuse | OTLP root span and generation observations implemented; model, token and cost fields remain unavailable from the current published-agent response |
 | RAGAS | Pinned `0.4.3` deterministic contract benchmark executes in CI; it is not presented as evaluation of an individual live answer |
+| Pinecone / Milvus | Not executed; the demo intentionally reuses Persora's current Supabase/Postgres vector retrieval and returned citations |
 | Neo4j GraphRAG | Not executed until a graph query returns records |
 
 ### Interaction contracts
 
-- `agentic-support-demo` returns an AG-UI Server-Sent Event stream when the client requests `text/event-stream`. The stream includes `RUN_STARTED`, step events, text-message events, one custom evidence event and `RUN_FINISHED`.
+- `agentic-support-demo` returns an AG-UI Server-Sent Event stream when the client requests `text/event-stream`. The stream includes `RUN_STARTED`, progressive step events, text-message events, contextual follow-ups, one custom evidence event and `RUN_FINISHED`.
 - The human-handoff route finishes with an interrupt outcome and an evidence summary; it never claims that an account mutation or refund occurred.
 - The group-chat route discovers the specialist Agent Card and sends an A2A 1.0 `message:send` request. The returned task artifact becomes bounded context for the primary published agent.
 - The A2A specialist endpoint is JWT-protected and invokes the existing published Persora Netflix agent. Browser clients never receive a service-role credential.

@@ -46,4 +46,26 @@ describe("Persora event stream", () => {
     expect(state.evidence?.traceId).toBe("trace-1");
     expect(state.citations[0].label).toBe("Netflix Help");
   });
+
+  it("captures contextual follow-up questions from the AG-UI custom event", () => {
+    const state = applyAgUiPayload(
+      { answer: "", citations: [], eventTypes: [], protocolEvents: [] },
+      JSON.stringify({
+        type: "CUSTOM",
+        name: "persora.followups",
+        value: { questions: ["What should I try next?", "When should I contact support?"] },
+      }),
+    );
+    expect(state.followUps).toEqual(["What should I try next?", "When should I contact support?"]);
+    expect(state.protocolEvents?.at(-1)?.type).toBe("CUSTOM");
+  });
+
+  it("preserves the server error returned by an AG-UI run", () => {
+    const state = applyAgUiPayload(
+      { answer: "", citations: [], eventTypes: [], protocolEvents: [] },
+      JSON.stringify({ type: "RUN_ERROR", message: "Specialist timed out" }),
+    );
+    expect(state.streamError).toBe("Specialist timed out");
+    expect(state.eventTypes).toContain("RUN_ERROR");
+  });
 });
