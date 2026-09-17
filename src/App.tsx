@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cases } from "./data";
 import { askAgenticDemo, askPublishedAgent, resolveAgenticHandoff } from "./liveClient";
+import { formatRetrievalScore } from "./retrievalScore";
 import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern, RunProgress } from "./types";
 
 const statusLabel: Record<EvidenceStatus, string> = {
@@ -297,7 +298,7 @@ function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
         {turn.runtime.retrieval && <div className="retrieval-results">
           <div><span>Retrieval provider</span><strong>{turn.runtime.retrieval.provider}</strong><small>{turn.runtime.retrieval.returnedCount} ranked sources · retrieval-only latency not captured</small></div>
           {turn.runtime.retrieval.results.map((result) => <article key={`${result.rank}-${result.label}`}>
-            <b>#{result.rank}</b><div><strong>{result.label}</strong>{result.snippet && <p>{result.snippet.slice(0, 180)}</p>}</div><em>{result.similarity == null ? "score not returned" : `${(result.similarity * 100).toFixed(1)}%`}</em>
+            <b>#{result.rank}</b><div><strong>{result.label}</strong>{result.snippet && <p>{result.snippet.slice(0, 180)}</p>}</div><em>{formatRetrievalScore(result.similarity)}</em>
           </article>)}
         </div>}
       </div>}
