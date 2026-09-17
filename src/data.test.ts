@@ -68,4 +68,17 @@ describe("demo evidence", () => {
     expect(requirements).toContain("ragas==0.4.3");
     expect(result).toMatchObject({ executed: true, scope: "benchmark", version: "0.4.3", sampleCount: 5 });
   });
+
+  it("keeps group-chat and human approval claims aligned with runtime behavior", () => {
+    const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    const migration = readFileSync(new URL("../supabase/migrations/20260917080958_add_agentic_demo_approvals.sql", import.meta.url), "utf8");
+    expect(app).toContain("one A2A specialist task result");
+    expect(app).toContain("Approve safe continuation");
+    expect(app).toContain("Required-phrase coverage");
+    expect(orchestrator).toContain("session-bound-demo-decision");
+    expect(orchestrator).toContain("no account was cancelled and no refund was issued");
+    expect(migration).toContain("enable row level security");
+    expect(migration).toContain("revoke all on table public.agentic_demo_approvals from public, anon, authenticated");
+  });
 });
