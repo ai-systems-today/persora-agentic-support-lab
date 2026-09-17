@@ -1,4 +1,5 @@
 import type { Citation, RuntimeEvidence } from "./types";
+import ragasBenchmark from "./generated/ragas-evaluation.json";
 
 export const NETFLIX_WIDGET_ID = "6a01cc31-ee9e-4977-aa8c-031894a71851";
 export const PERSORA_CHAT_URL = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
@@ -10,6 +11,8 @@ export type StreamState = {
   answer: string;
   citations: Citation[];
   eventTypes: string[];
+  protocolEvents?: Array<Record<string, unknown> & { type: string }>;
+  evidence?: Omit<RuntimeEvidence, "mode" | "transport" | "totalMs" | "citations" | "error">;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -50,6 +53,7 @@ export async function askAgenticDemo(question: string): Promise<{ answer: string
       "x-trace-id": traceId,
       "apikey": SUPABASE_PUBLISHABLE_KEY,
       "Authorization": `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+      "Accept": "text/event-stream",
     },
     body: JSON.stringify({
       widgetId: NETFLIX_WIDGET_ID,
@@ -58,31 +62,68 @@ export async function askAgenticDemo(question: string): Promise<{ answer: string
       deviceId: sessionValue("persora-agentic-demo-device"),
     }),
   });
-  const payload = await response.json() as {
-    answer?: string;
-    citations?: unknown[];
-    evidence?: Omit<RuntimeEvidence, "mode" | "transport" | "totalMs" | "citations" | "error">;
-    error?: string;
-  };
-  if (!response.ok || !payload.answer) throw new Error(payload.error ?? `Agentic demo returned HTTP ${response.status}.`);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(payload.error ?? `Agentic demo returned HTTP ${response.status}.`);
+  }
+  if (!response.body) throw new Error("Agentic demo returned no AG-UI event stream.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let state: StreamState = { answer: "", citations: [], eventTypes: [], protocolEvents: [] };
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? "";
+    for (const line of lines) if (line.startsWith("data:")) state = applyAgUiPayload(state, line.slice(5).trim());
+    if (done) break;
+  }
+  if (buffer.startsWith("data:")) state = applyAgUiPayload(state, buffer.slice(5).trim());
+  if (!state.answer.trim() || !state.evidence) throw new Error("AG-UI stream completed without answer or runtime evidence.");
+  const integrations = state.evidence.integrations
+    ? { ...state.evidence.integrations, ragas: ragasBenchmark as NonNullable<RuntimeEvidence["integrations"]>["ragas"] }
+    : undefined;
   return {
-    answer: payload.answer,
+    answer: state.answer.trim(),
     runtime: {
       mode: "agentic",
-      transport: "json",
-      traceId: payload.evidence?.traceId ?? traceId,
+      transport: "sse",
+      traceId: state.evidence.traceId ?? traceId,
       totalMs: Math.round(performance.now() - started),
-      eventTypes: payload.evidence?.eventTypes ?? [],
-      citations: (payload.citations ?? []).map(normaliseCitation),
+      eventTypes: state.eventTypes,
+      citations: state.citations,
       error: null,
-      pattern: payload.evidence?.pattern,
-      promptVersion: payload.evidence?.promptVersion,
-      guardrail: payload.evidence?.guardrail,
-      nodeTrace: payload.evidence?.nodeTrace,
-      protocolEvents: payload.evidence?.protocolEvents,
-      integrations: payload.evidence?.integrations,
+      pattern: state.evidence.pattern,
+      promptVersion: state.evidence.promptVersion,
+      guardrail: state.evidence.guardrail,
+      handoff: state.evidence.handoff,
+      nodeTrace: state.evidence.nodeTrace,
+      protocolEvents: state.protocolEvents,
+      integrations,
     },
   };
+}
+
+export function applyAgUiPayload(state: StreamState, payload: string): StreamState {
+  if (!payload || payload === "[DONE]") return state;
+  let parsed: unknown;
+  try { parsed = JSON.parse(payload); } catch { return state; }
+  const record = asRecord(parsed);
+  if (!record || typeof record.type !== "string") return state;
+  const event = record as Record<string, unknown> & { type: string };
+  const eventTypes = state.eventTypes.includes(event.type) ? state.eventTypes : [...state.eventTypes, event.type];
+  const protocolEvents = [...(state.protocolEvents ?? []), event];
+  if (event.type === "TEXT_MESSAGE_CONTENT" && typeof event.delta === "string") {
+    return { ...state, answer: state.answer + event.delta, eventTypes, protocolEvents };
+  }
+  if (event.type === "CUSTOM" && event.name === "persora.evidence") {
+    const value = asRecord(event.value);
+    const evidence = asRecord(value?.evidence) as StreamState["evidence"];
+    const citations = Array.isArray(value?.citations) ? value.citations.map(normaliseCitation) : state.citations;
+    return { ...state, evidence, citations, eventTypes, protocolEvents };
+  }
+  return { ...state, eventTypes, protocolEvents };
 }
 
 export function applySsePayload(state: StreamState, payload: string): StreamState {

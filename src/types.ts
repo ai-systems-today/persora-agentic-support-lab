@@ -60,7 +60,12 @@ export type RuntimeEvidence = {
   promptVersion?: string;
   guardrail?: { decision: "allow" | "block"; reason: string };
   nodeTrace?: Array<{ node: string; status: string; durationMs: number }>;
-  protocolEvents?: Array<{ type: string; source: string; target: string }>;
+  protocolEvents?: Array<Record<string, unknown> & { type: string }>;
+  handoff?: {
+    required: boolean;
+    status: "not-required" | "awaiting-human";
+    summary: string | null;
+  };
   integrations?: {
     langGraph: { executed: boolean; version: string };
     langfuse: {
@@ -70,7 +75,21 @@ export type RuntimeEvidence = {
       traceUrl: string | null;
       error: string | null;
     };
-    ragas: { executed: boolean; scores: Record<string, number> | null };
+    ragas: {
+      executed: boolean;
+      scope: "benchmark" | "request" | null;
+      version: string | null;
+      sampleCount: number | null;
+      scores: Record<string, number> | null;
+    };
+    agUi: { executed: boolean; version: string; eventCount: number };
+    a2a: {
+      executed: boolean;
+      version: string;
+      agentName: string | null;
+      taskId: string | null;
+      error: string | null;
+    };
     neo4j: { executed: boolean; records: number | null };
   };
 };
