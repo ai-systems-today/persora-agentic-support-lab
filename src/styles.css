@@ -145,12 +145,12 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
 .lane.human { border-color: #77633e; background: #1d1b17; }
 .lane .graph-node { width: 100%; }
 .handoff-gate { align-self: center; color: #e5bf72; border-top: 1px dashed #9b7d43; border-bottom: 1px dashed #9b7d43; padding: 12px 4px; text-align: center; text-transform: uppercase; letter-spacing: .08em; font-size: 9px; line-height: 1.6; }
-.group-topology { display: grid; grid-template-columns: 155px 145px 1fr 155px; align-items: center; gap: 12px; }
+.group-topology { display: flex; align-items: stretch; gap: 8px; }
+.group-topology .graph-unit { display: flex; align-items: center; flex: 1; min-width: 0; }
+.group-topology .graph-node { flex: 1; }
 .group-coordinator, .group-result { position: relative; }
 .shared-state { width: 118px; height: 118px; border-radius: 50%; border: 1px dashed #6d55b5; background: radial-gradient(circle, #3b2b69, #17162c); display: grid; place-items: center; text-align: center; color: #c5b6fa; text-transform: uppercase; letter-spacing: .08em; font-size: 9px; padding: 20px; box-shadow: 0 0 30px #7053d126; }
 .specialist-ring { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)); gap: 10px; }
-.group-topology > * { position: relative; }
-.group-topology > *:not(:last-child)::after { content: "→"; position: absolute; right: -13px; top: 45%; color: #705d9e; }
 .planner-topology { display: grid; grid-template-columns: 150px 70px 150px 1fr; gap: 12px; align-items: center; position: relative; padding-bottom: 26px; }
 .loop-arrow { color: #8ca6c7; font-size: 9px; text-align: center; text-transform: uppercase; }
 .worker-row { display: flex; gap: 10px; }
@@ -200,6 +200,19 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
 .evidence-value { text-align: right; }
 .evidence-value strong { display: block; font-size: 11px; line-height: 1.45; }
 .evidence-value a { display: block; color: #8ec5ff; font-size: 11px; font-weight: 800; line-height: 1.45; overflow-wrap: anywhere; }
+.metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; text-align: left; }
+.metric-grid div { border: 1px solid #294766; background: #0b1d31; border-radius: 8px; padding: 8px; }
+.metric-grid span { display: block; color: #738aa7; font-size: 8px; line-height: 1.25; }
+.metric-grid b { display: block; color: #d9edff; margin-top: 5px; font-size: 12px; }
+.approval-card { border: 1px solid #745b2a; background: linear-gradient(135deg, #1d1a13, #101a27); border-radius: 17px; padding: 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.approval-card h3 { margin: 0 0 8px; }
+.approval-card p:not(.eyebrow) { color: #c7d1de; margin: 0 0 7px; font-size: 12px; line-height: 1.55; }
+.approval-card small { color: #aa9874; }
+.approval-card .approval-error { color: #ff9a9a; margin-top: 10px; }
+.approval-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.approval-actions button { border: 1px solid #4a5c72; background: #18283a; border-radius: 10px; padding: 10px 13px; cursor: pointer; font-weight: 800; }
+.approval-actions .approve { background: #145241; border-color: #237b62; color: #dffff5; }
+.approval-actions button:disabled { opacity: .55; cursor: wait; }
 .status { display: inline-block; font-style: normal; border-radius: 99px; padding: 5px 8px; margin-top: 7px; font-size: 8px; text-transform: uppercase; letter-spacing: .07em; font-weight: 900; }
 .status.runtime-proven { background: #123d34; color: #69e4bd; }
 .status.repo-defined { background: #18395e; color: #93c4ff; }
@@ -230,6 +243,9 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
   .layer-panel { grid-template-columns: 1fr; }
   .layer-summary { border-right: 0; border-bottom: 1px solid var(--line); }
   .evidence-row { grid-template-columns: 1fr; }.evidence-value { text-align: left; }
+  .metric-grid { grid-template-columns: 1fr; }
+  .approval-card { align-items: stretch; flex-direction: column; }
+  .approval-actions button { flex: 1; }
   .stack-grid { grid-template-columns: 1fr 1fr; }
   .visual-tabs { overflow-x: auto; }
   .visual-tabs button { min-width: 130px; }

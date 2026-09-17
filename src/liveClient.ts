@@ -43,7 +43,7 @@ function normaliseCitation(value: unknown, index: number): Citation {
   };
 }
 
-export async function askAgenticDemo(question: string): Promise<{ answer: string; runtime: RuntimeEvidence }> {
+async function requestAgenticDemo(body: Record<string, unknown>): Promise<{ answer: string; runtime: RuntimeEvidence }> {
   const started = performance.now();
   const traceId = crypto.randomUUID();
   const response = await fetch(AGENTIC_DEMO_URL, {
@@ -56,8 +56,7 @@ export async function askAgenticDemo(question: string): Promise<{ answer: string
       "Accept": "text/event-stream",
     },
     body: JSON.stringify({
-      widgetId: NETFLIX_WIDGET_ID,
-      message: question,
+      ...body,
       sessionToken: sessionValue("persora-agentic-demo-session"),
       deviceId: sessionValue("persora-agentic-demo-device"),
     }),
@@ -103,6 +102,14 @@ export async function askAgenticDemo(question: string): Promise<{ answer: string
       integrations,
     },
   };
+}
+
+export async function askAgenticDemo(question: string): Promise<{ answer: string; runtime: RuntimeEvidence }> {
+  return requestAgenticDemo({ widgetId: NETFLIX_WIDGET_ID, message: question });
+}
+
+export async function resolveAgenticHandoff(approvalId: string, decision: "approve" | "reject") {
+  return requestAgenticDemo({ approvalId, decision });
 }
 
 export function applyAgUiPayload(state: StreamState, payload: string): StreamState {

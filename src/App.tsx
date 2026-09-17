@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cases } from "./data";
-import { askAgenticDemo, askPublishedAgent } from "./liveClient";
+import { askAgenticDemo, askPublishedAgent, resolveAgenticHandoff } from "./liveClient";
 import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern } from "./types";
 
 const statusLabel: Record<EvidenceStatus, string> = {
@@ -16,7 +16,7 @@ const statusLabel: Record<EvidenceStatus, string> = {
 const patternDescription: Record<Pattern, string> = {
   sequential: "Each step completes before the next begins.",
   concurrent: "Independent checks run side by side, then converge.",
-  "group-chat": "Specialists collaborate through a shared conversation state.",
+  "group-chat": "A coordinator obtains one A2A specialist task result before grounded synthesis.",
   handoff: "Control transfers when authorization or human judgment is required.",
   magentic: "A planner selects and revises the next specialist step from state.",
 };
@@ -169,12 +169,7 @@ function PatternGraph({ nodes, pattern }: { nodes: GraphNode[]; pattern: Pattern
       </div>;
     }
     if (pattern === "group-chat") {
-      return <div className="topology group-topology">
-        <div className="group-coordinator">{renderNode(nodes[0], 0)}</div>
-        <div className="shared-state">shared conversation state</div>
-        <div className="specialist-ring">{nodes.slice(1, -1).map((node, index) => renderNode(node, index + 1))}</div>
-        <div className="group-result">{renderNode(nodes.at(-1)!, nodes.length - 1)}</div>
-      </div>;
+      return <div className="topology group-topology">{nodes.map((node, index) => <div className="graph-unit" key={node.id}>{renderNode(node, index)}{index < nodes.length - 1 && <div className="connector"><i /></div>}</div>)}</div>;
     }
     if (pattern === "handoff") {
       return <div className="topology handoff-topology">
@@ -255,6 +250,7 @@ function LayerPanel({ layer }: { layer: EvidenceLayer }) {
             <div className="evidence-name"><span>{item.label}</span><small>{item.detail}</small></div>
             <div className="evidence-value">
               {item.href ? <a href={item.href} target="_blank" rel="noreferrer">{item.value} ↗</a> : <strong>{item.value}</strong>}
+              {item.metrics && <div className="metric-grid">{item.metrics.map((metric) => <div key={metric.label}><span>{metric.label}</span><b>{metric.value}</b></div>)}</div>}
               <em className={`status ${item.status}`}>{statusLabel[item.status]}</em>
             </div>
           </article>
@@ -293,8 +289,8 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
   next = next.map((layer) => layer.id === "interaction" ? { ...layer, fields: [
     { label: "Customer surface", value: "Support chatbot", status: "runtime-proven", detail: "The submitted question and returned answer are visible in this UI." },
     { label: "AG-UI event stream", value: agUi?.executed ? `${agUi.eventCount} events · v${agUi.version}` : "Not executed", status: agUi?.executed ? "runtime-proven" : "not-executed", detail: agUi?.executed ? `Observed over SSE: ${turn.runtime.eventTypes.join(", ")}.` : "The published-agent stream is not relabelled as AG-UI without AG-UI lifecycle envelopes." },
-    { label: "A2A specialist exchange", value: a2a?.executed ? `${a2a.agentName} · task ${a2a.taskId}` : a2a?.error ? `Failed: ${a2a.error}` : "Not required for this route", status: a2a?.executed ? "runtime-proven" : "not-executed", detail: a2a?.executed ? `Agent Card discovery and message:send completed using A2A ${a2a.version}.` : "A2A is invoked only by the group-chat route; absence on other routes is expected." },
-    { label: "Human handoff", value: handoff?.required ? "Awaiting authenticated approval" : "Not required for this route", status: handoff?.required ? "runtime-proven" : "not-executed", detail: handoff?.summary ?? "No approval interrupt was emitted for this answer." },
+    { label: "A2A specialist exchange", value: a2a?.executed ? `${a2a.agentName} · task ${a2a.taskId}` : a2a?.error ? `Failed: ${a2a.error}` : "Not required for this route", status: a2a?.executed ? "runtime-proven" : "not-executed", detail: a2a?.executed ? `One Agent Card discovery and one message:send completed using A2A ${a2a.version}; no additional specialists are claimed.` : "A2A is invoked only by the group-chat route; absence on other routes is expected." },
+    { label: "Human handoff", value: handoff?.status === "awaiting-human" ? "Awaiting demo-operator decision" : handoff?.status === "approved" ? "Approved — safe continuation recorded" : handoff?.status === "rejected" ? "Rejected — workflow closed" : "Not required for this route", status: handoff?.required ? "runtime-proven" : "not-executed", detail: handoff?.decisionMessage ?? handoff?.summary ?? "No approval interrupt was emitted for this answer." },
   ] } : layer);
   next = next.map((layer) => layer.id === "observability" ? { ...layer, fields: [
     { label: "Trace identifier", value: turn.runtime.traceId, status: "runtime-proven", detail: "Generated for this request and sent as x-trace-id." },
@@ -306,15 +302,21 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
     { label: "Answer present", value: turn.answer.trim() ? "Passed" : "Failed", status: "runtime-proven", detail: "Programmatic validation checked that the live stream produced answer text." },
     { label: "Citation presence", value: turn.runtime.citations.length ? "Passed" : "No citations returned", status: "runtime-proven", detail: "Validated directly from the streamed citations event." },
     { label: "Authorization guardrail", value: turn.runtime.guardrail ? `${turn.runtime.guardrail.decision}: ${turn.runtime.guardrail.reason}` : "Not captured", status: turn.runtime.guardrail ? "runtime-proven" : "not-captured", detail: "A deterministic server-side decision runs before retrieval." },
-    { label: "RAGAS benchmark", value: ragas?.executed ? `${ragas.sampleCount} samples · ${JSON.stringify(ragas.scores)}` : "Not executed", status: ragas?.executed ? "runtime-proven" : "not-executed", detail: ragas?.executed ? `Pinned RAGAS ${ragas.version} evaluated the checked-in deterministic benchmark. This is benchmark evidence, not a score for this individual answer.` : "No metric is displayed without an evaluator run." },
+    { label: "RAGAS benchmark", value: ragas?.executed ? "CI benchmark completed" : "Not executed", status: ragas?.executed ? "runtime-proven" : "not-executed", detail: ragas?.executed ? `Pinned RAGAS ${ragas.version} evaluated the checked-in deterministic benchmark. These are suite-level metrics, not a score for this answer.` : "No metric is displayed without an evaluator run.", metrics: ragas?.executed ? [
+      { label: "Benchmark cases", value: String(ragas.sampleCount ?? 0) },
+      { label: "Response similarity", value: `${((ragas.scores?.non_llm_string_similarity ?? 0) * 100).toFixed(2)}%` },
+      { label: "Required-phrase coverage", value: `${((ragas.scores?.required_phrase_presence ?? 0) * 100).toFixed(0)}%` },
+    ] : undefined },
   ] } : layer);
 }
 
-function ExplainDrawer({ turn, onClose }: { turn: ChatTurn; onClose: () => void }) {
+function ExplainDrawer({ turn, onClose, onHandoffDecision }: { turn: ChatTurn; onClose: () => void; onHandoffDecision: (decision: "approve" | "reject") => Promise<void> }) {
   const item = turn.demoCase!;
   const runId = turn.runId!;
   const evidenceLayers = useMemo(() => layersForTurn(turn), [turn]);
   const [activeLayer, setActiveLayer] = useState(evidenceLayers[0].id);
+  const [deciding, setDeciding] = useState(false);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
   const layer = evidenceLayers.find((candidate) => candidate.id === activeLayer) ?? evidenceLayers[0];
   const proofCounts = useMemo(() => {
     const fields = evidenceLayers.flatMap((entry) => entry.fields);
@@ -324,6 +326,18 @@ function ExplainDrawer({ turn, onClose }: { turn: ChatTurn; onClose: () => void 
       absent: fields.filter((entry) => entry.status === "not-captured" || entry.status === "not-executed").length,
     };
   }, [evidenceLayers]);
+
+  const decide = async (decision: "approve" | "reject") => {
+    setDeciding(true);
+    setDecisionError(null);
+    try {
+      await onHandoffDecision(decision);
+    } catch (error) {
+      setDecisionError(error instanceof Error ? error.message : "The decision could not be recorded.");
+    } finally {
+      setDeciding(false);
+    }
+  };
 
   return (
     <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -344,6 +358,11 @@ function ExplainDrawer({ turn, onClose }: { turn: ChatTurn; onClose: () => void 
           </section>
 
           <ExecutionVisuals turn={turn} />
+
+          {turn.runtime.handoff?.status === "awaiting-human" && turn.runtime.handoff.approvalId && <section className="approval-card">
+            <div><p className="eyebrow">Human-in-the-loop checkpoint</p><h3>Decide the demo workflow</h3><p>{turn.runtime.handoff.summary}</p><small>This records an orchestration decision only. It does not cancel a Netflix account or issue a refund.</small>{decisionError && <p className="approval-error" role="alert">{decisionError}</p>}</div>
+            <div className="approval-actions"><button disabled={deciding} onClick={() => void decide("reject")}>Reject</button><button className="approve" disabled={deciding} onClick={() => void decide("approve")}>{deciding ? "Recording…" : "Approve safe continuation"}</button></div>
+          </section>}
 
           <section className="architecture">
             <div className="section-title"><div><p className="eyebrow">Architecture evidence</p><h3>Five layers, one selected run</h3></div><p>Click a layer to inspect its actual values and evidence status.</p></div>
@@ -438,11 +457,29 @@ export default function App() {
     setTurns((current) => [...current, turn]);
   };
 
+  const decideHandoff = async (decision: "approve" | "reject") => {
+    if (!selectedTurn?.runtime.handoff?.approvalId) return;
+    const continuation = await resolveAgenticHandoff(selectedTurn.runtime.handoff.approvalId, decision);
+    const updated: ChatTurn = {
+      ...selectedTurn,
+      runtime: {
+        ...selectedTurn.runtime,
+        totalMs: selectedTurn.runtime.totalMs + continuation.runtime.totalMs,
+        eventTypes: [...new Set([...selectedTurn.runtime.eventTypes, ...continuation.runtime.eventTypes])],
+        protocolEvents: [...(selectedTurn.runtime.protocolEvents ?? []), ...(continuation.runtime.protocolEvents ?? [])],
+        nodeTrace: [...(selectedTurn.runtime.nodeTrace ?? []), ...(continuation.runtime.nodeTrace ?? [])],
+        handoff: continuation.runtime.handoff,
+      },
+    };
+    setTurns((current) => current.map((turn) => turn.id === updated.id ? updated : turn));
+    setSelectedTurn(updated);
+  };
+
   return (
     <div className="app">
       <Header source={source} onSourceChange={setSource} />
       <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} source={source} onSourceChange={setSource} />
-      {selectedTurn?.demoCase && selectedTurn.runId && <ExplainDrawer key={selectedTurn.id} turn={selectedTurn} onClose={() => setSelectedTurn(null)} />}
+      {selectedTurn?.demoCase && selectedTurn.runId && <ExplainDrawer key={`${selectedTurn.id}-${selectedTurn.runtime.handoff?.status ?? "none"}`} turn={selectedTurn} onClose={() => setSelectedTurn(null)} onHandoffDecision={decideHandoff} />}
     </div>
   );
 }
