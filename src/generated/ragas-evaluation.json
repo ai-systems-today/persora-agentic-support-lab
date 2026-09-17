@@ -1,0 +1,10 @@
+{
+  "executed": true,
+  "scope": "benchmark",
+  "version": "0.4.3",
+  "sampleCount": 5,
+  "scores": {
+    "non_llm_string_similarity": 0.9863,
+    "required_phrase_presence": 1.0
+  }
+}

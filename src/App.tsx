@@ -225,7 +225,7 @@ function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
       </nav>
       {view === "graph" && <PatternGraph nodes={nodes} pattern={pattern} />}
       {view === "timeline" && <div className="visual-card timeline-card">
-        <div className="card-heading"><div><span>Fixture event sequence</span><strong>Ordered run events</strong></div><p>Relative ordering is proven by the fixture; no synthetic latency is displayed.</p></div>
+        <div className="card-heading"><div><span>{turn.runtime.mode === "agentic" ? "Runtime event sequence" : "Fixture event sequence"}</span><strong>Ordered run events</strong></div><p>{turn.runtime.mode === "agentic" ? "Node order and durations were returned by this server-side LangGraph run." : "Relative ordering is proven by the fixture; no synthetic latency is displayed."}</p></div>
         <div className="timeline-list">{nodes.map((node, index) => <div className="timeline-row" key={node.id}><span>0{index + 1}</span><strong>{node.label}</strong><div className="timeline-track"><i style={{ width: `${32 + index * 14}%` }} /></div><em>{turn.runtime.nodeTrace?.[index] ? `${turn.runtime.nodeTrace[index].durationMs} ms` : node.state}</em></div>)}</div>
       </div>}
       {view === "evidence" && <div className="visual-card evidence-flow-card">
@@ -271,6 +271,10 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
   const agentic = turn.runtime.mode === "agentic";
   const publishedExecuted = !agentic || Boolean(turn.runtime.nodeTrace?.some((entry) => entry.node === "published_netflix_agent"));
   const langfuse = turn.runtime.integrations?.langfuse;
+  const agUi = turn.runtime.integrations?.agUi;
+  const a2a = turn.runtime.integrations?.a2a;
+  const ragas = turn.runtime.integrations?.ragas;
+  const handoff = turn.runtime.handoff;
 
   const replace = (id: EvidenceLayer["id"], fields: EvidenceLayer["fields"]): EvidenceLayer[] =>
     item.layers.map((layer) => layer.id === id ? { ...layer, fields } : layer);
@@ -288,8 +292,9 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
   ] } : layer);
   next = next.map((layer) => layer.id === "interaction" ? { ...layer, fields: [
     { label: "Customer surface", value: "Support chatbot", status: "runtime-proven", detail: "The submitted question and returned answer are visible in this UI." },
-    { label: "Transport", value: "Server-Sent Events", status: "runtime-proven", detail: `Observed event types: ${turn.runtime.eventTypes.join(", ") || "message stream"}.` },
-    { label: "Protocol events", value: agentic ? `${turn.runtime.protocolEvents?.length ?? 0} AG-UI-compatible events` : "Not executed", status: agentic ? "runtime-proven" : "not-executed", detail: agentic ? "The demo function returned typed run lifecycle envelopes; A2A remains unclaimed until a remote Agent Card exchange runs." : "SSE transport is not presented as AG-UI or A2A without their protocol envelopes." },
+    { label: "AG-UI event stream", value: agUi?.executed ? `${agUi.eventCount} events · v${agUi.version}` : "Not executed", status: agUi?.executed ? "runtime-proven" : "not-executed", detail: agUi?.executed ? `Observed over SSE: ${turn.runtime.eventTypes.join(", ")}.` : "The published-agent stream is not relabelled as AG-UI without AG-UI lifecycle envelopes." },
+    { label: "A2A specialist exchange", value: a2a?.executed ? `${a2a.agentName} · task ${a2a.taskId}` : a2a?.error ? `Failed: ${a2a.error}` : "Not required for this route", status: a2a?.executed ? "runtime-proven" : "not-executed", detail: a2a?.executed ? `Agent Card discovery and message:send completed using A2A ${a2a.version}.` : "A2A is invoked only by the group-chat route; absence on other routes is expected." },
+    { label: "Human handoff", value: handoff?.required ? "Awaiting authenticated approval" : "Not required for this route", status: handoff?.required ? "runtime-proven" : "not-executed", detail: handoff?.summary ?? "No approval interrupt was emitted for this answer." },
   ] } : layer);
   next = next.map((layer) => layer.id === "observability" ? { ...layer, fields: [
     { label: "Trace identifier", value: turn.runtime.traceId, status: "runtime-proven", detail: "Generated for this request and sent as x-trace-id." },
@@ -301,7 +306,7 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
     { label: "Answer present", value: turn.answer.trim() ? "Passed" : "Failed", status: "runtime-proven", detail: "Programmatic validation checked that the live stream produced answer text." },
     { label: "Citation presence", value: turn.runtime.citations.length ? "Passed" : "No citations returned", status: "runtime-proven", detail: "Validated directly from the streamed citations event." },
     { label: "Authorization guardrail", value: turn.runtime.guardrail ? `${turn.runtime.guardrail.decision}: ${turn.runtime.guardrail.reason}` : "Not captured", status: turn.runtime.guardrail ? "runtime-proven" : "not-captured", detail: "A deterministic server-side decision runs before retrieval." },
-    { label: "RAGAS evaluation", value: turn.runtime.integrations?.ragas.executed ? JSON.stringify(turn.runtime.integrations.ragas.scores) : "Not executed", status: turn.runtime.integrations?.ragas.executed ? "runtime-proven" : "not-executed", detail: "No metric is displayed without an evaluator run." },
+    { label: "RAGAS benchmark", value: ragas?.executed ? `${ragas.sampleCount} samples · ${JSON.stringify(ragas.scores)}` : "Not executed", status: ragas?.executed ? "runtime-proven" : "not-executed", detail: ragas?.executed ? `Pinned RAGAS ${ragas.version} evaluated the checked-in deterministic benchmark. This is benchmark evidence, not a score for this individual answer.` : "No metric is displayed without an evaluator run." },
   ] } : layer);
 }
 
@@ -353,13 +358,13 @@ function ExplainDrawer({ turn, onClose }: { turn: ChatTurn; onClose: () => void 
           </section>
 
           <section className="stack-map">
-            <div><p className="eyebrow">Transferable stack map</p><h3>What this proves—and what remains an adapter</h3></div>
+            <div><p className="eyebrow">Transferable stack map</p><h3>Technology proof for this selected run</h3></div>
             <div className="stack-grid">
               <article><span>Foundation</span><strong>Typed run evidence, deterministic fixtures, React UI</strong><small>Implemented here</small></article>
-              <article><span>Target orchestration</span><strong>LangChain / LangGraph</strong><small>Adapter boundary; no live claim</small></article>
-              <article><span>Target data</span><strong>Pinecone / Milvus / Neo4j</strong><small>Provider-neutral evidence fields</small></article>
-              <article><span>Target interaction</span><strong>AG-UI / A2A</strong><small>Protocol events not fabricated</small></article>
-              <article><span>Target assurance</span><strong>Langfuse / RAGAS</strong><small>Scores appear only after execution</small></article>
+              <article><span>Orchestration</span><strong>LangGraph {turn.runtime.integrations?.langGraph.version ?? ""}</strong><small>{turn.runtime.integrations?.langGraph.executed ? "Executed for this run" : "Not executed"}</small></article>
+              <article><span>Content & data</span><strong>Persora KB · Supabase vectors · citations</strong><small>{turn.runtime.citations.length ? `${turn.runtime.citations.length} sources returned` : "No sources returned"}; Neo4j not run</small></article>
+              <article><span>Interaction</span><strong>AG-UI {turn.runtime.integrations?.agUi.executed ? "executed" : "not run"} · A2A {turn.runtime.integrations?.a2a.executed ? "executed" : "route-dependent"}</strong><small>Handoff state: {turn.runtime.handoff?.status ?? "not captured"}</small></article>
+              <article><span>Observability & quality</span><strong>Langfuse {turn.runtime.integrations?.langfuse.executed ? "executed" : "not run"} · RAGAS {turn.runtime.integrations?.ragas.executed ? "benchmark executed" : "not run"}</strong><small>Per-run and benchmark evidence remain explicitly separate</small></article>
             </div>
           </section>
         </div>
@@ -410,7 +415,7 @@ export default function App() {
         answer = `The published agent could not be reached from this origin, so no live answer is shown. ${message}`;
         runtime = {
           mode: source,
-          transport: source === "agentic" ? "json" : "sse",
+          transport: "sse",
           traceId: crypto.randomUUID(),
           totalMs: Math.round(performance.now() - started),
           eventTypes: ["request-failed"],

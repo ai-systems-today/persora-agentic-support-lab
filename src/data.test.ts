@@ -45,4 +45,27 @@ describe("demo evidence", () => {
     expect(migration).toContain("revoke all on function public.get_agentic_demo_secrets() from public");
     expect(migration).toContain("grant execute on function public.get_agentic_demo_secrets() to service_role");
   });
+
+  it("defines distinct runtime branches and standards-based interaction contracts", () => {
+    const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    const specialist = readFileSync(new URL("../supabase/functions/netflix-specialist-a2a/index.ts", import.meta.url), "utf8");
+    for (const node of ["concurrent_privacy_checks", "human_handoff", "group_a2a_specialist", "recovery_planner"]) {
+      expect(orchestrator).toContain(`.addNode("${node}"`);
+    }
+    for (const event of ["RUN_STARTED", "TEXT_MESSAGE_CONTENT", "SUBAGENT_STARTED", "ACTIVITY_SNAPSHOT", "RUN_FINISHED"]) {
+      expect(orchestrator).toContain(`type: "${event}"`);
+    }
+    expect(specialist).toContain("/.well-known/agent-card.json");
+    expect(specialist).toContain("/message:send");
+    expect(specialist).toContain('"A2A-Version": A2A_VERSION');
+  });
+
+  it("runs the pinned RAGAS benchmark before the Pages build", () => {
+    const workflow = readFileSync(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8");
+    const requirements = readFileSync(new URL("../requirements-eval.txt", import.meta.url), "utf8");
+    const result = JSON.parse(readFileSync(new URL("./generated/ragas-evaluation.json", import.meta.url), "utf8"));
+    expect(workflow).toContain("python scripts/evaluate_ragas.py");
+    expect(requirements).toContain("ragas==0.4.3");
+    expect(result).toMatchObject({ executed: true, scope: "benchmark", version: "0.4.3", sampleCount: 5 });
+  });
 });

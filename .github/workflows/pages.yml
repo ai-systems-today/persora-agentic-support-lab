@@ -30,6 +30,17 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned RAGAS evaluator
+        run: pip install --requirement requirements-eval.txt
+
+      - name: Run deterministic RAGAS benchmark
+        run: python scripts/evaluate_ragas.py
+
       - name: Run evidence-contract tests
         run: npm test
 

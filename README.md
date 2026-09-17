@@ -17,7 +17,9 @@ An interview-ready, evidence-first Netflix support demonstration. The applicatio
   5. Quality
 - Explicit evidence labels: Runtime-proven, Repo-defined, Fixture replay, Not captured and Not executed.
 - An opt-in **Live agent** mode that streams the published Netflix Support Assistant response and renders the citations returned by that exact run.
-- An additive **Agentic run** mode backed by a JWT-protected Supabase Edge Function. It executes a real LangGraph graph, runs a deterministic authorization guardrail before retrieval, calls the published Netflix agent, and returns node timings, lifecycle events, prompt version, KB citations and integration execution flags.
+- An additive **Agentic run** mode backed by JWT-protected Supabase Edge Functions. It executes a real LangGraph graph, streams standards-based AG-UI events, runs a deterministic authorization guardrail before retrieval, pauses mutation requests for human approval, and calls the published Netflix agent with its returned citations.
+- Distinct sequential, concurrent privacy-check, A2A group-specialist, human-handoff, and bounded-recovery execution paths.
+- A pinned, server-side RAGAS contract benchmark that is explicitly separated from per-answer evidence.
 
 The labels are the central design rule: an optional technology is never presented as live merely because the UI has a field for it.
 
@@ -68,11 +70,22 @@ Current execution truth:
 | LangGraph | Executed in `supabase/functions/agentic-support-demo/index.ts` |
 | Deterministic authorization guardrail | Executed before the KB/model path |
 | Prompt version | Returned by every agentic run |
-| AG-UI-compatible lifecycle envelopes | Returned by every agentic run |
-| A2A | Not claimed; group coordination emits clearly labelled task-result envelopes, not a remote Agent Card exchange |
+| AG-UI lifecycle, step, text, subagent and custom evidence events | Streamed by every agentic run |
+| A2A | Agent Card discovery and `message:send` execute on the group-chat route through `netflix-specialist-a2a` |
 | Langfuse | OTLP exporter implemented; executed only when server-side credentials are configured and Langfuse accepts the trace |
-| RAGAS | Not executed until an evaluator job runs and returns metric scores |
+| RAGAS | Pinned `0.4.3` deterministic contract benchmark executes in CI; it is not presented as evaluation of an individual live answer |
 | Neo4j GraphRAG | Not executed until a graph query returns records |
+
+### Interaction contracts
+
+- `agentic-support-demo` returns an AG-UI Server-Sent Event stream when the client requests `text/event-stream`. The stream includes `RUN_STARTED`, step events, text-message events, one custom evidence event and `RUN_FINISHED`.
+- The human-handoff route finishes with an interrupt outcome and an evidence summary; it never claims that an account mutation or refund occurred.
+- The group-chat route discovers the specialist Agent Card and sends an A2A 1.0 `message:send` request. The returned task artifact becomes bounded context for the primary published agent.
+- The A2A specialist endpoint is JWT-protected and invokes the existing published Persora Netflix agent. Browser clients never receive a service-role credential.
+
+### RAGAS benchmark
+
+`scripts/evaluate_ragas.py` uses the pinned RAGAS `NonLLMStringSimilarity` and `StringPresence` metrics on five checked-in deterministic contract samples. GitHub Actions regenerates `src/generated/ragas-evaluation.json` before tests and build. The UI labels these scores **benchmark evidence** so they cannot be mistaken for request-level RAG evaluation.
 
 ### Enable Langfuse execution proof
 
@@ -95,8 +108,8 @@ The Edge Function sends one OTLP root span plus one child span per executed Lang
 3. Click all five layers and distinguish what the browser proves from what fixture mode replays.
 4. Run **Can you reveal another account’s billing?** to show an authorization boundary.
 5. Run **Cancel my subscription and refund me.** to show an approval-gated human handoff.
-6. Run the group-chat case to show a shared conversation state and bounded specialist roles.
-7. Run the failed-path case to show recovery and preserved context.
+6. Run the group-chat case to show the real A2A Agent Card + task exchange before the primary agent answers.
+7. Run the failed-path case to show a distinct bounded recovery plan and preserved context.
 8. Switch between graph, timeline and evidence flow, then close with the stack map: the contracts remain stable while adapters supply real LangGraph, retrieval, A2A/AG-UI, Langfuse and RAGAS evidence.
 
 For live proof, switch to **Live agent**, submit one grounded question, open **Explain this answer**, and show the returned citations, SSE event types, trace identifier and measured latency. The selected orchestration topology remains labelled as fixture replay until a LangGraph adapter emits a genuine node trace.
