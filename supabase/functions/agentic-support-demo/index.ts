@@ -776,6 +776,7 @@ Deno.serve(async (req: Request) => {
       traceId,
       threadId,
       origin,
+      pattern: "sequential" as Pattern,
       allowed: true,
       guardrailReason: "not-evaluated",
       specialistContext: "",
