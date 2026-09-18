@@ -469,6 +469,7 @@ function ExplainDrawer({ turn, onClose, onHandoffDecision }: { turn: ChatTurn; o
 
 function routeFixtureQuestion(question: string): DemoCase | null {
   const selected = selectOrchestrationPattern(question).pattern;
+  if (selected === "sequential" && !/\b(travel|travelling|household|stream|watch|tv)\b/i.test(question)) return null;
   return cases.find((item) => item.pattern === selected) ?? null;
 }
 
