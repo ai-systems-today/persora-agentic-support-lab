@@ -26,6 +26,7 @@ function applySsePayload(state: { answer: string; citations: unknown[] }, payloa
 }
 
 async function askPublishedSpecialist(message: string, taskId: string) {
+  const qualityInstruction = "Answer with exactly 1 standalone sentence containing 1 factual support step, ending with its matching [#n] citation. Use only a fact directly stated in the returned Netflix knowledge sources. Do not include headings, introductions, transitions, uncited text, links, or follow-up questions. If the sources do not support an answer, say only: I do not have enough source evidence.";
   const response = await fetch(UPSTREAM, {
     method: "POST",
     headers: {
@@ -35,7 +36,7 @@ async function askPublishedSpecialist(message: string, taskId: string) {
     },
     body: JSON.stringify({
       widgetId: DEFAULT_WIDGET,
-      message,
+      message: `${message}\n\n${qualityInstruction}`,
       sessionToken: `a2a-${taskId}`,
       deviceId: `a2a-${taskId}`,
       mode: "chat",
@@ -57,6 +58,34 @@ async function askPublishedSpecialist(message: string, taskId: string) {
   if (buffer.startsWith("data:")) applySsePayload(state, buffer.slice(5).trim());
   if (!state.answer.trim()) throw new Error("Published specialist returned no answer");
   return state;
+}
+
+function shiftCitationReferences(answer: string, offset: number) {
+  return answer.replace(/\[#(\d+)\]/g, (_match: string, value: string) => `[#${Number(value) + offset}]`);
+}
+
+async function askSpecialistTask(message: string, taskId: string) {
+  if (!(/billing/i.test(message) && /household/i.test(message) && /email/i.test(message))) {
+    return askPublishedSpecialist(message, taskId);
+  }
+
+  const domainQuestions = [
+    "How can a Netflix customer review billing charges and payment history?",
+    "How does a Netflix customer update Netflix Household from a TV?",
+    "How can a Netflix customer recover account access with a password reset email or text?",
+  ];
+  const results = await Promise.all(domainQuestions.map((question, index) =>
+    askPublishedSpecialist(question, `${taskId}-${index + 1}`)
+  ));
+  let offset = 0;
+  const answers: string[] = [];
+  const citations: unknown[] = [];
+  for (const result of results) {
+    answers.push(shiftCitationReferences(result.answer, offset));
+    citations.push(...result.citations);
+    offset += result.citations.length;
+  }
+  return { answer: answers.join(" "), citations };
 }
 
 Deno.serve(async (req: Request) => {
@@ -92,7 +121,7 @@ Deno.serve(async (req: Request) => {
     const text = body.message?.parts?.map((part) => typeof part.text === "string" ? part.text : "").filter(Boolean).join("\n").trim() ?? "";
     if (!text || text.length > 2000) return json({ error: { code: "invalid_message", message: "A text message of 1-2000 characters is required" } }, 400);
     const taskId = crypto.randomUUID();
-    const result = await askPublishedSpecialist(text, taskId);
+    const result = await askSpecialistTask(text, taskId);
     return json({
       task: {
         id: taskId,

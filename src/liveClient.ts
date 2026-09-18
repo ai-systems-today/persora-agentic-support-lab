@@ -135,6 +135,8 @@ async function requestAgenticDemo(
       nodeTrace: state.evidence.nodeTrace,
       publicTrace: state.evidence.publicTrace,
       protocolEvents: state.protocolEvents,
+      quality: state.evidence.quality,
+      orchestrationProof: state.evidence.orchestrationProof,
       followUps: state.followUps,
       retrieval: state.evidence.retrieval,
       integrations,

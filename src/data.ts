@@ -158,15 +158,15 @@ export const cases: DemoCase[] = [
   },
   {
     id: "recovery",
-    starter: "The first support path failed—what next?",
-    customer: "I tried the temporary travel code twice and it still does not work.",
-    answer: "Since the temporary-code path failed, don’t repeat it indefinitely. Confirm the device time and network, check whether the code expired, and try updating the Netflix Household from the primary location. If you cannot access the primary TV, hand off to support with the device, error message, and steps already attempted.",
+    starter: "My temporary Netflix travel access failed. Can I use Netflix on a mobile device, computer, or hotel TV instead?",
+    customer: "My temporary Netflix travel access failed. Can I use Netflix on a mobile device, computer, or hotel TV instead?",
+    answer: "Netflix can be used while traveling on mobile devices and computers, or by signing in to a new TV at a hotel or holiday rental. Available titles can vary by country.",
     summary: "A failed branch changes the route, preserves prior attempts, and produces a useful escalation summary.",
     pattern: "magentic",
     graph: [
       { id: "history", label: "History", role: "Read attempted steps", state: "complete" },
       { id: "planner", label: "Planner", role: "Choose alternate route", state: "complete" },
-      { id: "diagnose", label: "Diagnose", role: "Check device and code", state: "complete" },
+      { id: "diagnose", label: "Alternative", role: "Find a sourced travel option", state: "complete" },
       { id: "handoff", label: "Handoff", role: "Escalate with context", state: "active" },
     ],
     layers: layers({

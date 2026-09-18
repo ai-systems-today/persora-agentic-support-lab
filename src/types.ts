@@ -3,7 +3,8 @@ export type EvidenceStatus =
   | "repo-defined"
   | "fixture-replay"
   | "not-captured"
-  | "not-executed";
+  | "not-executed"
+  | "not-evaluated";
 
 export type Pattern = "sequential" | "concurrent" | "group-chat" | "handoff" | "magentic";
 
@@ -77,6 +78,41 @@ export type RuntimeEvidence = {
     privateObservabilityExported: boolean;
   };
   protocolEvents?: Array<Record<string, unknown> & { type: string }>;
+  quality?: {
+    executed: boolean;
+    method: "deterministic-grounding-v2";
+    status: "passed" | "failed" | "not-evaluated";
+    grounding: number | null;
+    citationValidity: number | null;
+    answerRelevance: number | null;
+    correctness: null;
+    claimCount: number;
+    supportedClaimCount: number;
+    referencedCitationCount: number;
+    validCitationCount: number;
+    retryCount: number;
+    reason: string;
+  };
+  orchestrationProof?: {
+    concurrent: {
+      executed: boolean;
+      checks: Array<{
+        name: string;
+        startedAtMs: number;
+        finishedAtMs: number;
+        durationMs: number;
+        result: string;
+      }>;
+      overlapMs: number;
+      proved: boolean;
+    } | null;
+    recovery: {
+      executed: boolean;
+      maxIterations: number;
+      iterations: Array<{ attempt: number; decision: "revise" | "finish"; reason: string }>;
+      revised: boolean;
+    } | null;
+  };
   followUps?: string[];
   retrieval?: {
     provider: string;

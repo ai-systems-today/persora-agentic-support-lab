@@ -64,6 +64,8 @@ describe("demo evidence", () => {
     expect(specialist).toContain("/.well-known/agent-card.json");
     expect(specialist).toContain("/message:send");
     expect(specialist).toContain('"A2A-Version": A2A_VERSION');
+    expect(specialist).toContain("const domainQuestions");
+    expect(specialist).toContain("shiftCitationReferences");
   });
 
   it("runs the pinned RAGAS benchmark before the Pages build", () => {
@@ -122,7 +124,7 @@ describe("demo evidence", () => {
     expect(app).toContain("caseEvaluation.scores");
     expect(app).toContain("caseEvaluation.question");
     expect(app).toContain('langfuse?.readback === "failed"');
-    expect(app).toContain("This free-form question has no checked-in RAGAS reference answer");
+    expect(app).toContain("This free-form question has no checked-in trusted reference");
     expect(orchestrator).toContain("session-bound-demo-decision");
     expect(orchestrator).toContain("no account was cancelled and no refund was issued");
     expect(migration).toContain("enable row level security");
@@ -140,5 +142,40 @@ describe("demo evidence", () => {
     expect(app).toContain("Selected execution node");
     expect(app).toContain("retrieval-only latency not captured");
     expect(app).toContain("Continue this conversation");
+  });
+
+  it("validates each published answer, retries once, and fails closed", () => {
+    const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    expect(orchestrator).toContain("evaluateLiveAnswer");
+    expect(orchestrator).toContain("requestPublishedAgent(state, true)");
+    expect(orchestrator).toContain("live_quality_failed_closed");
+    expect(orchestrator).toContain("I couldn’t verify a sufficiently grounded answer");
+    expect(app).toContain("Exact-run quality gate");
+    expect(app).toContain("Citation validity");
+    expect(app).toContain("Not evaluated for this live answer");
+  });
+
+  it("returns run evidence for concurrency and bounded planner decisions", () => {
+    const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    const proof = readFileSync(new URL("../supabase/functions/_shared/orchestrationProof.ts", import.meta.url), "utf8");
+    expect(proof).toContain("const checks = await Promise.all");
+    expect(proof).toContain("overlapMs > 0");
+    expect(proof).toContain('decision: "revise"');
+    expect(proof).toContain('decision: "finish"');
+    expect(proof).toContain("maxIterations: 2");
+    expect(orchestrator).toContain("executeRemoteConcurrentCheck");
+    expect(orchestrator).toContain('action: "concurrent-check"');
+    expect(orchestrator).toContain("planRecoveryEvidence(state.message)");
+    expect(app).toContain("Pattern execution proof");
+    expect(app).toContain("planner decisions");
+  });
+
+  it("suppresses blocked prompts before any Langfuse configuration or export", () => {
+    const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    expect(orchestrator).toContain("result.allowed\n          ? await emitLangfuseTrace");
+    expect(orchestrator).toContain("suppressedLangfuseEvidence()");
+    expect(orchestrator).toContain("Suppressed because the authorization guardrail blocked the request before telemetry export");
   });
 });

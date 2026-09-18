@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { Annotation, END, START, StateGraph } from "npm:@langchain/langgraph@1.4.15";
+import { evaluateLiveAnswer, extractGroundedClaims, notEvaluatedQuality, type LiveQuality, type QualityCitation } from "../_shared/answerQuality.ts";
+import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
 
 const ALLOWED_ORIGINS = new Set([
@@ -10,7 +12,7 @@ const ALLOWED_ORIGINS = new Set([
 const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
 const A2A_SPECIALIST = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
 const DEFAULT_WIDGET = "6a01cc31-ee9e-4977-aa8c-031894a71851";
-const PROMPT_VERSION = "netflix-support-demo@2026-09-16.1";
+const PROMPT_VERSION = "netflix-support-demo@2026-09-18.3";
 const LANGGRAPH_VERSION = "1.4.15";
 
 const secureEqual = (left: string, right: string) => {
@@ -61,6 +63,17 @@ type LangfuseConfig = {
   baseUrl: string;
 };
 
+const suppressedLangfuseEvidence = (): LangfuseEvidence => ({
+  configured: false,
+  executed: false,
+  traceId: null,
+  traceUrl: null,
+  error: "Suppressed because the authorization guardrail blocked the request before telemetry export",
+  readback: "not-attempted",
+  observations: [],
+  readbackToken: null,
+});
+
 const State = Annotation.Root({
   message: Annotation<string>,
   widgetId: Annotation<string>,
@@ -81,9 +94,12 @@ const State = Annotation.Root({
   nodeTrace: Annotation<TraceEntry[]>({ reducer: (left, right) => [...left, ...right], default: () => [] }),
   protocolEvents: Annotation<ProtocolEvent[]>({ reducer: (left, right) => [...left, ...right], default: () => [] }),
   specialistContext: Annotation<string>,
+  specialistCitations: Annotation<unknown[]>({ reducer: (_left, right) => right, default: () => [] }),
   handoffRequired: Annotation<boolean>,
   handoffSummary: Annotation<string>,
   a2a: Annotation<A2AEvidence>,
+  quality: Annotation<LiveQuality>,
+  orchestrationProof: Annotation<OrchestrationProof>,
 });
 
 const buildFollowUps = (pattern: Pattern, citations: unknown[]): string[] => {
@@ -168,7 +184,11 @@ function applySsePayload(state: { answer: string; citations: unknown[]; eventTyp
   if (typeof first?.delta?.content === "string") state.answer += first.delta.content;
 }
 
-async function callPublishedAgent(state: typeof State.State) {
+async function requestPublishedAgent(state: typeof State.State, repair: boolean) {
+  const question = state.pattern === "group-chat"
+    ? "Give one verified step for each of these Netflix issues: billing, Netflix Household, and account email access."
+    : state.message;
+  const qualityInstruction = "Answer in at most 3 standalone sentences. Every sentence must contain exactly one factual claim and end with its matching [#n] citation. Use only facts directly stated in the returned Netflix knowledge sources. Do not include headings, introductions, transitions, uncited text, links, or follow-up questions. If the sources do not support an answer, say only: I do not have enough source evidence.";
   const response = await fetch(UPSTREAM, {
     method: "POST",
     headers: {
@@ -178,8 +198,8 @@ async function callPublishedAgent(state: typeof State.State) {
     },
     body: JSON.stringify({
       widgetId: state.widgetId,
-      message: state.specialistContext ? `${state.message}\n\nCase coordination context:\n${state.specialistContext}` : state.message,
-      sessionToken: state.sessionToken,
+      message: `${question}\n\n${qualityInstruction}`,
+      sessionToken: `${state.sessionToken}:${state.traceId}:${repair ? "retry" : "primary"}`,
       deviceId: state.deviceId,
       mode: "chat",
     }),
@@ -200,6 +220,80 @@ async function callPublishedAgent(state: typeof State.State) {
   if (buffer.startsWith("data:")) applySsePayload(stream, buffer.slice(5).trim());
   if (!stream.answer.trim()) throw new Error("Published agent completed without answer text");
   return { answer: stream.answer.trim(), citations: stream.citations, eventTypes: stream.eventTypes };
+}
+
+const qualityCitations = (values: unknown[]): QualityCitation[] => values.map((value, index) => {
+  const citation = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+  const label = [citation.title, citation.source, citation.filename]
+    .find((candidate) => typeof candidate === "string");
+  const snippet = [citation.snippet, citation.content, citation.text]
+    .find((candidate) => typeof candidate === "string");
+  return {
+    label: typeof label === "string" ? label : `Source ${index + 1}`,
+    url: typeof citation.url === "string" ? citation.url : typeof citation.source_url === "string" ? citation.source_url : null,
+    snippet: typeof snippet === "string" ? snippet : null,
+  };
+});
+
+async function callPublishedAgent(state: typeof State.State) {
+  type PublishedResult = { answer: string; citations: unknown[]; eventTypes: string[] };
+  let first: PublishedResult | null = null;
+  try {
+    first = state.pattern === "group-chat" && state.specialistContext.trim() && state.specialistCitations.length
+      ? {
+        answer: state.specialistContext,
+        citations: state.specialistCitations,
+        eventTypes: ["a2a_grounded_result_used"],
+      }
+      : await requestPublishedAgent(state, false);
+  } catch {
+    first = null;
+  }
+
+  if (first) {
+    const firstCitations = qualityCitations(first.citations);
+    const firstAnswer = extractGroundedClaims(first.answer, firstCitations);
+    const firstQuality = evaluateLiveAnswer({
+      question: state.message,
+      answer: firstAnswer,
+      citations: firstCitations,
+      retryCount: 0,
+    });
+    if (firstQuality.status === "passed") {
+      return { ...first, answer: firstAnswer, quality: firstQuality, eventTypes: [...first.eventTypes, "live_quality_passed"] };
+    }
+  }
+
+  let repaired: PublishedResult;
+  try {
+    repaired = await requestPublishedAgent(state, true);
+  } catch {
+    const fallbackCitations = first?.citations ?? [];
+    return {
+      answer: "I couldn’t verify a sufficiently grounded answer from the returned Netflix sources, so I’m not presenting the generated answer as reliable. Please rephrase the question or use authenticated Netflix Support.",
+      citations: fallbackCitations,
+      quality: evaluateLiveAnswer({ question: state.message, answer: "", citations: qualityCitations(fallbackCitations), retryCount: 1 }),
+      eventTypes: [...(first?.eventTypes ?? []), "live_quality_retry_request_failed", "live_quality_failed_closed"],
+    };
+  }
+  const repairedCitations = qualityCitations(repaired.citations);
+  const repairedAnswer = extractGroundedClaims(repaired.answer, repairedCitations);
+  const repairedQuality = evaluateLiveAnswer({
+    question: state.message,
+    answer: repairedAnswer,
+    citations: repairedCitations,
+    retryCount: 1,
+  });
+  if (repairedQuality.status === "passed") {
+    return { ...repaired, answer: repairedAnswer, quality: repairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_retry_passed"] };
+  }
+
+  return {
+    answer: "I couldn’t verify a sufficiently grounded answer from the returned Netflix sources, so I’m not presenting the generated answer as reliable. Please rephrase the question or use authenticated Netflix Support.",
+    citations: repaired.citations,
+    quality: repairedQuality,
+    eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_failed_closed"],
+  };
 }
 
 const randomHex = (bytes: number) => Array.from(crypto.getRandomValues(new Uint8Array(bytes)))
@@ -476,17 +570,20 @@ async function runA2ASpecialist(state: typeof State.State) {
     });
     if (!response.ok) throw new Error(`A2A message:send returned HTTP ${response.status}`);
     const payload = await response.json() as {
-      task?: { id?: unknown; artifacts?: Array<{ parts?: Array<{ text?: unknown }> }> };
+      task?: { id?: unknown; artifacts?: Array<{ parts?: Array<{ text?: unknown }>; metadata?: { citations?: unknown } }> };
     };
     const context = payload.task?.artifacts?.flatMap((artifact) => artifact.parts ?? [])
       .map((part) => typeof part.text === "string" ? part.text : "")
       .filter(Boolean)
       .join("\n") ?? "";
     if (!context) throw new Error("A2A specialist returned no text artifact");
+    const citations = payload.task?.artifacts?.flatMap((artifact) => Array.isArray(artifact.metadata?.citations) ? artifact.metadata.citations : []) ?? [];
+    if (!citations.length) throw new Error("A2A specialist returned no source citations");
     const taskId = typeof payload.task?.id === "string" ? payload.task.id : null;
     const agentName = typeof card.name === "string" ? card.name : "Netflix Support Specialist";
     return {
       specialistContext: context,
+      specialistCitations: citations,
       a2a: { executed: true, version: typeof card.version === "string" ? card.version : "1.0", agentName, taskId, error: null },
       eventTypes: ["a2a_task_completed"],
       protocolEvents: [
@@ -500,22 +597,44 @@ async function runA2ASpecialist(state: typeof State.State) {
   }
 }
 
+async function executeRemoteConcurrentCheck(state: typeof State.State, name: ConcurrentCheckName, message: string) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+  if (!supabaseUrl || !serviceRoleKey) throw new Error("Concurrent check runtime credentials unavailable");
+  const response = await fetch(`${supabaseUrl}/functions/v1/agentic-support-demo`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+      Origin: state.origin,
+      "Content-Type": "application/json",
+      "x-trace-id": `${state.traceId}-${name === "Privacy policy check" ? "privacy" : "alternative"}`,
+    },
+    body: JSON.stringify({ action: "concurrent-check", checkName: name, message }),
+  });
+  if (!response.ok) throw new Error(`Concurrent ${name} returned HTTP ${response.status}`);
+  const payload = await response.json() as { result?: unknown };
+  if (typeof payload.result !== "string") throw new Error(`Concurrent ${name} returned no result`);
+  return payload.result;
+}
+
 async function runConcurrentPrivacyChecks(state: typeof State.State) {
-  const [policy, safeAlternative] = await Promise.all([
-    Promise.resolve("Cross-account billing data is denied before retrieval."),
-    Promise.resolve("Offer the account owner an authenticated billing-history path."),
-  ]);
-  const first = `${state.traceId}-privacy`;
-  const second = `${state.traceId}-alternative`;
+  const concurrent = await runConcurrentChecks(
+    state.message,
+    (name, message) => executeRemoteConcurrentCheck(state, name, message),
+  );
   return {
     answer: "I can’t access or disclose another customer’s payment card, invoices, or account information. The account owner can sign in to view billing history, or an authenticated support case can be opened without exposing sensitive data.",
     eventTypes: ["concurrent_checks_completed", "guardrail_blocked"],
-    protocolEvents: [
-      { type: "SUBAGENT_STARTED", subagentRunId: first, name: "Privacy policy check", description: policy },
-      { type: "SUBAGENT_STARTED", subagentRunId: second, name: "Safe alternative check", description: safeAlternative },
-      { type: "SUBAGENT_FINISHED", subagentRunId: first, outcome: { type: "success" } },
-      { type: "SUBAGENT_FINISHED", subagentRunId: second, outcome: { type: "success" } },
-    ],
+    orchestrationProof: {
+      ...state.orchestrationProof,
+      concurrent,
+    },
+    protocolEvents: concurrent.checks.map((check) => ({
+      type: "CUSTOM",
+      name: "persora.concurrent.check",
+      value: { name: check.name, durationMs: check.durationMs, result: check.result },
+    })),
   };
 }
 
@@ -530,16 +649,27 @@ function prepareHumanHandoff() {
 }
 
 function planRecovery(state: typeof State.State) {
+  const recovery = planRecoveryEvidence(state.message);
   return {
-    specialistContext: "Recovery planner: the temporary travel-code path already failed. Do not repeat it indefinitely; diagnose device time, network, expiry and primary-household access, then escalate with attempted steps.",
-    eventTypes: ["recovery_plan_created"],
-    protocolEvents: [{
+    specialistContext: "Recovery planner: the temporary travel-access path failed. Ask the published Netflix agent for a source-backed alternative without inventing diagnostic causes.",
+    eventTypes: recovery.revised ? ["recovery_plan_revised", "recovery_plan_finished"] : ["recovery_plan_finished"],
+    orchestrationProof: {
+      ...state.orchestrationProof,
+      recovery,
+    },
+    protocolEvents: recovery.iterations.map((iteration) => ({
       type: "ACTIVITY_SNAPSHOT",
-      messageId: `${state.traceId}-recovery-plan`,
+      messageId: `${state.traceId}-recovery-plan-${iteration.attempt}`,
       activityType: "PLAN",
-      content: { attempted: ["temporary travel code"], next: ["device time", "network", "code expiry", "household update", "support handoff"] },
-      replace: true,
-    }],
+      content: {
+        attempt: iteration.attempt,
+        decision: iteration.decision,
+        reason: iteration.reason,
+        attempted: ["temporary travel code"],
+        next: ["mobile device", "computer", "hotel or holiday-rental TV", "country availability"],
+      },
+      replace: iteration.attempt > 1,
+    })),
   };
 }
 
@@ -570,7 +700,13 @@ const graph = new StateGraph(State)
   .addNode("published_netflix_agent", timed("published_netflix_agent", callPublishedAgent))
   .addNode("response_validation", timed("response_validation", (state) => {
     if (!state.answer.trim()) throw new Error("Answer validation failed");
-    return { eventTypes: ["answer_present", state.citations.length ? "citations_present" : "citations_absent"] };
+    return {
+      eventTypes: [
+        "answer_present",
+        state.citations.length ? "citations_present" : "citations_absent",
+        state.quality.status === "not-evaluated" ? "live_quality_not_evaluated" : `live_quality_${state.quality.status}`,
+      ],
+    };
   }))
   .addEdge(START, "intake")
   .addEdge("intake", "authorization_guardrail")
@@ -675,17 +811,19 @@ function streamAgenticRun(input: typeof State.State, origin: string, started: nu
         const approval = result.handoffRequired
           ? await createApproval({ traceId: input.traceId, threadId: input.threadId, message: input.message, summary: result.handoffSummary })
           : null;
-        const langfuse = await emitLangfuseTrace({
-          requestTraceId: input.traceId,
-          message: input.message,
-          answer: result.answer,
-          sessionToken: input.sessionToken,
-          pattern: result.pattern,
-          guardrailDecision: result.allowed ? "allow" : "block",
-          citations: result.citations,
-          nodeTrace: result.nodeTrace,
-          totalMs,
-        });
+        const langfuse = result.allowed
+          ? await emitLangfuseTrace({
+            requestTraceId: input.traceId,
+            message: input.message,
+            answer: result.answer,
+            sessionToken: input.sessionToken,
+            pattern: result.pattern,
+            guardrailDecision: "allow",
+            citations: result.citations,
+            nodeTrace: result.nodeTrace,
+            totalMs,
+          })
+          : suppressedLangfuseEvidence();
         const followUps = buildFollowUps(result.pattern, result.citations);
         const evidence = {
           traceId: input.traceId,
@@ -710,6 +848,8 @@ function streamAgenticRun(input: typeof State.State, origin: string, started: nu
           },
           nodeTrace: result.nodeTrace,
           protocolEvents: result.protocolEvents,
+          quality: result.quality,
+          orchestrationProof: result.orchestrationProof,
           followUps,
           retrieval: retrievalEvidence(result.citations),
           publicTrace: {
@@ -785,6 +925,16 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const sessionToken = typeof body.sessionToken === "string" ? body.sessionToken : crypto.randomUUID();
     const threadId = (await sha256(sessionToken)).slice(0, 32);
+    if (body.action === "concurrent-check") {
+      const message = typeof body.message === "string" ? body.message.trim() : "";
+      const checkName = body.checkName === "Privacy policy check" || body.checkName === "Safe alternative check"
+        ? body.checkName as ConcurrentCheckName
+        : null;
+      if (!message || message.length > 2000 || !checkName) {
+        return new Response(JSON.stringify({ error: "A valid concurrent check and message are required" }), { status: 400, headers: { ...cors(origin), "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ result: evaluateConcurrentCheck(checkName, message) }), { headers: { ...cors(origin), "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    }
     if (body.action === "langfuse-readback") {
       const requestedTraceId = typeof body.langfuseTraceId === "string" ? body.langfuseTraceId : "";
       const readbackToken = typeof body.readbackToken === "string" ? body.readbackToken : "";
@@ -836,6 +986,8 @@ Deno.serve(async (req: Request) => {
         handoff: { required: true, status: record.status, summary: record.summary, approvalId: record.id, decidedAt: record.decided_at, decisionMessage: record.decision_message },
         nodeTrace,
         protocolEvents: graphEvents,
+        quality: notEvaluatedQuality("A persisted human decision is not a generated knowledge answer."),
+        orchestrationProof: { concurrent: null, recovery: null },
         integrations: {
           langGraph: { executed: false, version: LANGGRAPH_VERSION },
           langfuse: { configured: false, executed: false, traceId: null, traceUrl: null, error: "Decision continuation is persisted separately from the original observed run", readback: "not-attempted", observations: [], readbackToken: null },
@@ -865,6 +1017,7 @@ Deno.serve(async (req: Request) => {
       allowed: true,
       guardrailReason: "not-evaluated",
       specialistContext: "",
+      specialistCitations: [],
       answer: "",
       citations: [],
       eventTypes: [],
@@ -873,6 +1026,8 @@ Deno.serve(async (req: Request) => {
       handoffRequired: false,
       handoffSummary: "",
       a2a: emptyA2A(),
+      quality: notEvaluatedQuality("No published knowledge answer has run yet."),
+      orchestrationProof: { concurrent: null, recovery: null },
     };
     if (req.headers.get("accept")?.includes("text/event-stream")) {
       return streamAgenticRun(initialState, origin, started);
@@ -882,17 +1037,19 @@ Deno.serve(async (req: Request) => {
     const approval = result.handoffRequired
       ? await createApproval({ traceId, threadId, message, summary: result.handoffSummary })
       : null;
-    const langfuse = await emitLangfuseTrace({
-      requestTraceId: traceId,
-      message,
-      answer: result.answer,
-      sessionToken,
-      pattern: result.pattern,
-      guardrailDecision: result.allowed ? "allow" : "block",
-      citations: result.citations,
-      nodeTrace: result.nodeTrace,
-      totalMs,
-    });
+    const langfuse = result.allowed
+      ? await emitLangfuseTrace({
+        requestTraceId: traceId,
+        message,
+        answer: result.answer,
+        sessionToken,
+        pattern: result.pattern,
+        guardrailDecision: "allow",
+        citations: result.citations,
+        nodeTrace: result.nodeTrace,
+        totalMs,
+      })
+      : suppressedLangfuseEvidence();
     const evidence = {
       traceId,
       totalMs,
@@ -916,6 +1073,8 @@ Deno.serve(async (req: Request) => {
       },
       nodeTrace: result.nodeTrace,
       protocolEvents: result.protocolEvents,
+      quality: result.quality,
+      orchestrationProof: result.orchestrationProof,
       followUps: buildFollowUps(result.pattern, result.citations),
       retrieval: retrievalEvidence(result.citations),
       publicTrace: {
