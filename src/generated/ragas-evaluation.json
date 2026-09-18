@@ -11,5 +11,62 @@
     "bleu_score": 0.9572,
     "chrf_score": 0.992,
     "rouge_l": 0.9636
+  },
+  "cases": {
+    "grounded-answer": {
+      "question": "How do I use Netflix while travelling?",
+      "scores": {
+        "non_llm_string_similarity": 1.0,
+        "required_phrase_presence": 1.0,
+        "exact_match": 1.0,
+        "bleu_score": 1.0,
+        "chrf_score": 1.0,
+        "rouge_l": 1.0
+      }
+    },
+    "access-blocked": {
+      "question": "Can I see another account's payment card?",
+      "scores": {
+        "non_llm_string_similarity": 0.9315,
+        "required_phrase_presence": 1.0,
+        "exact_match": 0.0,
+        "bleu_score": 0.7861,
+        "chrf_score": 0.9599,
+        "rouge_l": 0.8182
+      }
+    },
+    "approval-required": {
+      "question": "Can you cancel and refund my plan?",
+      "scores": {
+        "non_llm_string_similarity": 1.0,
+        "required_phrase_presence": 1.0,
+        "exact_match": 1.0,
+        "bleu_score": 1.0,
+        "chrf_score": 1.0,
+        "rouge_l": 1.0
+      }
+    },
+    "group-chat": {
+      "question": "I have billing and household issues.",
+      "scores": {
+        "non_llm_string_similarity": 1.0,
+        "required_phrase_presence": 1.0,
+        "exact_match": 1.0,
+        "bleu_score": 1.0,
+        "chrf_score": 1.0,
+        "rouge_l": 1.0
+      }
+    },
+    "recovery": {
+      "question": "The temporary code failed.",
+      "scores": {
+        "non_llm_string_similarity": 1.0,
+        "required_phrase_presence": 1.0,
+        "exact_match": 1.0,
+        "bleu_score": 1.0,
+        "chrf_score": 1.0,
+        "rouge_l": 1.0
+      }
+    }
   }
 }
