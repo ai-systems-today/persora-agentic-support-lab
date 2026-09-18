@@ -246,6 +246,13 @@ function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
   const pattern = turn.runtime.pattern ?? item.pattern;
   const publishedExecuted = turn.runtime.mode === "live" || Boolean(turn.runtime.nodeTrace?.some((entry) => entry.node === "published_netflix_agent"));
   const retrievalExecuted = publishedExecuted && turn.runtime.citations.length > 0;
+  const retrievalDisplay = turn.runtime.mode === "fixture"
+    ? { value: source, status: "Fixture replay" }
+    : retrievalExecuted
+      ? { value: "Published Netflix KB", status: "Runtime-proven" }
+      : publishedExecuted
+        ? { value: "KB source records", status: "Not captured" }
+        : { value: "No KB retrieval", status: "Not executed" };
   const runtimeNodes: GraphNode[] = turn.runtime.nodeTrace?.map((entry) => ({ id: entry.node, label: entry.node.replaceAll("_", " "), role: `${entry.durationMs} ms`, state: entry.status === "complete" ? "complete" : entry.status === "blocked" ? "waiting" : "active", kind: nodeKind(entry.node) })) ?? [];
   const nodes = runtimeNodes.length ? runtimeNodes : item.graph;
   const responseEvidenceLabel = turn.runtime.mode === "fixture" ? "Fixture replay" : "Runtime-proven";
@@ -300,7 +307,7 @@ function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
       {view === "evidence" && <div className="visual-card evidence-flow-card">
         <div className="card-heading"><div><span>Evidence lineage</span><strong>Source to answer</strong></div><p>Every stage retains its evidence classification.</p></div>
         <div className="flow-line">
-          <article><span>01</span><strong>{turn.runtime.mode === "fixture" ? source : retrievalExecuted ? "Published Netflix KB" : "No KB retrieval"}</strong><small>{retrievalExecuted || turn.runtime.mode === "fixture" ? responseEvidenceLabel : "Not executed"}</small></article><i>→</i>
+          <article><span>01</span><strong>{retrievalDisplay.value}</strong><small>{retrievalDisplay.status}</small></article><i>→</i>
           <article><span>02</span><strong>{pattern} route</strong><small>{routeEvidenceLabel}</small></article><i>→</i>
           <article><span>03</span><strong>Case response</strong><small>{responseEvidenceLabel}</small></article><i>→</i>
           <article><span>04</span><strong>{turn.runtime.quality?.executed ? "Live quality gate" : "Quality evaluation"}</strong><small>{turn.runtime.quality ? qualityLabel : turn.runtime.mode === "fixture" ? "Fixture replay" : "Not evaluated"}</small></article>
@@ -346,6 +353,7 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
 
   const agentic = turn.runtime.mode === "agentic";
   const publishedExecuted = !agentic || Boolean(turn.runtime.nodeTrace?.some((entry) => entry.node === "published_netflix_agent"));
+  const citationEvidenceReturned = turn.runtime.citations.length > 0;
   const langfuse = langfuseOverride ?? turn.runtime.integrations?.langfuse;
   const agUi = turn.runtime.integrations?.agUi;
   const a2a = turn.runtime.integrations?.a2a;
@@ -416,7 +424,12 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
     { label: "LangGraph node trace", value: agentic ? `${turn.runtime.nodeTrace?.length ?? 0} completed nodes` : "Not executed", status: agentic ? "runtime-proven" : "not-executed", detail: agentic ? `Server runtime: ${turn.runtime.integrations?.langGraph.version ?? "version not returned"}.` : "A LangGraph server adapter has not supplied node events for this run." },
   ]);
   next = next.map((layer) => layer.id === "content" ? { ...layer, fields: [
-    { label: "Knowledge source", value: publishedExecuted ? "help.netflix.com Website Knowledge" : "Not queried", status: publishedExecuted ? "runtime-proven" : "not-executed", detail: publishedExecuted ? "The published agent returned this answer and its source records." : skipReason.detail },
+    {
+      label: "Knowledge source",
+      value: citationEvidenceReturned ? "help.netflix.com Website Knowledge" : publishedExecuted ? "Source records not returned" : "Not queried",
+      status: citationEvidenceReturned ? "runtime-proven" : publishedExecuted ? "not-captured" : "not-executed",
+      detail: citationEvidenceReturned ? "This exact run returned source records with the answer." : publishedExecuted ? "The published-agent call completed, but this run returned no citation record proving retrieval." : skipReason.detail,
+    },
     { label: "Returned citations", value: `${turn.runtime.citations.length}`, status: "runtime-proven", detail: "Counted from citation events in this answer's stream." },
     { label: "Vector store", value: "Supabase/Postgres vector retrieval", status: "repo-defined", detail: "The inspected Persora implementation calls search_kb_chunks; this browser run does not expose the SQL payload." },
     { label: "Neo4j / GraphRAG", value: "Not executed", status: "not-executed", detail: "No graph database event was present in this run." },

@@ -163,7 +163,8 @@ describe("demo evidence", () => {
     expect(proof).toContain('decision: "revise"');
     expect(proof).toContain('decision: "finish"');
     expect(proof).toContain("maxIterations: 2");
-    expect(orchestrator).toContain("runConcurrentChecks(state.message)");
+    expect(orchestrator).toContain("executeRemoteConcurrentCheck");
+    expect(orchestrator).toContain('action: "concurrent-check"');
     expect(orchestrator).toContain("planRecoveryEvidence(state.message)");
     expect(app).toContain("Pattern execution proof");
     expect(app).toContain("planner decisions");

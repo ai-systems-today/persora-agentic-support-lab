@@ -112,7 +112,7 @@ The Edge Function sends one OTLP root span plus one child span per executed Lang
 
 `supabase/functions/_shared/orchestrationRouter.ts` applies a deterministic policy router before the graph branches. Mutation and refund requests route to human handoff; sensitive cross-account requests route to concurrent privacy checks; failed recovery attempts route to the bounded planner; multi-domain questions route to the A2A specialist exchange; and ordinary single-intent support questions follow the sequential grounded path. Every run returns the selected pattern, matched signals, confidence and plain-language reason so the route is inspectable rather than inferred from the picture alone.
 
-The concurrent route performs two independent asynchronous computations and returns their start/finish timings plus measured overlap. The Magentic route evaluates the available diagnostic signals and records each bounded planner decision: it either finishes on the first attempt or revises once and then finishes. The UI reports missing overlap or missing planner decisions as unproved rather than inferring them from the topology.
+The concurrent route sends the privacy-policy and safe-alternative checks as two independent internal HTTP executions, then returns their start/finish timings plus measured overlap. The Magentic route records each bounded planner decision: it either finishes on the first attempt or revises once after a reported failure and then asks only for source-backed alternatives. The UI reports missing overlap or missing planner decisions as unproved rather than inferring them from the topology.
 
 ## Five-minute interview flow
 

@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { Annotation, END, START, StateGraph } from "npm:@langchain/langgraph@1.4.15";
 import { evaluateLiveAnswer, extractGroundedClaims, notEvaluatedQuality, type LiveQuality, type QualityCitation } from "../_shared/answerQuality.ts";
-import { planRecoveryEvidence, runConcurrentChecks, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
+import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
 
 const ALLOWED_ORIGINS = new Set([
@@ -236,26 +236,46 @@ const qualityCitations = (values: unknown[]): QualityCitation[] => values.map((v
 });
 
 async function callPublishedAgent(state: typeof State.State) {
-  const first = state.pattern === "group-chat" && state.specialistContext.trim() && state.specialistCitations.length
-    ? {
-      answer: state.specialistContext,
-      citations: state.specialistCitations,
-      eventTypes: ["a2a_grounded_result_used"],
-    }
-    : await requestPublishedAgent(state, false);
-  const firstCitations = qualityCitations(first.citations);
-  const firstAnswer = extractGroundedClaims(first.answer, firstCitations);
-  const firstQuality = evaluateLiveAnswer({
-    question: state.message,
-    answer: firstAnswer,
-    citations: firstCitations,
-    retryCount: 0,
-  });
-  if (firstQuality.status === "passed") {
-    return { ...first, answer: firstAnswer, quality: firstQuality, eventTypes: [...first.eventTypes, "live_quality_passed"] };
+  type PublishedResult = { answer: string; citations: unknown[]; eventTypes: string[] };
+  let first: PublishedResult | null = null;
+  try {
+    first = state.pattern === "group-chat" && state.specialistContext.trim() && state.specialistCitations.length
+      ? {
+        answer: state.specialistContext,
+        citations: state.specialistCitations,
+        eventTypes: ["a2a_grounded_result_used"],
+      }
+      : await requestPublishedAgent(state, false);
+  } catch {
+    first = null;
   }
 
-  const repaired = await requestPublishedAgent(state, true);
+  if (first) {
+    const firstCitations = qualityCitations(first.citations);
+    const firstAnswer = extractGroundedClaims(first.answer, firstCitations);
+    const firstQuality = evaluateLiveAnswer({
+      question: state.message,
+      answer: firstAnswer,
+      citations: firstCitations,
+      retryCount: 0,
+    });
+    if (firstQuality.status === "passed") {
+      return { ...first, answer: firstAnswer, quality: firstQuality, eventTypes: [...first.eventTypes, "live_quality_passed"] };
+    }
+  }
+
+  let repaired: PublishedResult;
+  try {
+    repaired = await requestPublishedAgent(state, true);
+  } catch {
+    const fallbackCitations = first?.citations ?? [];
+    return {
+      answer: "I couldn’t verify a sufficiently grounded answer from the returned Netflix sources, so I’m not presenting the generated answer as reliable. Please rephrase the question or use authenticated Netflix Support.",
+      citations: fallbackCitations,
+      quality: evaluateLiveAnswer({ question: state.message, answer: "", citations: qualityCitations(fallbackCitations), retryCount: 1 }),
+      eventTypes: [...(first?.eventTypes ?? []), "live_quality_retry_request_failed", "live_quality_failed_closed"],
+    };
+  }
   const repairedCitations = qualityCitations(repaired.citations);
   const repairedAnswer = extractGroundedClaims(repaired.answer, repairedCitations);
   const repairedQuality = evaluateLiveAnswer({
@@ -265,14 +285,14 @@ async function callPublishedAgent(state: typeof State.State) {
     retryCount: 1,
   });
   if (repairedQuality.status === "passed") {
-    return { ...repaired, answer: repairedAnswer, quality: repairedQuality, eventTypes: [...repaired.eventTypes, "live_quality_retry_passed"] };
+    return { ...repaired, answer: repairedAnswer, quality: repairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_retry_passed"] };
   }
 
   return {
     answer: "I couldn’t verify a sufficiently grounded answer from the returned Netflix sources, so I’m not presenting the generated answer as reliable. Please rephrase the question or use authenticated Netflix Support.",
     citations: repaired.citations,
     quality: repairedQuality,
-    eventTypes: [...repaired.eventTypes, "live_quality_failed_closed"],
+    eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_failed_closed"],
   };
 }
 
@@ -577,8 +597,32 @@ async function runA2ASpecialist(state: typeof State.State) {
   }
 }
 
+async function executeRemoteConcurrentCheck(state: typeof State.State, name: ConcurrentCheckName, message: string) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+  if (!supabaseUrl || !serviceRoleKey) throw new Error("Concurrent check runtime credentials unavailable");
+  const response = await fetch(`${supabaseUrl}/functions/v1/agentic-support-demo`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+      Origin: state.origin,
+      "Content-Type": "application/json",
+      "x-trace-id": `${state.traceId}-${name === "Privacy policy check" ? "privacy" : "alternative"}`,
+    },
+    body: JSON.stringify({ action: "concurrent-check", checkName: name, message }),
+  });
+  if (!response.ok) throw new Error(`Concurrent ${name} returned HTTP ${response.status}`);
+  const payload = await response.json() as { result?: unknown };
+  if (typeof payload.result !== "string") throw new Error(`Concurrent ${name} returned no result`);
+  return payload.result;
+}
+
 async function runConcurrentPrivacyChecks(state: typeof State.State) {
-  const concurrent = await runConcurrentChecks(state.message);
+  const concurrent = await runConcurrentChecks(
+    state.message,
+    (name, message) => executeRemoteConcurrentCheck(state, name, message),
+  );
   return {
     answer: "I can’t access or disclose another customer’s payment card, invoices, or account information. The account owner can sign in to view billing history, or an authenticated support case can be opened without exposing sensitive data.",
     eventTypes: ["concurrent_checks_completed", "guardrail_blocked"],
@@ -622,7 +666,7 @@ function planRecovery(state: typeof State.State) {
         decision: iteration.decision,
         reason: iteration.reason,
         attempted: ["temporary travel code"],
-        next: ["device time", "network", "code expiry", "household update", "support handoff"],
+        next: ["mobile device", "computer", "hotel or holiday-rental TV", "country availability"],
       },
       replace: iteration.attempt > 1,
     })),
@@ -881,6 +925,16 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const sessionToken = typeof body.sessionToken === "string" ? body.sessionToken : crypto.randomUUID();
     const threadId = (await sha256(sessionToken)).slice(0, 32);
+    if (body.action === "concurrent-check") {
+      const message = typeof body.message === "string" ? body.message.trim() : "";
+      const checkName = body.checkName === "Privacy policy check" || body.checkName === "Safe alternative check"
+        ? body.checkName as ConcurrentCheckName
+        : null;
+      if (!message || message.length > 2000 || !checkName) {
+        return new Response(JSON.stringify({ error: "A valid concurrent check and message are required" }), { status: 400, headers: { ...cors(origin), "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({ result: evaluateConcurrentCheck(checkName, message) }), { headers: { ...cors(origin), "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    }
     if (body.action === "langfuse-readback") {
       const requestedTraceId = typeof body.langfuseTraceId === "string" ? body.langfuseTraceId : "";
       const readbackToken = typeof body.readbackToken === "string" ? body.readbackToken : "";

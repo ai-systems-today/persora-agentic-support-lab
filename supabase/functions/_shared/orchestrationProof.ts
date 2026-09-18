@@ -18,34 +18,33 @@ export type OrchestrationProof = {
   recovery: RecoveryProof | null;
 };
 
-export async function runConcurrentChecks(message: string) {
-  const runCheck = async (name: string, evaluate: () => { material: string; result: string }): Promise<ConcurrentCheck> => {
+export type ConcurrentCheckName = "Privacy policy check" | "Safe alternative check";
+
+export function evaluateConcurrentCheck(name: ConcurrentCheckName, message: string): string {
+  if (name === "Privacy policy check") {
+    const crossAccount = /another account|other account|someone else/i.test(message);
+    const financialData = /card|invoice|billing|payment/i.test(message);
+    return crossAccount && financialData
+      ? "Cross-account financial data is denied before retrieval."
+      : "The authorization guardrail blocked the request; no sensitive retrieval is permitted.";
+  }
+  const topic = /invoice|billing|payment/i.test(message) ? "billing history" : "account information";
+  return `Offer the account owner an authenticated ${topic} path without disclosing third-party data.`;
+}
+
+export async function runConcurrentChecks(
+  message: string,
+  execute: (name: ConcurrentCheckName, message: string) => Promise<string> = async (name, value) => evaluateConcurrentCheck(name, value),
+) {
+  const runCheck = async (name: ConcurrentCheckName): Promise<ConcurrentCheck> => {
     const startedAtMs = performance.now();
-    const evaluated = evaluate();
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(evaluated.material.repeat(32)));
+    const result = await execute(name, message);
     const finishedAtMs = performance.now();
-    return { name, startedAtMs, finishedAtMs, durationMs: Math.max(0, finishedAtMs - startedAtMs), result: evaluated.result };
+    return { name, startedAtMs, finishedAtMs, durationMs: Math.max(0, finishedAtMs - startedAtMs), result };
   };
   const checks = await Promise.all([
-    runCheck("Privacy policy check", () => {
-      const signals = [
-        /another account|other account|someone else/i.test(message) ? "cross-account" : null,
-        /card|invoice|billing|payment/i.test(message) ? "financial-data" : null,
-      ].filter(Boolean);
-      return {
-        material: `${message}:${signals.join(",")}`,
-        result: signals.length === 2
-          ? "Cross-account financial data is denied before retrieval."
-          : "The authorization guardrail blocked the request; no sensitive retrieval is permitted.",
-      };
-    }),
-    runCheck("Safe alternative check", () => {
-      const topic = /invoice|billing|payment/i.test(message) ? "billing history" : "account information";
-      return {
-        material: `${message}:authenticated-owner:${topic}`,
-        result: `Offer the account owner an authenticated ${topic} path without disclosing third-party data.`,
-      };
-    }),
+    runCheck("Privacy policy check"),
+    runCheck("Safe alternative check"),
   ]);
   const overlapMs = Math.max(0, Math.min(...checks.map((check) => check.finishedAtMs)) - Math.max(...checks.map((check) => check.startedAtMs)));
   return { executed: true, checks, overlapMs, proved: overlapMs > 0 };
