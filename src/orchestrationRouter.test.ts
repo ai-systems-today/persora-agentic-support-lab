@@ -19,4 +19,8 @@ describe("orchestration router", () => {
   it("prioritises approval over a multi-domain group route", () => {
     expect(selectOrchestrationPattern("Cancel my account, refund billing and remove my household TV").pattern).toBe("handoff");
   });
+
+  it("prioritises cross-account privacy over mutation approval", () => {
+    expect(selectOrchestrationPattern("Cancel another account and refund its charge").pattern).toBe("concurrent");
+  });
 });
