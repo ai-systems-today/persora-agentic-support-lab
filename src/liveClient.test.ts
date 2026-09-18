@@ -38,6 +38,7 @@ describe("Persora event stream", () => {
         evidence: {
           traceId: "trace-1",
           eventTypes: [],
+          specialist: { domain: "billing", agentId: "billing-agent", agentName: "Netflix Billing Policy Specialist", widgetId: "billing-widget" },
           quality: { executed: true, status: "passed", method: "deterministic-grounding-v2", grounding: 1 },
           orchestrationProof: { concurrent: null, recovery: { executed: true, maxIterations: 2, iterations: [], revised: false } },
         },
@@ -49,6 +50,7 @@ describe("Persora event stream", () => {
     expect(state.eventTypes).toEqual(["RUN_STARTED", "TEXT_MESSAGE_CONTENT", "CUSTOM"]);
     expect(state.protocolEvents).toHaveLength(3);
     expect(state.evidence?.traceId).toBe("trace-1");
+    expect(state.evidence?.specialist?.domain).toBe("billing");
     expect(state.evidence?.quality?.status).toBe("passed");
     expect(state.evidence?.orchestrationProof?.recovery?.executed).toBe(true);
     expect(state.citations[0].label).toBe("Netflix Help");

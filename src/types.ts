@@ -51,6 +51,13 @@ export type Citation = {
   similarity: number | null;
 };
 
+export type SpecialistEvidence = {
+  domain: "billing" | "household" | "identity" | "general";
+  agentId: string;
+  agentName: string;
+  widgetId: string;
+};
+
 export type RuntimeEvidence = {
   mode: "agentic" | "live" | "fixture";
   transport: "json" | "sse" | "local";
@@ -60,6 +67,7 @@ export type RuntimeEvidence = {
   citations: Citation[];
   error: string | null;
   pattern?: Pattern;
+  specialist?: SpecialistEvidence | null;
   routing?: {
     strategy: "deterministic-policy-router";
     reason: string;
@@ -80,16 +88,19 @@ export type RuntimeEvidence = {
   protocolEvents?: Array<Record<string, unknown> & { type: string }>;
   quality?: {
     executed: boolean;
-    method: "deterministic-grounding-v2";
+    method: "deterministic-grounding-v3";
     status: "passed" | "failed" | "not-evaluated";
     grounding: number | null;
     citationValidity: number | null;
     answerRelevance: number | null;
+    intentCoverage: number | null;
     correctness: null;
     claimCount: number;
     supportedClaimCount: number;
     referencedCitationCount: number;
     validCitationCount: number;
+    requiredIntentCount: number;
+    coveredIntentCount: number;
     retryCount: number;
     reason: string;
   };
@@ -168,6 +179,7 @@ export type RuntimeEvidence = {
       version: string;
       agentName: string | null;
       taskId: string | null;
+      specialists: SpecialistEvidence[];
       error: string | null;
     };
     neo4j: { executed: boolean; records: number | null };

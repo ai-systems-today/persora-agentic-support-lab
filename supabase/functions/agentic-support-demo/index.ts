@@ -3,6 +3,7 @@ import { Annotation, END, START, StateGraph } from "npm:@langchain/langgraph@1.4
 import { evaluateLiveAnswer, extractGroundedClaims, notEvaluatedQuality, type LiveQuality, type QualityCitation } from "../_shared/answerQuality.ts";
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
+import { selectPrimarySpecialist, type SpecialistSelection } from "../_shared/specialistRouter.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://ai-systems-today.github.io",
@@ -11,8 +12,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
 const A2A_SPECIALIST = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
-const DEFAULT_WIDGET = "6a01cc31-ee9e-4977-aa8c-031894a71851";
-const PROMPT_VERSION = "netflix-support-demo@2026-09-18.3";
+const PROMPT_VERSION = "netflix-support-demo@2026-09-18.4-distinct-specialists";
 const LANGGRAPH_VERSION = "1.4.15";
 
 const secureEqual = (left: string, right: string) => {
@@ -37,6 +37,7 @@ type A2AEvidence = {
   version: string;
   agentName: string | null;
   taskId: string | null;
+  specialists: SpecialistSelection[];
   error: string | null;
 };
 type LangfuseEvidence = {
@@ -76,7 +77,6 @@ const suppressedLangfuseEvidence = (): LangfuseEvidence => ({
 
 const State = Annotation.Root({
   message: Annotation<string>,
-  widgetId: Annotation<string>,
   sessionToken: Annotation<string>,
   deviceId: Annotation<string>,
   traceId: Annotation<string>,
@@ -95,6 +95,7 @@ const State = Annotation.Root({
   protocolEvents: Annotation<ProtocolEvent[]>({ reducer: (left, right) => [...left, ...right], default: () => [] }),
   specialistContext: Annotation<string>,
   specialistCitations: Annotation<unknown[]>({ reducer: (_left, right) => right, default: () => [] }),
+  specialist: Annotation<SpecialistSelection | null>,
   handoffRequired: Annotation<boolean>,
   handoffSummary: Annotation<string>,
   a2a: Annotation<A2AEvidence>,
@@ -189,6 +190,7 @@ async function requestPublishedAgent(state: typeof State.State, repair: boolean)
     ? "Give one verified step for each of these Netflix issues: billing, Netflix Household, and account email access."
     : state.message;
   const qualityInstruction = "Answer in at most 3 standalone sentences. Every sentence must contain exactly one factual claim and end with its matching [#n] citation. Use only facts directly stated in the returned Netflix knowledge sources. Do not include headings, introductions, transitions, uncited text, links, or follow-up questions. If the sources do not support an answer, say only: I do not have enough source evidence.";
+  const specialist = selectPrimarySpecialist(state.message);
   const response = await fetch(UPSTREAM, {
     method: "POST",
     headers: {
@@ -197,7 +199,7 @@ async function requestPublishedAgent(state: typeof State.State, repair: boolean)
       "x-trace-id": state.traceId,
     },
     body: JSON.stringify({
-      widgetId: state.widgetId,
+      widgetId: specialist.widgetId,
       message: `${question}\n\n${qualityInstruction}`,
       sessionToken: `${state.sessionToken}:${state.traceId}:${repair ? "retry" : "primary"}`,
       deviceId: state.deviceId,
@@ -219,7 +221,7 @@ async function requestPublishedAgent(state: typeof State.State, repair: boolean)
   }
   if (buffer.startsWith("data:")) applySsePayload(stream, buffer.slice(5).trim());
   if (!stream.answer.trim()) throw new Error("Published agent completed without answer text");
-  return { answer: stream.answer.trim(), citations: stream.citations, eventTypes: stream.eventTypes };
+  return { answer: stream.answer.trim(), citations: stream.citations, eventTypes: stream.eventTypes, specialist };
 }
 
 const qualityCitations = (values: unknown[]): QualityCitation[] => values.map((value, index) => {
@@ -235,15 +237,28 @@ const qualityCitations = (values: unknown[]): QualityCitation[] => values.map((v
   };
 });
 
+const MULTI_INTENT_QUALITY_TOPICS: Record<SpecialistSelection["domain"], { label: string; terms: string[] }> = {
+  billing: { label: "billing", terms: ["billing", "payment", "currency", "charge", "invoice", "membership"] },
+  household: { label: "household", terms: ["household", "TV", "home internet"] },
+  identity: { label: "identity", terms: ["email", "password", "sign in", "login"] },
+  general: { label: "general support", terms: ["support", "help"] },
+};
+
+const requiredQualityTopics = (state: typeof State.State) => state.pattern === "group-chat"
+  ? state.a2a.specialists.map((specialist) => MULTI_INTENT_QUALITY_TOPICS[specialist.domain])
+  : [];
+
 async function callPublishedAgent(state: typeof State.State) {
-  type PublishedResult = { answer: string; citations: unknown[]; eventTypes: string[] };
+  type PublishedResult = { answer: string; citations: unknown[]; eventTypes: string[]; specialist: SpecialistSelection | null };
   let first: PublishedResult | null = null;
+  const requiredTopics = requiredQualityTopics(state);
   try {
     first = state.pattern === "group-chat" && state.specialistContext.trim() && state.specialistCitations.length
       ? {
         answer: state.specialistContext,
         citations: state.specialistCitations,
         eventTypes: ["a2a_grounded_result_used"],
+        specialist: null,
       }
       : await requestPublishedAgent(state, false);
   } catch {
@@ -258,9 +273,19 @@ async function callPublishedAgent(state: typeof State.State) {
       answer: firstAnswer,
       citations: firstCitations,
       retryCount: 0,
+      requiredTopics,
     });
     if (firstQuality.status === "passed") {
       return { ...first, answer: firstAnswer, quality: firstQuality, eventTypes: [...first.eventTypes, "live_quality_passed"] };
+    }
+    if (state.pattern === "group-chat") {
+      return {
+        answer: "I couldn’t verify a source-backed answer for every part of this multi-topic request, so I’m not presenting a partial answer as complete. Please ask the billing, Household, and sign-in questions separately or use authenticated Netflix Support.",
+        citations: first.citations,
+        specialist: null,
+        quality: firstQuality,
+        eventTypes: [...first.eventTypes, "live_quality_multi_intent_failed_closed"],
+      };
     }
   }
 
@@ -272,6 +297,7 @@ async function callPublishedAgent(state: typeof State.State) {
     return {
       answer: "I couldn’t verify a sufficiently grounded answer from the returned Netflix sources, so I’m not presenting the generated answer as reliable. Please rephrase the question or use authenticated Netflix Support.",
       citations: fallbackCitations,
+      specialist: first?.specialist ?? selectPrimarySpecialist(state.message),
       quality: evaluateLiveAnswer({ question: state.message, answer: "", citations: qualityCitations(fallbackCitations), retryCount: 1 }),
       eventTypes: [...(first?.eventTypes ?? []), "live_quality_retry_request_failed", "live_quality_failed_closed"],
     };
@@ -283,6 +309,7 @@ async function callPublishedAgent(state: typeof State.State) {
     answer: repairedAnswer,
     citations: repairedCitations,
     retryCount: 1,
+    requiredTopics,
   });
   if (repairedQuality.status === "passed") {
     return { ...repaired, answer: repairedAnswer, quality: repairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_retry_passed"] };
@@ -291,6 +318,7 @@ async function callPublishedAgent(state: typeof State.State) {
   return {
     answer: "I couldn’t verify a sufficiently grounded answer from the returned Netflix sources, so I’m not presenting the generated answer as reliable. Please rephrase the question or use authenticated Netflix Support.",
     citations: repaired.citations,
+    specialist: repaired.specialist,
     quality: repairedQuality,
     eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_failed_closed"],
   };
@@ -538,6 +566,7 @@ const emptyA2A = (): A2AEvidence => ({
   version: "1.0",
   agentName: null,
   taskId: null,
+  specialists: [],
   error: null,
 });
 
@@ -570,7 +599,7 @@ async function runA2ASpecialist(state: typeof State.State) {
     });
     if (!response.ok) throw new Error(`A2A message:send returned HTTP ${response.status}`);
     const payload = await response.json() as {
-      task?: { id?: unknown; artifacts?: Array<{ parts?: Array<{ text?: unknown }>; metadata?: { citations?: unknown } }> };
+      task?: { id?: unknown; artifacts?: Array<{ parts?: Array<{ text?: unknown }>; metadata?: { citations?: unknown; specialists?: unknown } }> };
     };
     const context = payload.task?.artifacts?.flatMap((artifact) => artifact.parts ?? [])
       .map((part) => typeof part.text === "string" ? part.text : "")
@@ -579,12 +608,19 @@ async function runA2ASpecialist(state: typeof State.State) {
     if (!context) throw new Error("A2A specialist returned no text artifact");
     const citations = payload.task?.artifacts?.flatMap((artifact) => Array.isArray(artifact.metadata?.citations) ? artifact.metadata.citations : []) ?? [];
     if (!citations.length) throw new Error("A2A specialist returned no source citations");
+    const specialists = payload.task?.artifacts?.flatMap((artifact) => Array.isArray(artifact.metadata?.specialists) ? artifact.metadata.specialists : [])
+      .filter((value): value is SpecialistSelection => {
+        if (!value || typeof value !== "object") return false;
+        const record = value as Record<string, unknown>;
+        return typeof record.domain === "string" && typeof record.agentId === "string" && typeof record.agentName === "string" && typeof record.widgetId === "string";
+      }) ?? [];
+    if (!specialists.length) throw new Error("A2A specialist returned no executed specialist identities");
     const taskId = typeof payload.task?.id === "string" ? payload.task.id : null;
     const agentName = typeof card.name === "string" ? card.name : "Netflix Support Specialist";
     return {
       specialistContext: context,
       specialistCitations: citations,
-      a2a: { executed: true, version: typeof card.version === "string" ? card.version : "1.0", agentName, taskId, error: null },
+      a2a: { executed: true, version: typeof card.version === "string" ? card.version : "1.0", agentName, taskId, specialists, error: null },
       eventTypes: ["a2a_task_completed"],
       protocolEvents: [
         { type: "SUBAGENT_STARTED", subagentRunId: taskId ?? state.traceId, name: agentName, description: "A2A Netflix support specialist" },
@@ -836,6 +872,7 @@ function streamAgenticRun(input: typeof State.State, origin: string, started: nu
             signals: result.routeSignals,
             confidence: result.routeConfidence,
           },
+          specialist: result.specialist,
           promptVersion: PROMPT_VERSION,
           guardrail: { decision: result.allowed ? "allow" : "block", reason: result.guardrailReason },
           handoff: {
@@ -981,6 +1018,7 @@ Deno.serve(async (req: Request) => {
         totalMs: Math.round(performance.now() - started),
         eventTypes: ["human_decision_recorded", "RUN_FINISHED"],
         pattern: "handoff",
+        specialist: null,
         promptVersion: PROMPT_VERSION,
         guardrail: { decision: "allow", reason: "session-bound-demo-decision" },
         handoff: { required: true, status: record.status, summary: record.summary, approvalId: record.id, decidedAt: record.decided_at, decisionMessage: record.decision_message },
@@ -1004,7 +1042,6 @@ Deno.serve(async (req: Request) => {
     if (!message || message.length > 2000) return new Response(JSON.stringify({ error: "Message must contain 1-2000 characters" }), { status: 400, headers: { ...cors(origin), "Content-Type": "application/json" } });
     const initialState = {
       message,
-      widgetId: typeof body.widgetId === "string" ? body.widgetId : DEFAULT_WIDGET,
       sessionToken,
       deviceId: typeof body.deviceId === "string" ? body.deviceId : crypto.randomUUID(),
       traceId,
@@ -1018,6 +1055,7 @@ Deno.serve(async (req: Request) => {
       guardrailReason: "not-evaluated",
       specialistContext: "",
       specialistCitations: [],
+      specialist: null,
       answer: "",
       citations: [],
       eventTypes: [],
@@ -1061,6 +1099,7 @@ Deno.serve(async (req: Request) => {
         signals: result.routeSignals,
         confidence: result.routeConfidence,
       },
+      specialist: result.specialist,
       promptVersion: PROMPT_VERSION,
       guardrail: { decision: result.allowed ? "allow" : "block", reason: result.guardrailReason },
       handoff: {

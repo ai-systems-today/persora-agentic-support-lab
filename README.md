@@ -19,7 +19,8 @@ An interview-ready, evidence-first Netflix support demonstration. The applicatio
 - An opt-in **Live agent** mode that streams the published Netflix Support Assistant response and renders the citations returned by that exact run.
 - An additive **Agentic run** mode backed by JWT-protected Supabase Edge Functions. It executes a real LangGraph graph, streams standards-based AG-UI events, runs a deterministic authorization guardrail before retrieval, pauses mutation requests for human approval, and calls the published Netflix agent with its returned citations.
 - Distinct sequential, concurrent privacy-check, A2A group-specialist, human-handoff, and bounded revise-or-finish recovery execution paths, each with exact-run proof.
-- An exact-run deterministic quality gate for published answers: citation-index validity, lexical grounding and answer relevance. It retries once with stricter citation instructions, then fails closed instead of displaying an unverifiable generated answer.
+- Distinct published Billing, Household & Travel, and Account Access & Security Persora agents. Each has its own agent ID, prompt and widget ID while sharing the same Netflix Help knowledge corpus; every agentic run returns the exact specialist identities it executed.
+- An exact-run deterministic quality gate for published answers: citation-index validity, lexical grounding, answer relevance and multi-intent coverage. It retries single-agent answers once with stricter citation instructions and fails closed instead of displaying an unverifiable or incomplete generated answer.
 - A pinned, server-side RAGAS contract benchmark that is explicitly separated from per-answer evidence.
 - Progressive run status while LangGraph nodes execute, contextual follow-up questions, a selectable orchestration canvas, and a node inspector backed by that run's trace.
 - A sanitized public trace projection that exposes route reasoning, nodes, timings, protocol-event counts and citation counts without exposing the private Langfuse console or credentials.
@@ -77,7 +78,7 @@ Current execution truth:
 | Exact-run quality gate | Runs on each published answer in agentic mode; reports grounding, citation validity and answer relevance, retries once, and fails closed on a second failure |
 | Correctness | Not inferred from grounding or citation presence; remains not evaluated unless a trusted reference or human judgment evaluates that exact answer |
 | AG-UI lifecycle, step, text, subagent and custom evidence events | Progressively streamed by every agentic run; upstream answer text arrives as one delta after the graph completes |
-| A2A | Agent Card discovery and `message:send` execute on the group-chat route through `netflix-specialist-a2a` |
+| A2A | Agent Card discovery and `message:send` execute on the group-chat route through `netflix-specialist-a2a`; the task artifact identifies every published specialist widget that ran |
 | Langfuse | OTLP root span and child observations implemented; the server reads the current trace back and returns an allow-listed observation projection without private URLs, content or identifiers |
 | RAGAS | Pinned `0.4.3` six-metric deterministic reference-contract evaluation executes in CI; it is never presented as a score of the newly generated live answer |
 | Pinecone / Milvus | Not executed; the demo intentionally reuses Persora's current Supabase/Postgres vector retrieval and returned citations |
@@ -87,7 +88,7 @@ Current execution truth:
 
 - `agentic-support-demo` returns an AG-UI Server-Sent Event stream when the client requests `text/event-stream`. The stream includes `RUN_STARTED`, progressive step events, text-message events, contextual follow-ups, one custom evidence event and `RUN_FINISHED`.
 - The human-handoff route finishes with an interrupt outcome and an evidence summary; it never claims that an account mutation or refund occurred.
-- The group-chat route discovers the specialist Agent Card and sends an A2A 1.0 `message:send` request. The returned task artifact becomes bounded context for the primary published agent.
+- The group-chat route discovers the specialist-team Agent Card and sends an A2A 1.0 `message:send` request. The service fans the question out only to the matched Billing, Household/Travel and Identity/Access widgets, then returns their identities, answers and citations in one bounded task artifact.
 - The A2A specialist endpoint is JWT-protected and invokes the existing published Persora Netflix agent. Browser clients never receive a service-role credential.
 
 ### RAGAS benchmark
@@ -110,7 +111,7 @@ The Edge Function sends one OTLP root span plus one child span per executed Lang
 
 ### Automatic orchestration routing
 
-`supabase/functions/_shared/orchestrationRouter.ts` applies a deterministic policy router before the graph branches. Mutation and refund requests route to human handoff; sensitive cross-account requests route to concurrent privacy checks; failed recovery attempts route to the bounded planner; multi-domain questions route to the A2A specialist exchange; and ordinary single-intent support questions follow the sequential grounded path. Every run returns the selected pattern, matched signals, confidence and plain-language reason so the route is inspectable rather than inferred from the picture alone.
+`supabase/functions/_shared/orchestrationRouter.ts` applies a deterministic policy router before the graph branches. Mutation and refund requests route to human handoff; sensitive cross-account requests route to concurrent privacy checks; failed recovery attempts route to the bounded planner; multi-domain questions route to the A2A specialist exchange; and ordinary single-intent support questions follow the sequential grounded path. `supabase/functions/_shared/specialistRouter.ts` then maps grounded calls to the published Billing, Household/Travel, Identity/Access or general widget. Every run returns the selected pattern, matched signals, confidence and exact specialist identity so routing is inspectable rather than inferred from the picture alone.
 
 The concurrent route sends the privacy-policy and safe-alternative checks as two independent internal HTTP executions, then returns their start/finish timings plus measured overlap. The Magentic route records each bounded planner decision: it either finishes on the first attempt or revises once after a reported failure and then asks only for source-backed alternatives. The UI reports missing overlap or missing planner decisions as unproved rather than inferring them from the topology.
 

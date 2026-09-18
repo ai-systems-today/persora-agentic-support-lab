@@ -128,6 +128,7 @@ async function requestAgenticDemo(
       citations: state.citations,
       error: null,
       pattern: state.evidence.pattern,
+      specialist: state.evidence.specialist,
       routing: state.evidence.routing,
       promptVersion: state.evidence.promptVersion,
       guardrail: state.evidence.guardrail,
