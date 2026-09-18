@@ -26,6 +26,10 @@ function applySsePayload(state: { answer: string; citations: unknown[] }, payloa
 }
 
 async function askPublishedSpecialist(message: string, taskId: string) {
+  const question = /billing/i.test(message) && /household/i.test(message) && /email/i.test(message)
+    ? "Give one verified step for each of these Netflix issues: billing, Netflix Household, and account email access."
+    : message;
+  const qualityInstruction = "Answer in at most 3 standalone sentences. Every sentence must contain exactly one factual claim and end with its matching [#n] citation. Use only facts directly stated in the returned Netflix knowledge sources. Do not include headings, introductions, transitions, uncited text, links, or follow-up questions. If the sources do not support an answer, say only: I do not have enough source evidence.";
   const response = await fetch(UPSTREAM, {
     method: "POST",
     headers: {
@@ -35,7 +39,7 @@ async function askPublishedSpecialist(message: string, taskId: string) {
     },
     body: JSON.stringify({
       widgetId: DEFAULT_WIDGET,
-      message,
+      message: `${question}\n\n${qualityInstruction}`,
       sessionToken: `a2a-${taskId}`,
       deviceId: `a2a-${taskId}`,
       mode: "chat",

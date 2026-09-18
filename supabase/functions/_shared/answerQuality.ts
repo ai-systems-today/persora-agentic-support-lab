@@ -30,6 +30,12 @@ const STOP_WORDS = new Set([
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
 const round = (value: number) => Math.round(clamp(value) * 1000) / 1000;
+const normalizeToken = (token: string) => {
+  if (/^travell?ing$/.test(token)) return "travel";
+  if (token.length > 4 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
+  if (token.length > 4 && token.endsWith("s") && !token.endsWith("ss")) return token.slice(0, -1);
+  return token;
+};
 
 const tokens = (value: string) => new Set(
   value.toLowerCase()
@@ -37,7 +43,8 @@ const tokens = (value: string) => new Set(
     .replace(/\[#\d+\]/g, " ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .split(/\s+/)
-    .filter((token) => token.length > 2 && !STOP_WORDS.has(token)),
+    .filter((token) => token.length > 2 && !STOP_WORDS.has(token))
+    .map(normalizeToken),
 );
 
 const overlap = (left: Set<string>, right: Set<string>) => {
@@ -51,6 +58,62 @@ const citationReferences = (value: string) => Array.from(
   value.matchAll(/\[#(\d+)\]/g),
   (match) => Number(match[1]),
 );
+
+const claimSegments = (answer: string) => answer
+  .split(/(?<=[.!?])\s+|\n+/)
+  .map((claim) => claim.trim())
+  .filter((claim) => tokens(claim).size >= 3);
+
+const citationSupport = (claim: string, citation: QualityCitation) => {
+  const claimTokens = tokens(claim);
+  const sourceTokens = tokens(`${citation.label} ${citation.snippet ?? ""}`);
+  const shared = overlap(claimTokens, sourceTokens);
+  return {
+    shared,
+    ratio: shared / Math.max(Math.min(claimTokens.size, 8), 1),
+    supported: shared >= Math.min(2, claimTokens.size) && shared / Math.max(Math.min(claimTokens.size, 8), 1) >= 0.16,
+  };
+};
+
+const appendReference = (claim: string, reference: number) => {
+  const cleaned = claim
+    .replace(/\s*\[#\d+\]\s*/g, " ")
+    .replace(/\s+([.!?])/g, "$1")
+    .trim();
+  return /[.!?]$/.test(cleaned)
+    ? `${cleaned.slice(0, -1).trim()} [#${reference}]${cleaned.slice(-1)}`
+    : `${cleaned} [#${reference}].`;
+};
+
+/**
+ * Keeps only cited, lexically supported factual sentences. If the model cited the
+ * wrong returned source number, a sentence is re-anchored only when another
+ * returned source is a materially stronger match (at least 3 shared terms and
+ * 37.5% overlap across the first 8 substantive terms).
+ */
+export function extractGroundedClaims(answer: string, citations: QualityCitation[]): string {
+  const grounded: string[] = [];
+  for (const claim of claimSegments(answer)) {
+    const validReferences = [...new Set(citationReferences(claim))]
+      .filter((reference) => reference >= 1 && reference <= citations.length);
+    if (!validReferences.length) continue;
+
+    const existing = validReferences
+      .map((reference) => ({ reference, ...citationSupport(claim, citations[reference - 1]) }))
+      .sort((left, right) => right.shared - left.shared || right.ratio - left.ratio)[0];
+    if (existing?.supported) {
+      grounded.push(appendReference(claim, existing.reference));
+      continue;
+    }
+
+    const reanchored = citations
+      .map((citation, index) => ({ reference: index + 1, ...citationSupport(claim, citation) }))
+      .filter((candidate) => candidate.shared >= 3 && candidate.ratio >= 0.375)
+      .sort((left, right) => right.shared - left.shared || right.ratio - left.ratio)[0];
+    if (reanchored) grounded.push(appendReference(claim, reanchored.reference));
+  }
+  return grounded.join(" ");
+}
 
 export const notEvaluatedQuality = (reason: string): LiveQuality => ({
   executed: false,
@@ -80,21 +143,14 @@ export function evaluateLiveAnswer(input: {
   const uniqueReferences = [...new Set(citationReferences(input.answer))];
   const validReferences = uniqueReferences.filter((reference) => reference >= 1 && reference <= input.citations.length);
   const citationValidity = round(validReferences.length / Math.max(uniqueReferences.length, 1));
-  const claims = input.answer
-    .split(/(?<=[.!?])\s+|\n+/)
-    .map((claim) => claim.trim())
-    .filter((claim) => tokens(claim).size >= 3);
+  const claims = claimSegments(input.answer);
 
   let supportedClaimCount = 0;
   for (const claim of claims) {
-    const claimTokens = tokens(claim);
     const references = [...new Set(citationReferences(claim))]
       .filter((reference) => reference >= 1 && reference <= input.citations.length);
     const supported = references.some((reference) => {
-      const citation = input.citations[reference - 1];
-      const sourceTokens = tokens(`${citation.label} ${citation.snippet ?? ""}`);
-      const shared = overlap(claimTokens, sourceTokens);
-      return shared >= Math.min(2, claimTokens.size) && shared / Math.max(Math.min(claimTokens.size, 8), 1) >= 0.16;
+      return citationSupport(claim, input.citations[reference - 1]).supported;
     });
     if (supported) supportedClaimCount += 1;
   }

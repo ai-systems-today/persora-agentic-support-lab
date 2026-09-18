@@ -52,18 +52,12 @@ export async function runConcurrentChecks(message: string) {
 }
 
 export function planRecoveryEvidence(message: string): RecoveryProof {
-  const observed = [
-    /time|clock/i.test(message) ? "device time" : null,
-    /network|wifi|internet/i.test(message) ? "network" : null,
-    /expir|old code/i.test(message) ? "code expiry" : null,
-    /household|primary tv|home/i.test(message) ? "primary household access" : null,
-  ].filter((value): value is string => Boolean(value));
   const iterations: RecoveryProof["iterations"] = [];
-  if (observed.length >= 2) {
-    iterations.push({ attempt: 1, decision: "finish", reason: `The request already includes ${observed.length} diagnostic signals, so the bounded plan is specific enough to execute.` });
+  if (/failed|fails|doesn(?:'|’)t work|didn(?:'|’)t work|still cannot|still can(?:'|’)t/i.test(message)) {
+    iterations.push({ attempt: 1, decision: "revise", reason: "The requested path already failed, so repeating it would not be a valid recovery plan." });
+    iterations.push({ attempt: 2, decision: "finish", reason: "The revised plan asks the published agent for source-backed travel alternatives and rejects unsupported diagnostic causes." });
   } else {
-    iterations.push({ attempt: 1, decision: "revise", reason: "The first plan lacked enough concrete diagnostic signals and would risk repeating the failed code path." });
-    iterations.push({ attempt: 2, decision: "finish", reason: "The revised plan adds device time, network, expiry and primary-household checks plus a bounded escalation." });
+    iterations.push({ attempt: 1, decision: "finish", reason: "No failed path was reported, so the source-backed support route can run without a recovery revision." });
   }
   return {
     executed: true,

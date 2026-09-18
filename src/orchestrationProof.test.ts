@@ -12,14 +12,14 @@ describe("orchestration execution proof", () => {
     expect(proof.proved).toBe(true);
   });
 
-  it("revises once when the failed-path request lacks diagnostic evidence", () => {
+  it("revises once instead of repeating a failed path", () => {
     const proof = planRecoveryEvidence("I tried the travel code repeatedly and it still fails");
     expect(proof.maxIterations).toBe(2);
     expect(proof.iterations.map((iteration) => iteration.decision)).toEqual(["revise", "finish"]);
     expect(proof.revised).toBe(true);
   });
 
-  it("finishes immediately when enough diagnostic evidence already exists", () => {
+  it("finishes immediately when no failed path was reported", () => {
     const proof = planRecoveryEvidence("The code expired; my device clock and wifi are correct");
     expect(proof.iterations).toHaveLength(1);
     expect(proof.iterations[0].decision).toBe("finish");

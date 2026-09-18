@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateLiveAnswer, notEvaluatedQuality } from "../supabase/functions/_shared/answerQuality";
+import { evaluateLiveAnswer, extractGroundedClaims, notEvaluatedQuality } from "../supabase/functions/_shared/answerQuality";
 
 const citations = [{
   label: "How to update your Netflix Household",
@@ -65,5 +65,28 @@ describe("exact-run answer quality", () => {
       correctness: null,
       reason: "guardrail blocked",
     });
+  });
+
+  it("removes headings, filler, and uncited sentences before live display", () => {
+    const answer = [
+      "## Household help",
+      "Here are the steps:",
+      "Update your Netflix Household from a TV connected to your home internet [#1].",
+      "Contact support if you need anything else.",
+    ].join("\n");
+    expect(extractGroundedClaims(answer, citations)).toBe(
+      "Update your Netflix Household from a TV connected to your home internet [#1].",
+    );
+  });
+
+  it("re-anchors a cited sentence only to a materially stronger returned source", () => {
+    const returned = [
+      { label: "Using Netflix outside your home", url: null, snippet: "Use Netflix while traveling on mobile devices and computers." },
+      { label: "Changing account country", url: null, snippet: "Each country has its own catalog of licensed TV shows and movies." },
+    ];
+    expect(extractGroundedClaims(
+      "Netflix TV show and movie catalogs differ between countries [#1]. Maturity ratings may differ [#1].",
+      returned,
+    )).toBe("Netflix TV show and movie catalogs differ between countries [#2].");
   });
 });

@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { Annotation, END, START, StateGraph } from "npm:@langchain/langgraph@1.4.15";
-import { evaluateLiveAnswer, notEvaluatedQuality, type LiveQuality, type QualityCitation } from "../_shared/answerQuality.ts";
+import { evaluateLiveAnswer, extractGroundedClaims, notEvaluatedQuality, type LiveQuality, type QualityCitation } from "../_shared/answerQuality.ts";
 import { planRecoveryEvidence, runConcurrentChecks, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
 
@@ -12,7 +12,7 @@ const ALLOWED_ORIGINS = new Set([
 const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
 const A2A_SPECIALIST = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
 const DEFAULT_WIDGET = "6a01cc31-ee9e-4977-aa8c-031894a71851";
-const PROMPT_VERSION = "netflix-support-demo@2026-09-18.2";
+const PROMPT_VERSION = "netflix-support-demo@2026-09-18.3";
 const LANGGRAPH_VERSION = "1.4.15";
 
 const secureEqual = (left: string, right: string) => {
@@ -94,6 +94,7 @@ const State = Annotation.Root({
   nodeTrace: Annotation<TraceEntry[]>({ reducer: (left, right) => [...left, ...right], default: () => [] }),
   protocolEvents: Annotation<ProtocolEvent[]>({ reducer: (left, right) => [...left, ...right], default: () => [] }),
   specialistContext: Annotation<string>,
+  specialistCitations: Annotation<unknown[]>({ reducer: (_left, right) => right, default: () => [] }),
   handoffRequired: Annotation<boolean>,
   handoffSummary: Annotation<string>,
   a2a: Annotation<A2AEvidence>,
@@ -184,10 +185,10 @@ function applySsePayload(state: { answer: string; citations: unknown[]; eventTyp
 }
 
 async function requestPublishedAgent(state: typeof State.State, repair: boolean) {
-  const coordinationContext = state.specialistContext ? `\n\nCase coordination context:\n${state.specialistContext}` : "";
-  const repairInstruction = repair
-    ? "\n\nQuality repair: Answer the original question using only claims supported by the returned Netflix knowledge sources. Put [#n] immediately after each factual claim, where n is the matching 1-based source number. Omit unsupported claims."
-    : "";
+  const question = state.pattern === "group-chat"
+    ? "Give one verified step for each of these Netflix issues: billing, Netflix Household, and account email access."
+    : state.message;
+  const qualityInstruction = "Answer in at most 3 standalone sentences. Every sentence must contain exactly one factual claim and end with its matching [#n] citation. Use only facts directly stated in the returned Netflix knowledge sources. Do not include headings, introductions, transitions, uncited text, links, or follow-up questions. If the sources do not support an answer, say only: I do not have enough source evidence.";
   const response = await fetch(UPSTREAM, {
     method: "POST",
     headers: {
@@ -197,8 +198,8 @@ async function requestPublishedAgent(state: typeof State.State, repair: boolean)
     },
     body: JSON.stringify({
       widgetId: state.widgetId,
-      message: `${state.message}${coordinationContext}${repairInstruction}`,
-      sessionToken: state.sessionToken,
+      message: `${question}\n\n${qualityInstruction}`,
+      sessionToken: `${state.sessionToken}:${state.traceId}:${repair ? "retry" : "primary"}`,
       deviceId: state.deviceId,
       mode: "chat",
     }),
@@ -235,26 +236,36 @@ const qualityCitations = (values: unknown[]): QualityCitation[] => values.map((v
 });
 
 async function callPublishedAgent(state: typeof State.State) {
-  const first = await requestPublishedAgent(state, false);
+  const first = state.pattern === "group-chat" && state.specialistContext.trim() && state.specialistCitations.length
+    ? {
+      answer: state.specialistContext,
+      citations: state.specialistCitations,
+      eventTypes: ["a2a_grounded_result_used"],
+    }
+    : await requestPublishedAgent(state, false);
+  const firstCitations = qualityCitations(first.citations);
+  const firstAnswer = extractGroundedClaims(first.answer, firstCitations);
   const firstQuality = evaluateLiveAnswer({
     question: state.message,
-    answer: first.answer,
-    citations: qualityCitations(first.citations),
+    answer: firstAnswer,
+    citations: firstCitations,
     retryCount: 0,
   });
   if (firstQuality.status === "passed") {
-    return { ...first, quality: firstQuality, eventTypes: [...first.eventTypes, "live_quality_passed"] };
+    return { ...first, answer: firstAnswer, quality: firstQuality, eventTypes: [...first.eventTypes, "live_quality_passed"] };
   }
 
   const repaired = await requestPublishedAgent(state, true);
+  const repairedCitations = qualityCitations(repaired.citations);
+  const repairedAnswer = extractGroundedClaims(repaired.answer, repairedCitations);
   const repairedQuality = evaluateLiveAnswer({
     question: state.message,
-    answer: repaired.answer,
-    citations: qualityCitations(repaired.citations),
+    answer: repairedAnswer,
+    citations: repairedCitations,
     retryCount: 1,
   });
   if (repairedQuality.status === "passed") {
-    return { ...repaired, quality: repairedQuality, eventTypes: [...repaired.eventTypes, "live_quality_retry_passed"] };
+    return { ...repaired, answer: repairedAnswer, quality: repairedQuality, eventTypes: [...repaired.eventTypes, "live_quality_retry_passed"] };
   }
 
   return {
@@ -539,17 +550,20 @@ async function runA2ASpecialist(state: typeof State.State) {
     });
     if (!response.ok) throw new Error(`A2A message:send returned HTTP ${response.status}`);
     const payload = await response.json() as {
-      task?: { id?: unknown; artifacts?: Array<{ parts?: Array<{ text?: unknown }> }> };
+      task?: { id?: unknown; artifacts?: Array<{ parts?: Array<{ text?: unknown }>; metadata?: { citations?: unknown } }> };
     };
     const context = payload.task?.artifacts?.flatMap((artifact) => artifact.parts ?? [])
       .map((part) => typeof part.text === "string" ? part.text : "")
       .filter(Boolean)
       .join("\n") ?? "";
     if (!context) throw new Error("A2A specialist returned no text artifact");
+    const citations = payload.task?.artifacts?.flatMap((artifact) => Array.isArray(artifact.metadata?.citations) ? artifact.metadata.citations : []) ?? [];
+    if (!citations.length) throw new Error("A2A specialist returned no source citations");
     const taskId = typeof payload.task?.id === "string" ? payload.task.id : null;
     const agentName = typeof card.name === "string" ? card.name : "Netflix Support Specialist";
     return {
       specialistContext: context,
+      specialistCitations: citations,
       a2a: { executed: true, version: typeof card.version === "string" ? card.version : "1.0", agentName, taskId, error: null },
       eventTypes: ["a2a_task_completed"],
       protocolEvents: [
@@ -593,7 +607,7 @@ function prepareHumanHandoff() {
 function planRecovery(state: typeof State.State) {
   const recovery = planRecoveryEvidence(state.message);
   return {
-    specialistContext: "Recovery planner: the temporary travel-code path already failed. Do not repeat it indefinitely; diagnose device time, network, expiry and primary-household access, then escalate with attempted steps.",
+    specialistContext: "Recovery planner: the temporary travel-access path failed. Ask the published Netflix agent for a source-backed alternative without inventing diagnostic causes.",
     eventTypes: recovery.revised ? ["recovery_plan_revised", "recovery_plan_finished"] : ["recovery_plan_finished"],
     orchestrationProof: {
       ...state.orchestrationProof,
@@ -949,6 +963,7 @@ Deno.serve(async (req: Request) => {
       allowed: true,
       guardrailReason: "not-evaluated",
       specialistContext: "",
+      specialistCitations: [],
       answer: "",
       citations: [],
       eventTypes: [],
