@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cases } from "./data";
-import { askAgenticDemo, askPublishedAgent, resolveAgenticHandoff } from "./liveClient";
+import { askAgenticDemo, askPublishedAgent, readLangfuseMirror, resolveAgenticHandoff } from "./liveClient";
 import { formatRetrievalScore } from "./retrievalScore";
 import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern, RunProgress } from "./types";
 import { selectOrchestrationPattern } from "../supabase/functions/_shared/orchestrationRouter";
@@ -331,17 +331,18 @@ function LayerPanel({ layer }: { layer: EvidenceLayer }) {
   );
 }
 
-function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
+function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["runtime"]["integrations"]>["langfuse"]): EvidenceLayer[] {
   const item = turn.demoCase!;
   if (turn.runtime.mode === "fixture") return item.layers;
 
   const agentic = turn.runtime.mode === "agentic";
   const publishedExecuted = !agentic || Boolean(turn.runtime.nodeTrace?.some((entry) => entry.node === "published_netflix_agent"));
-  const langfuse = turn.runtime.integrations?.langfuse;
+  const langfuse = langfuseOverride ?? turn.runtime.integrations?.langfuse;
   const agUi = turn.runtime.integrations?.agUi;
   const a2a = turn.runtime.integrations?.a2a;
   const ragas = turn.runtime.integrations?.ragas;
   const handoff = turn.runtime.handoff;
+  const caseEvaluation = item ? ragas?.cases?.[item.id] : undefined;
 
   const replace = (id: EvidenceLayer["id"], fields: EvidenceLayer["fields"]): EvidenceLayer[] =>
     item.layers.map((layer) => layer.id === id ? { ...layer, fields } : layer);
@@ -369,26 +370,47 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
     { label: "Public trace projection", value: turn.runtime.publicTrace ? `${turn.runtime.publicTrace.nodeCount} nodes · ${turn.runtime.publicTrace.protocolEventCount} events` : "Not captured", status: turn.runtime.publicTrace ? "runtime-proven" : "not-captured", detail: turn.runtime.publicTrace ? `Sanitized trace schema ${turn.runtime.publicTrace.schemaVersion}; ${turn.runtime.publicTrace.citationCount} citations. The private Langfuse console and credentials are never exposed.` : "No sanitized trace projection was returned." },
     { label: "End-to-end latency", value: `${turn.runtime.totalMs} ms`, status: "runtime-proven", detail: "Measured in the browser from request start through stream completion." },
     { label: "Prompt version", value: turn.runtime.promptVersion ?? "Not captured", status: turn.runtime.promptVersion ? "runtime-proven" : "not-captured", detail: "Version returned by the server execution contract." },
-    { label: "Private Langfuse mirror", value: langfuse?.executed ? "Export accepted" : langfuse?.configured ? "Export failed" : "Not configured", status: langfuse?.executed ? "runtime-proven" : "not-executed", detail: langfuse?.executed ? "The private project accepted this run. This public UI shows its sanitized trace projection without exposing the Langfuse console or credentials." : langfuse?.error ?? "Server-side Langfuse credentials are absent; no trace is claimed." },
+    { label: "Private Langfuse mirror", value: langfuse?.readback === "available" ? `${langfuse.observations.length} sanitized observations` : langfuse?.executed ? "Export accepted · read-back pending" : langfuse?.configured ? "Export failed" : "Not configured", status: langfuse?.readback === "available" || langfuse?.executed ? "runtime-proven" : "not-executed", detail: langfuse?.readback === "available" ? "The server read this run back from the private Langfuse project and returned only an allow-listed projection—never credentials, inputs, outputs, user/session IDs or private console links." : langfuse?.executed ? "Langfuse accepted the export, but its observation API did not make the new records available within the bounded read-back window." : langfuse?.error ?? "Server-side Langfuse credentials are absent; no trace is claimed.", metrics: langfuse?.readback === "available" ? langfuse.observations.map((observation) => ({ label: `${observation.type} · ${observation.name}`, value: [observation.durationMs === null ? null : `${observation.durationMs} ms`, observation.status].filter(Boolean).join(" · ") || "Observed" })) : undefined },
   ] } : layer);
   return next.map((layer) => layer.id === "quality" ? { ...layer, fields: [
     { label: "Answer present", value: turn.answer.trim() ? "Passed" : "Failed", status: "runtime-proven", detail: "Programmatic validation checked that the live stream produced answer text." },
     { label: "Citation presence", value: turn.runtime.citations.length ? "Passed" : "No citations returned", status: "runtime-proven", detail: "Validated directly from the streamed citations event." },
     { label: "Authorization guardrail", value: turn.runtime.guardrail ? `${turn.runtime.guardrail.decision}: ${turn.runtime.guardrail.reason}` : "Not captured", status: turn.runtime.guardrail ? "runtime-proven" : "not-captured", detail: "A deterministic server-side decision runs before retrieval." },
-    { label: "RAGAS benchmark", value: ragas?.executed ? "CI benchmark completed" : "Not executed", status: ragas?.executed ? "runtime-proven" : "not-executed", detail: ragas?.executed ? `Pinned RAGAS ${ragas.version} evaluated the checked-in deterministic benchmark. These are suite-level metrics, not a score for this answer.` : "No metric is displayed without an evaluator run.", metrics: ragas?.executed ? [
-      { label: "Benchmark cases", value: String(ragas.sampleCount ?? 0) },
-      ...Object.entries(ragas.scores ?? {}).map(([name, score]) => ({
+    { label: "RAGAS case evaluation", value: caseEvaluation ? `Evaluated: ${item.starter}` : "Not evaluated", status: caseEvaluation ? "runtime-proven" : "not-executed", detail: caseEvaluation ? `Pinned RAGAS ${ragas?.version} evaluated the deterministic contract sample mapped to this demo case. It does not score the newly generated live answer.` : "This free-form question has no checked-in RAGAS reference answer, so no case score is inferred from the suite average.", metrics: caseEvaluation ? Object.entries(caseEvaluation.scores).map(([name, score]) => ({
         label: name.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" "),
         value: `${(score * 100).toFixed(2)}%`,
-      })),
-    ] : undefined },
+      })) : undefined },
+    { label: "RAGAS release benchmark", value: ragas?.executed ? `${ragas.sampleCount ?? 0} cases · ${Object.keys(ragas.scores ?? {}).length} metrics` : "Not executed", status: ragas?.executed ? "repo-defined" : "not-executed", detail: ragas?.executed ? "Suite averages are generated in CI as release evidence and are intentionally separate from the selected question." : "No benchmark artifact was loaded." },
   ] } : layer);
 }
 
 function ExplainDrawer({ turn, onClose, onHandoffDecision }: { turn: ChatTurn; onClose: () => void; onHandoffDecision: (decision: "approve" | "reject") => Promise<void> }) {
   const item = turn.demoCase!;
   const runId = turn.runId!;
-  const evidenceLayers = useMemo(() => layersForTurn(turn), [turn]);
+  const [langfuseMirror, setLangfuseMirror] = useState(turn.runtime.integrations?.langfuse);
+  const evidenceLayers = useMemo(() => layersForTurn(turn, langfuseMirror), [turn, langfuseMirror]);
+  useEffect(() => {
+    const traceId = turn.runtime.integrations?.langfuse.traceId;
+    const readbackToken = turn.runtime.integrations?.langfuse.readbackToken;
+    if (!traceId || !readbackToken || turn.runtime.integrations?.langfuse.readback === "available") return;
+    let cancelled = false;
+    void (async () => {
+      for (const delayMs of [1_000, 3_000, 5_000, 8_000]) {
+        await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+        if (cancelled) return;
+        try {
+          const result = await readLangfuseMirror(traceId, readbackToken);
+          if (cancelled) return;
+          setLangfuseMirror(result);
+          if (result.readback === "available") return;
+        } catch (error) {
+          if (!cancelled) setLangfuseMirror((current) => current ? { ...current, readback: "failed", error: error instanceof Error ? error.message : "Langfuse read-back failed" } : current);
+          return;
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [turn]);
   const [activeLayer, setActiveLayer] = useState(evidenceLayers[0].id);
   const [deciding, setDeciding] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
