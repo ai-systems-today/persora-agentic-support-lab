@@ -145,6 +145,7 @@ export type ChatTurn = {
   runId: string | null;
   createdAt: string;
   demoCase: DemoCase | null;
+  ragasCaseId: string | null;
   runtime: RuntimeEvidence;
 };
 
