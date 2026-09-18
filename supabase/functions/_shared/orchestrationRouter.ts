@@ -15,19 +15,19 @@ type RouteRule = {
 
 const rules: RouteRule[] = [
   {
-    pattern: "handoff",
-    reason: "The request asks for an account or payment mutation that requires authenticated human approval.",
-    signals: [
-      { label: "account mutation", expression: /\b(cancel|close|delete|change|remove)\b/i },
-      { label: "financial decision", expression: /\b(refund|chargeback|reverse (?:a )?charge)\b/i },
-    ],
-  },
-  {
     pattern: "concurrent",
     reason: "The request involves sensitive cross-account data, so independent privacy and safe-alternative checks run together.",
     signals: [
       { label: "cross-account request", expression: /\b(another|other|someone else(?:'s)?) account\b/i },
       { label: "sensitive billing data", expression: /\b(reveal|show|display|access)\b.{0,32}\b(card|invoice|payment|billing)\b/i },
+    ],
+  },
+  {
+    pattern: "handoff",
+    reason: "The request asks for an account or payment mutation that requires authenticated human approval.",
+    signals: [
+      { label: "account mutation", expression: /\b(cancel|close|delete|change|remove)\b/i },
+      { label: "financial decision", expression: /\b(refund|chargeback|reverse (?:a )?charge)\b/i },
     ],
   },
   {
