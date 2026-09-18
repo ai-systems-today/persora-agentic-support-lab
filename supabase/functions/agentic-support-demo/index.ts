@@ -422,54 +422,14 @@ async function emitLangfuseTrace(input: {
       }),
     });
     if (!response.ok) throw new Error(`Langfuse OTLP returned HTTP ${response.status}`);
-    const authorization = `Basic ${btoa(`${publicKey}:${secretKey}`)}`;
-    let readback: LangfuseEvidence["readback"] = "pending";
-    let observations: LangfuseEvidence["observations"] = [];
-    let readbackError: string | null = null;
-    for (const delayMs of [0]) {
-      if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
-      try {
-        const observationsResponse = await fetch(`${baseUrl}/api/public/v2/observations?traceId=${traceId}&fields=core,basic,usage,metrics&limit=100`, {
-          headers: { Authorization: authorization },
-        });
-        if (!observationsResponse.ok) throw new Error(`Langfuse observations returned HTTP ${observationsResponse.status}`);
-        const payload = await observationsResponse.json() as { data?: unknown[] };
-        const records = Array.isArray(payload.data) ? payload.data : [];
-        observations = records.flatMap((value) => {
-          if (!value || typeof value !== "object") return [];
-          const record = value as Record<string, unknown>;
-          const usage = record.usageDetails && typeof record.usageDetails === "object" ? record.usageDetails as Record<string, unknown> : {};
-          const cost = record.costDetails && typeof record.costDetails === "object" ? record.costDetails as Record<string, unknown> : {};
-          const start = typeof record.startTime === "string" ? Date.parse(record.startTime) : NaN;
-          const end = typeof record.endTime === "string" ? Date.parse(record.endTime) : NaN;
-          return [{
-            name: typeof record.name === "string" ? record.name : "unnamed observation",
-            type: typeof record.type === "string" ? record.type : "SPAN",
-            status: typeof record.level === "string" ? record.level : null,
-            durationMs: Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : null,
-            inputTokens: typeof usage.input === "number" ? usage.input : null,
-            outputTokens: typeof usage.output === "number" ? usage.output : null,
-            totalCost: typeof cost.total === "number" ? cost.total : null,
-          }];
-        });
-        if (observations.length) {
-          readback = "available";
-          break;
-        }
-      } catch (error) {
-        readback = "failed";
-        readbackError = error instanceof Error ? error.message : "Langfuse observation read-back failed";
-        break;
-      }
-    }
     return {
       configured: true,
       executed: true,
       traceId,
       traceUrl: `${baseUrl}/trace/${traceId}`,
-      error: readbackError,
-      readback,
-      observations,
+      error: null,
+      readback: "pending",
+      observations: [],
       readbackToken: await signReadback(traceId, input.sessionToken),
     };
   } catch (error) {
