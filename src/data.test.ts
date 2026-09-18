@@ -67,6 +67,8 @@ describe("demo evidence", () => {
     expect(workflow).toContain("python scripts/evaluate_ragas.py");
     expect(requirements).toContain("ragas==0.4.3");
     expect(result).toMatchObject({ executed: true, scope: "benchmark", version: "0.4.3", sampleCount: 5, metricCount: 6 });
+    expect(Object.keys(result.cases)).toEqual(["grounded-answer", "access-blocked", "approval-required", "group-chat", "recovery"]);
+    expect(Object.keys(result.cases["grounded-answer"].scores)).toEqual(Object.keys(result.scores));
     expect(Object.keys(result.scores)).toEqual([
       "non_llm_string_similarity",
       "required_phrase_presence",
@@ -85,6 +87,10 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("langfuse: { ...langfuse, traceUrl: null }");
     expect(orchestrator).toContain("persora.telemetry.redaction");
     expect(orchestrator).toContain("[REDACTED_PAYMENT_NUMBER]");
+    expect(orchestrator).toContain("/api/public/v2/observations?traceId=");
+    expect(orchestrator).toContain('readback = "available"');
+    expect(orchestrator).not.toContain("record.input");
+    expect(orchestrator).not.toContain("record.output");
     expect(app).toContain("Public trace projection");
     expect(app).toContain("Private Langfuse mirror");
     expect(app).not.toContain("open it in Langfuse");
@@ -106,7 +112,8 @@ describe("demo evidence", () => {
     const migration = readFileSync(new URL("../supabase/migrations/20260917080958_add_agentic_demo_approvals.sql", import.meta.url), "utf8");
     expect(app).toContain("one A2A specialist task result");
     expect(app).toContain("Approve safe continuation");
-    expect(app).toContain("Object.entries(ragas.scores ?? {})");
+    expect(app).toContain("caseEvaluation.scores");
+    expect(app).toContain("This free-form question has no checked-in RAGAS reference answer");
     expect(orchestrator).toContain("session-bound-demo-decision");
     expect(orchestrator).toContain("no account was cancelled and no refund was issued");
     expect(migration).toContain("enable row level security");
