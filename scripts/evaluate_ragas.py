@@ -31,12 +31,14 @@ def main() -> None:
         resolved = getattr(value, "value", value)
         return float(resolved)
 
+    per_case = {sample["case_id"]: {} for sample in samples}
     scores = {}
     for name, (metric, reference_field) in metrics.items():
-        values = [
-            numeric(metric.score(reference=sample[reference_field], response=sample["response"]))
-            for sample in samples
-        ]
+        values = []
+        for sample in samples:
+            value = numeric(metric.score(reference=sample[reference_field], response=sample["response"]))
+            values.append(value)
+            per_case[sample["case_id"]][name] = round(value, 4)
         scores[name] = round(sum(values) / len(values), 4)
 
     result = {
@@ -46,6 +48,13 @@ def main() -> None:
         "sampleCount": len(samples),
         "metricCount": len(metrics),
         "scores": scores,
+        "cases": {
+            sample["case_id"]: {
+                "question": sample["question"],
+                "scores": per_case[sample["case_id"]],
+            }
+            for sample in samples
+        },
     }
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

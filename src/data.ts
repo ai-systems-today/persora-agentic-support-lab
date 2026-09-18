@@ -178,3 +178,8 @@ export const cases: DemoCase[] = [
     }),
   },
 ];
+
+export function matchRagasCaseId(question: string): string | null {
+  const normalized = question.trim().toLocaleLowerCase();
+  return cases.find((item) => [item.customer, item.starter].some((candidate) => candidate.trim().toLocaleLowerCase() === normalized))?.id ?? null;
+}

@@ -153,6 +153,17 @@ export async function resolveAgenticHandoff(approvalId: string, decision: "appro
   return requestAgenticDemo({ approvalId, decision });
 }
 
+export async function readLangfuseMirror(langfuseTraceId: string, readbackToken: string): Promise<NonNullable<RuntimeEvidence["integrations"]>["langfuse"]> {
+  const response = await fetch(AGENTIC_DEMO_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}` },
+    body: JSON.stringify({ action: "langfuse-readback", langfuseTraceId, readbackToken, sessionToken: sessionValue("persora-agentic-demo-session") }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error ?? `Langfuse read-back returned HTTP ${response.status}`);
+  return { configured: true, executed: true, traceId: langfuseTraceId, traceUrl: null, error: payload.error ?? null, readback: payload.readback, observations: payload.observations ?? [], readbackToken };
+}
+
 export function applyAgUiPayload(state: StreamState, payload: string): StreamState {
   if (!payload || payload === "[DONE]") return state;
   let parsed: unknown;
