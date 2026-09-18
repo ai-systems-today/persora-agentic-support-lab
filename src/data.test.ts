@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { cases } from "./data";
+import { cases, matchRagasCaseId } from "./data";
 
 describe("demo evidence", () => {
   it("provides five distinct cases", () => {
     expect(cases).toHaveLength(5);
     expect(new Set(cases.map((item) => item.answer)).size).toBe(5);
     expect(cases.map((item) => item.pattern)).toContain("group-chat");
+  });
+
+  it("maps RAGAS only to an exact supported starter or customer prompt", () => {
+    expect(matchRagasCaseId(cases[0].customer)).toBe(cases[0].id);
+    expect(matchRagasCaseId(cases[0].starter)).toBe(cases[0].id);
+    expect(matchRagasCaseId("Can Netflix help me with travel and billing today?")).toBeNull();
   });
 
   it("provides all five evidence layers for every case", () => {
@@ -88,7 +94,8 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("persora.telemetry.redaction");
     expect(orchestrator).toContain("[REDACTED_PAYMENT_NUMBER]");
     expect(orchestrator).toContain("/api/public/v2/observations?traceId=");
-    expect(orchestrator).toContain('readback = "available"');
+    expect(orchestrator).toContain('observations.length ? "available" : "pending"');
+    expect(orchestrator).not.toContain("for (const delayMs of [0])");
     expect(orchestrator).not.toContain("record.input");
     expect(orchestrator).not.toContain("record.output");
     expect(app).toContain("Public trace projection");
@@ -113,6 +120,8 @@ describe("demo evidence", () => {
     expect(app).toContain("one A2A specialist task result");
     expect(app).toContain("Approve safe continuation");
     expect(app).toContain("caseEvaluation.scores");
+    expect(app).toContain("caseEvaluation.question");
+    expect(app).toContain('langfuse?.readback === "failed"');
     expect(app).toContain("This free-form question has no checked-in RAGAS reference answer");
     expect(orchestrator).toContain("session-bound-demo-decision");
     expect(orchestrator).toContain("no account was cancelled and no refund was issued");
