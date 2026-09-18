@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { cases } from "./data";
+import { cases, matchRagasCaseId } from "./data";
 import { askAgenticDemo, askPublishedAgent, readLangfuseMirror, resolveAgenticHandoff } from "./liveClient";
 import { formatRetrievalScore } from "./retrievalScore";
 import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern, RunProgress } from "./types";
@@ -342,7 +342,7 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   const a2a = turn.runtime.integrations?.a2a;
   const ragas = turn.runtime.integrations?.ragas;
   const handoff = turn.runtime.handoff;
-  const caseEvaluation = item ? ragas?.cases?.[item.id] : undefined;
+  const caseEvaluation = turn.ragasCaseId ? ragas?.cases?.[turn.ragasCaseId] : undefined;
 
   const replace = (id: EvidenceLayer["id"], fields: EvidenceLayer["fields"]): EvidenceLayer[] =>
     item.layers.map((layer) => layer.id === id ? { ...layer, fields } : layer);
@@ -370,13 +370,13 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
     { label: "Public trace projection", value: turn.runtime.publicTrace ? `${turn.runtime.publicTrace.nodeCount} nodes · ${turn.runtime.publicTrace.protocolEventCount} events` : "Not captured", status: turn.runtime.publicTrace ? "runtime-proven" : "not-captured", detail: turn.runtime.publicTrace ? `Sanitized trace schema ${turn.runtime.publicTrace.schemaVersion}; ${turn.runtime.publicTrace.citationCount} citations. The private Langfuse console and credentials are never exposed.` : "No sanitized trace projection was returned." },
     { label: "End-to-end latency", value: `${turn.runtime.totalMs} ms`, status: "runtime-proven", detail: "Measured in the browser from request start through stream completion." },
     { label: "Prompt version", value: turn.runtime.promptVersion ?? "Not captured", status: turn.runtime.promptVersion ? "runtime-proven" : "not-captured", detail: "Version returned by the server execution contract." },
-    { label: "Private Langfuse mirror", value: langfuse?.readback === "available" ? `${langfuse.observations.length} sanitized observations` : langfuse?.executed ? "Export accepted · read-back pending" : langfuse?.configured ? "Export failed" : "Not configured", status: langfuse?.readback === "available" || langfuse?.executed ? "runtime-proven" : "not-executed", detail: langfuse?.readback === "available" ? "The server read this run back from the private Langfuse project and returned only an allow-listed projection—never credentials, inputs, outputs, user/session IDs or private console links." : langfuse?.executed ? "Langfuse accepted the export, but its observation API did not make the new records available within the bounded read-back window." : langfuse?.error ?? "Server-side Langfuse credentials are absent; no trace is claimed.", metrics: langfuse?.readback === "available" ? langfuse.observations.map((observation) => ({ label: `${observation.type} · ${observation.name}`, value: [observation.durationMs === null ? null : `${observation.durationMs} ms`, observation.status].filter(Boolean).join(" · ") || "Observed" })) : undefined },
+    { label: "Private Langfuse mirror", value: langfuse?.readback === "available" ? `${langfuse.observations.length} sanitized observations` : langfuse?.readback === "failed" ? "Read-back failed" : langfuse?.executed ? "Export accepted · read-back pending" : langfuse?.configured ? "Export failed" : "Not configured", status: langfuse?.readback === "available" || (langfuse?.executed && langfuse?.readback !== "failed") ? "runtime-proven" : "not-executed", detail: langfuse?.readback === "available" ? "The server read this run back from the private Langfuse project and returned only an allow-listed projection—never credentials, inputs, outputs, user/session IDs or private console links." : langfuse?.readback === "failed" ? langfuse.error ?? "The private observation read-back failed." : langfuse?.executed ? "Langfuse accepted the export, but its observation API has not made the new records available yet." : langfuse?.error ?? "Server-side Langfuse credentials are absent; no trace is claimed.", metrics: langfuse?.readback === "available" ? langfuse.observations.map((observation) => ({ label: `${observation.type} · ${observation.name}`, value: [observation.durationMs === null ? null : `${observation.durationMs} ms`, observation.status].filter(Boolean).join(" · ") || "Observed" })) : undefined },
   ] } : layer);
   return next.map((layer) => layer.id === "quality" ? { ...layer, fields: [
     { label: "Answer present", value: turn.answer.trim() ? "Passed" : "Failed", status: "runtime-proven", detail: "Programmatic validation checked that the live stream produced answer text." },
     { label: "Citation presence", value: turn.runtime.citations.length ? "Passed" : "No citations returned", status: "runtime-proven", detail: "Validated directly from the streamed citations event." },
     { label: "Authorization guardrail", value: turn.runtime.guardrail ? `${turn.runtime.guardrail.decision}: ${turn.runtime.guardrail.reason}` : "Not captured", status: turn.runtime.guardrail ? "runtime-proven" : "not-captured", detail: "A deterministic server-side decision runs before retrieval." },
-    { label: "RAGAS case evaluation", value: caseEvaluation ? `Evaluated: ${item.starter}` : "Not evaluated", status: caseEvaluation ? "runtime-proven" : "not-executed", detail: caseEvaluation ? `Pinned RAGAS ${ragas?.version} evaluated the deterministic contract sample mapped to this demo case. It does not score the newly generated live answer.` : "This free-form question has no checked-in RAGAS reference answer, so no case score is inferred from the suite average.", metrics: caseEvaluation ? Object.entries(caseEvaluation.scores).map(([name, score]) => ({
+    { label: "RAGAS case evaluation", value: caseEvaluation ? `Evaluated contract: ${caseEvaluation.question}` : "Not evaluated", status: caseEvaluation ? "runtime-proven" : "not-executed", detail: caseEvaluation ? `Pinned RAGAS ${ragas?.version} evaluated this checked-in deterministic contract sample. It does not score the newly generated live answer.` : "This free-form question has no checked-in RAGAS reference answer, so no case score is inferred from the suite average.", metrics: caseEvaluation ? Object.entries(caseEvaluation.scores).map(([name, score]) => ({
         label: name.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" "),
         value: `${(score * 100).toFixed(2)}%`,
       })) : undefined },
@@ -503,6 +503,7 @@ export default function App() {
 
   const ask = async (question: string, selectedCase?: DemoCase) => {
     const demoCase = selectedCase ?? routeFixtureQuestion(question);
+    const ragasCaseId = selectedCase?.id ?? matchRagasCaseId(question);
     const sequence = turns.length + 1;
     const started = performance.now();
     let answer = demoCase?.answer ?? "This evidence fixture does not have a supported route for that question yet. Try one of the five conversation starters. I will not invent an answer or a runtime trace.";
@@ -546,6 +547,7 @@ export default function App() {
       runId: resolvedDemoCase ? `${runtime.mode === "agentic" ? "agentic" : runtime.mode === "live" ? "live" : "fx"}-${resolvedDemoCase.id}-${String(sequence).padStart(3, "0")}` : null,
       createdAt: new Date().toISOString(),
       demoCase: resolvedDemoCase,
+      ragasCaseId,
       runtime,
     };
     setTurns((current) => [...current, turn]);
