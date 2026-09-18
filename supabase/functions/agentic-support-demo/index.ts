@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { Annotation, END, START, StateGraph } from "npm:@langchain/langgraph@1.4.15";
+import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://ai-systems-today.github.io",
@@ -12,7 +13,6 @@ const DEFAULT_WIDGET = "6a01cc31-ee9e-4977-aa8c-031894a71851";
 const PROMPT_VERSION = "netflix-support-demo@2026-09-16.1";
 const LANGGRAPH_VERSION = "1.4.15";
 
-type Pattern = "sequential" | "concurrent" | "group-chat" | "handoff" | "magentic";
 type TraceEntry = { node: string; status: "complete" | "blocked" | "failed"; durationMs: number };
 type ProtocolEvent = Record<string, unknown> & { type: string; timestamp?: string };
 type A2AEvidence = {
@@ -44,6 +44,9 @@ const State = Annotation.Root({
   threadId: Annotation<string>,
   origin: Annotation<string>,
   pattern: Annotation<Pattern>,
+  routeReason: Annotation<string>,
+  routeSignals: Annotation<string[]>({ reducer: (_left, right) => right, default: () => [] }),
+  routeConfidence: Annotation<number>,
   allowed: Annotation<boolean>,
   guardrailReason: Annotation<string>,
   answer: Annotation<string>,
@@ -56,17 +59,6 @@ const State = Annotation.Root({
   handoffSummary: Annotation<string>,
   a2a: Annotation<A2AEvidence>,
 });
-
-const classifyPattern = (message: string): Pattern => {
-  const text = message.toLowerCase();
-  const has = (...terms: string[]) => terms.some((term) => text.includes(term));
-  const issueCount = [has("billing", "payment", "country"), has("household", "device"), has("email", "sign in", "access")].filter(Boolean).length;
-  if (issueCount >= 2) return "group-chat";
-  if (has("cancel", "refund")) return "handoff";
-  if (has("another account", "other account", "reveal", "payment card")) return "concurrent";
-  if (has("tried", "failed", "still does not", "temporary code")) return "magentic";
-  return "sequential";
-};
 
 const buildFollowUps = (pattern: Pattern, citations: unknown[]): string[] => {
   const cited = citations.length > 0;
@@ -326,9 +318,14 @@ async function emitLangfuseTrace(input: {
   const traceId = randomHex(16);
   const rootSpanId = randomHex(8);
   const sessionId = (await sha256(input.sessionToken)).slice(0, 32);
+  const redactForTelemetry = (value: string) => value
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[REDACTED_EMAIL]")
+    .replace(/\b(?:\d[ -]*?){13,19}\b/g, "[REDACTED_PAYMENT_NUMBER]")
+    .replace(/\b(?:account|customer|invoice)[-_: ]+[A-Z0-9]{6,}\b/gi, "[REDACTED_IDENTIFIER]");
   const traceInput = input.guardrailDecision === "block"
     ? { question: "[REDACTED_BY_AUTHORIZATION_GUARDRAIL]" }
-    : { question: input.message };
+    : { question: redactForTelemetry(input.message) };
+  const traceAnswer = redactForTelemetry(input.answer);
   const endNanos = BigInt(Date.now()) * 1_000_000n;
   const startNanos = endNanos - BigInt(Math.max(input.totalMs, 1)) * 1_000_000n;
   let cursorNanos = startNanos;
@@ -352,7 +349,7 @@ async function emitLangfuseTrace(input: {
         ...(isGeneration ? [
           otelAttribute("langfuse.observation.input", JSON.stringify(traceInput)),
           otelAttribute("langfuse.observation.output", JSON.stringify({
-            answer: entry.node === "published_netflix_agent" ? input.answer : "A2A task artifact returned",
+            answer: entry.node === "published_netflix_agent" ? traceAnswer : "A2A task artifact returned",
           })),
         ] : []),
       ],
@@ -369,7 +366,7 @@ async function emitLangfuseTrace(input: {
     attributes: [
       otelAttribute("langfuse.observation.type", "span"),
       otelAttribute("langfuse.observation.input", JSON.stringify(traceInput)),
-      otelAttribute("langfuse.observation.output", JSON.stringify({ answer: input.answer })),
+      otelAttribute("langfuse.observation.output", JSON.stringify({ answer: traceAnswer })),
       otelAttribute("langfuse.session.id", sessionId),
       otelAttribute("langfuse.trace.name", "persora-netflix-support"),
       otelAttribute("langfuse.trace.tags", JSON.stringify(["interview-demo", input.pattern])),
@@ -378,6 +375,7 @@ async function emitLangfuseTrace(input: {
       otelAttribute("persora.pattern", input.pattern),
       otelAttribute("persora.guardrail.decision", input.guardrailDecision),
       otelAttribute("persora.citation_count", input.citations.length),
+      otelAttribute("persora.telemetry.redaction", true),
     ],
     status: { code: 1 },
   };
@@ -517,7 +515,21 @@ function planRecovery(state: typeof State.State) {
 }
 
 const graph = new StateGraph(State)
-  .addNode("intake", timed("intake", (state) => ({ pattern: classifyPattern(state.message) })))
+  .addNode("intake", timed("intake", (state) => {
+    const route = selectOrchestrationPattern(state.message);
+    return {
+      pattern: route.pattern,
+      routeReason: route.reason,
+      routeSignals: route.signals,
+      routeConfidence: route.confidence,
+      eventTypes: ["orchestration_route_selected"],
+      protocolEvents: [{
+        type: "CUSTOM",
+        name: "persora.orchestration.route",
+        value: route,
+      }],
+    };
+  }))
   .addNode("authorization_guardrail", timed("authorization_guardrail", (state) => {
     const blocked = /another account|other account|someone else|reveal.*(?:card|invoice)|payment card/i.test(state.message);
     return { allowed: !blocked, guardrailReason: blocked ? "cross-account-sensitive-data" : "support-question-allowed" };
@@ -651,6 +663,12 @@ function streamAgenticRun(input: typeof State.State, origin: string, started: nu
           totalMs,
           eventTypes: [...result.eventTypes, "RUN_FINISHED"],
           pattern: result.pattern,
+          routing: {
+            strategy: "deterministic-policy-router",
+            reason: result.routeReason,
+            signals: result.routeSignals,
+            confidence: result.routeConfidence,
+          },
           promptVersion: PROMPT_VERSION,
           guardrail: { decision: result.allowed ? "allow" : "block", reason: result.guardrailReason },
           handoff: {
@@ -665,9 +683,17 @@ function streamAgenticRun(input: typeof State.State, origin: string, started: nu
           protocolEvents: result.protocolEvents,
           followUps,
           retrieval: retrievalEvidence(result.citations),
+          publicTrace: {
+            schemaVersion: "1.0",
+            generatedAt: new Date().toISOString(),
+            nodeCount: result.nodeTrace.length,
+            protocolEventCount: result.protocolEvents.length + 7,
+            citationCount: result.citations.length,
+            privateObservabilityExported: langfuse.executed,
+          },
           integrations: {
             langGraph: { executed: true, version: LANGGRAPH_VERSION },
-            langfuse,
+            langfuse: { ...langfuse, traceUrl: null },
             ragas: { executed: false, scope: null, version: null, sampleCount: null, scores: null },
             agUi: { executed: true, version: "1.0", eventCount: result.protocolEvents.length + 7 },
             a2a: result.a2a,
@@ -777,6 +803,9 @@ Deno.serve(async (req: Request) => {
       threadId,
       origin,
       pattern: "sequential" as Pattern,
+      routeReason: "not-evaluated",
+      routeSignals: [],
+      routeConfidence: 0,
       allowed: true,
       guardrailReason: "not-evaluated",
       specialistContext: "",
@@ -813,6 +842,12 @@ Deno.serve(async (req: Request) => {
       totalMs,
       eventTypes: [...result.eventTypes, "RUN_FINISHED"],
       pattern: result.pattern,
+      routing: {
+        strategy: "deterministic-policy-router",
+        reason: result.routeReason,
+        signals: result.routeSignals,
+        confidence: result.routeConfidence,
+      },
       promptVersion: PROMPT_VERSION,
       guardrail: { decision: result.allowed ? "allow" : "block", reason: result.guardrailReason },
       handoff: {
@@ -827,9 +862,17 @@ Deno.serve(async (req: Request) => {
       protocolEvents: result.protocolEvents,
       followUps: buildFollowUps(result.pattern, result.citations),
       retrieval: retrievalEvidence(result.citations),
+      publicTrace: {
+        schemaVersion: "1.0",
+        generatedAt: new Date().toISOString(),
+        nodeCount: result.nodeTrace.length,
+        protocolEventCount: result.protocolEvents.length + 6,
+        citationCount: result.citations.length,
+        privateObservabilityExported: langfuse.executed,
+      },
       integrations: {
         langGraph: { executed: true, version: LANGGRAPH_VERSION },
-        langfuse,
+        langfuse: { ...langfuse, traceUrl: null },
         ragas: { executed: false, scope: null, version: null, sampleCount: null, scores: null },
         agUi: { executed: true, version: "1.0", eventCount: result.protocolEvents.length + 6 },
         a2a: result.a2a,
