@@ -274,7 +274,7 @@ function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
       <div className="run-summary">
         <div><span>Pattern</span><strong>{pattern}</strong></div>
         <div><span>Outcome</span><strong>{turn.runtime.error ? "Failed" : "Completed"}</strong></div>
-        <div><span>Agents</span><strong>{agentCount}</strong></div>
+        <div><span>Agent steps</span><strong>{agentCount}</strong></div>
         <div><span>Citations</span><strong>{turn.runtime.citations.length}</strong></div>
         <div><span>Guardrail</span><strong>{turn.runtime.guardrail?.decision ?? "n/a"}</strong></div>
         <div><span>Latency</span><strong>{(turn.runtime.totalMs / 1000).toFixed(2)} s</strong></div>

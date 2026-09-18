@@ -170,6 +170,8 @@ describe("demo evidence", () => {
     expect(router).toContain('domain: "household"');
     expect(router).toContain('domain: "identity"');
     expect(app).toContain("Executed specialist agents");
+    expect(app).toContain("Agent steps");
+    expect(app).not.toContain("<span>Agents</span>");
   });
 
   it("returns run evidence for concurrency and bounded planner decisions", () => {
