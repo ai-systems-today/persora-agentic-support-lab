@@ -64,7 +64,8 @@ describe("demo evidence", () => {
     expect(specialist).toContain("/.well-known/agent-card.json");
     expect(specialist).toContain("/message:send");
     expect(specialist).toContain('"A2A-Version": A2A_VERSION');
-    expect(specialist).toContain("const domainQuestions");
+    expect(specialist).toContain("selectSpecialists(message)");
+    expect(specialist).toContain("specialists: result.specialists");
     expect(specialist).toContain("shiftCitationReferences");
   });
 
@@ -154,6 +155,21 @@ describe("demo evidence", () => {
     expect(app).toContain("Exact-run quality gate");
     expect(app).toContain("Citation validity");
     expect(app).toContain("Not evaluated for this live answer");
+  });
+
+  it("routes agentic questions to distinct published Persora specialist widgets", () => {
+    const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    const a2a = readFileSync(new URL("../supabase/functions/netflix-specialist-a2a/index.ts", import.meta.url), "utf8");
+    const router = readFileSync(new URL("../supabase/functions/_shared/specialistRouter.ts", import.meta.url), "utf8");
+    expect(orchestrator).toContain("selectPrimarySpecialist(state.message)");
+    expect(orchestrator).toContain("specialist: result.specialist");
+    expect(a2a).toContain("selectSpecialists(message)");
+    expect(a2a).toContain("specialists: result.specialists");
+    expect(router).toContain('domain: "billing"');
+    expect(router).toContain('domain: "household"');
+    expect(router).toContain('domain: "identity"');
+    expect(app).toContain("Executed specialist agents");
   });
 
   it("returns run evidence for concurrency and bounded planner decisions", () => {

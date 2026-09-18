@@ -296,7 +296,7 @@ function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
             <div><span>Events</span><strong>{nodeEvents.length}</strong></div>
           </div>
           <p>{nodeEvents.length ? nodeEvents.map((event) => event.type).join(" → ") : "No node-specific protocol envelope was returned for this view."}</p>
-          {selectedNode.id.includes("specialist") && turn.runtime.integrations?.a2a.executed && <div className="artifact-proof"><span>A2A task artifact</span><strong>{turn.runtime.integrations.a2a.agentName}</strong><small>Task {turn.runtime.integrations.a2a.taskId}</small></div>}
+          {selectedNode.id.includes("specialist") && turn.runtime.integrations?.a2a.executed && <div className="artifact-proof"><span>A2A task artifact</span><strong>{turn.runtime.integrations.a2a.specialists?.map((specialist) => specialist.agentName).join(" + ") || turn.runtime.integrations.a2a.agentName}</strong><small>Task {turn.runtime.integrations.a2a.taskId}</small></div>}
           {selectedNode.id === "published_netflix_agent" && <div className="artifact-proof"><span>Evidence consumed</span><strong>{turn.runtime.citations.length} returned citations</strong><small>Persora KB · Supabase/Postgres vectors</small></div>}
         </aside>}
       </div>}
@@ -361,6 +361,9 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   const handoff = turn.runtime.handoff;
   const quality = turn.runtime.quality;
   const orchestrationProof = turn.runtime.orchestrationProof;
+  const executedSpecialists = turn.runtime.specialist
+    ? [turn.runtime.specialist]
+    : a2a?.specialists ?? [];
   const caseEvaluation = turn.ragasCaseId ? ragas?.cases?.[turn.ragasCaseId] : undefined;
   const skipReason = turn.runtime.guardrail?.decision === "block"
     ? { value: "Blocked before model call", detail: "The authorization guardrail ended the graph before retrieval or model execution." }
@@ -419,6 +422,7 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   let next = replace("orchestration", [
     { label: agentic ? "Executed pattern" : "Demo pattern", value: turn.runtime.pattern ?? item.pattern, status: agentic ? "runtime-proven" : "fixture-replay", detail: agentic ? "Returned by the server-side LangGraph run for this request." : "The selected visual pattern remains an interview demonstration; it is not relabelled as the published agent's internal graph." },
     { label: "Why this route", value: turn.runtime.routing?.reason ?? "Not captured", status: turn.runtime.routing ? "runtime-proven" : "not-captured", detail: turn.runtime.routing ? `Transparent ${turn.runtime.routing.strategy}; signals: ${turn.runtime.routing.signals.join(", ")}; confidence ${(turn.runtime.routing.confidence * 100).toFixed(0)}%.` : "The runtime did not return a routing decision." },
+    { label: "Executed specialist agents", value: executedSpecialists.length ? executedSpecialists.map((specialist) => specialist.agentName).join(" + ") : "Not captured", status: executedSpecialists.length ? "runtime-proven" : "not-captured", detail: executedSpecialists.length ? executedSpecialists.map((specialist) => `${specialist.domain}: agent ${specialist.agentId}, widget ${specialist.widgetId}`).join("; ") : "This run returned no specialist identity, so the UI does not infer one from the question." },
     patternProof,
     { label: "Published execution", value: publishedExecuted ? "Persora orchestrate-chat" : skipReason.value, status: publishedExecuted ? "runtime-proven" : "not-executed", detail: publishedExecuted ? "This answer was received from the published agent endpoint." : skipReason.detail },
     { label: "LangGraph node trace", value: agentic ? `${turn.runtime.nodeTrace?.length ?? 0} completed nodes` : "Not executed", status: agentic ? "runtime-proven" : "not-executed", detail: agentic ? `Server runtime: ${turn.runtime.integrations?.langGraph.version ?? "version not returned"}.` : "A LangGraph server adapter has not supplied node events for this run." },
@@ -437,7 +441,7 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   next = next.map((layer) => layer.id === "interaction" ? { ...layer, fields: [
     { label: "Customer surface", value: "Support chatbot", status: "runtime-proven", detail: "The submitted question and returned answer are visible in this UI." },
     { label: "AG-UI event stream", value: agUi?.executed ? `${agUi.eventCount} events · v${agUi.version}` : "Not executed", status: agUi?.executed ? "runtime-proven" : "not-executed", detail: agUi?.executed ? `Observed over SSE: ${turn.runtime.eventTypes.join(", ")}.` : "The published-agent stream is not relabelled as AG-UI without AG-UI lifecycle envelopes." },
-    { label: "A2A specialist exchange", value: a2a?.executed ? `${a2a.agentName} · task ${a2a.taskId}` : a2a?.error ? `Failed: ${a2a.error}` : "Not required for this route", status: a2a?.executed ? "runtime-proven" : "not-executed", detail: a2a?.executed ? `One Agent Card discovery and one message:send completed using A2A ${a2a.version}; no additional specialists are claimed.` : "A2A is invoked only by the group-chat route; absence on other routes is expected." },
+    { label: "A2A specialist exchange", value: a2a?.executed ? `${a2a.agentName} · task ${a2a.taskId}` : a2a?.error ? `Failed: ${a2a.error}` : "Not required for this route", status: a2a?.executed ? "runtime-proven" : "not-executed", detail: a2a?.executed ? `Agent Card discovery and message:send completed using A2A ${a2a.version}; ${a2a.specialists?.length ?? 0} published specialist agent${a2a.specialists?.length === 1 ? "" : "s"} returned task evidence.` : "A2A is invoked only by the group-chat route; absence on other routes is expected." },
     { label: "Human handoff", value: handoff?.status === "awaiting-human" ? "Awaiting demo-operator decision" : handoff?.status === "approved" ? "Approved — safe continuation recorded" : handoff?.status === "rejected" ? "Rejected — workflow closed" : "Not required for this route", status: handoff?.required ? "runtime-proven" : "not-executed", detail: handoff?.decisionMessage ?? handoff?.summary ?? "No approval interrupt was emitted for this answer." },
   ] } : layer);
   next = next.map((layer) => layer.id === "observability" ? { ...layer, fields: [

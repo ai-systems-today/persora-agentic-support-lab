@@ -1,8 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { selectSpecialists, type SpecialistSelection } from "../_shared/specialistRouter.ts";
 
 const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
 const AGENT_URL = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
-const DEFAULT_WIDGET = "6a01cc31-ee9e-4977-aa8c-031894a71851";
 const A2A_VERSION = "1.0";
 
 function json(body: unknown, status = 200) {
@@ -25,7 +25,7 @@ function applySsePayload(state: { answer: string; citations: unknown[] }, payloa
   if (typeof first?.delta?.content === "string") state.answer += first.delta.content;
 }
 
-async function askPublishedSpecialist(message: string, taskId: string) {
+async function askPublishedSpecialist(specialist: SpecialistSelection, message: string, taskId: string) {
   const qualityInstruction = "Answer with exactly 1 standalone sentence containing 1 factual support step, ending with its matching [#n] citation. Use only a fact directly stated in the returned Netflix knowledge sources. Do not include headings, introductions, transitions, uncited text, links, or follow-up questions. If the sources do not support an answer, say only: I do not have enough source evidence.";
   const response = await fetch(UPSTREAM, {
     method: "POST",
@@ -35,7 +35,7 @@ async function askPublishedSpecialist(message: string, taskId: string) {
       "x-trace-id": taskId,
     },
     body: JSON.stringify({
-      widgetId: DEFAULT_WIDGET,
+      widgetId: specialist.widgetId,
       message: `${message}\n\n${qualityInstruction}`,
       sessionToken: `a2a-${taskId}`,
       deviceId: `a2a-${taskId}`,
@@ -57,7 +57,7 @@ async function askPublishedSpecialist(message: string, taskId: string) {
   }
   if (buffer.startsWith("data:")) applySsePayload(state, buffer.slice(5).trim());
   if (!state.answer.trim()) throw new Error("Published specialist returned no answer");
-  return state;
+  return { ...state, specialist };
 }
 
 function shiftCitationReferences(answer: string, offset: number) {
@@ -65,17 +65,9 @@ function shiftCitationReferences(answer: string, offset: number) {
 }
 
 async function askSpecialistTask(message: string, taskId: string) {
-  if (!(/billing/i.test(message) && /household/i.test(message) && /email/i.test(message))) {
-    return askPublishedSpecialist(message, taskId);
-  }
-
-  const domainQuestions = [
-    "How can a Netflix customer review billing charges and payment history?",
-    "How does a Netflix customer update Netflix Household from a TV?",
-    "How can a Netflix customer recover account access with a password reset email or text?",
-  ];
-  const results = await Promise.all(domainQuestions.map((question, index) =>
-    askPublishedSpecialist(question, `${taskId}-${index + 1}`)
+  const specialists = selectSpecialists(message);
+  const results = await Promise.all(specialists.map((specialist, index) =>
+    askPublishedSpecialist(specialist, message, `${taskId}-${index + 1}`)
   ));
   let offset = 0;
   const answers: string[] = [];
@@ -85,27 +77,30 @@ async function askSpecialistTask(message: string, taskId: string) {
     citations.push(...result.citations);
     offset += result.citations.length;
   }
-  return { answer: answers.join(" "), citations };
+  return {
+    answer: answers.join(" "),
+    citations,
+    specialists: results.map(({ specialist }) => specialist),
+  };
 }
 
 Deno.serve(async (req: Request) => {
   const path = new URL(req.url).pathname;
   if (req.method === "GET" && path.endsWith("/.well-known/agent-card.json")) {
     return json({
-      name: "Persora Netflix Support Specialist",
-      description: "Grounded Netflix support specialist backed by the published Persora knowledge base.",
+      name: "Persora Netflix Specialist Team",
+      description: "Routes billing, household/travel, and account-access questions to distinct published Persora agents.",
       url: AGENT_URL,
       version: A2A_VERSION,
       protocolVersion: A2A_VERSION,
       capabilities: { streaming: false, pushNotifications: false },
       defaultInputModes: ["text/plain"],
       defaultOutputModes: ["text/plain"],
-      skills: [{
-        id: "netflix-support-grounding",
-        name: "Netflix support grounding",
-        description: "Returns a support answer and source citations from the configured Netflix knowledge base.",
-        tags: ["netflix", "support", "rag"],
-      }],
+      skills: [
+        { id: "netflix-billing", name: "Netflix billing", description: "Grounded billing-policy support.", tags: ["netflix", "billing", "rag"] },
+        { id: "netflix-household", name: "Netflix household and travel", description: "Grounded household and travel support.", tags: ["netflix", "household", "travel", "rag"] },
+        { id: "netflix-identity", name: "Netflix account access and security", description: "Grounded account-access and security support.", tags: ["netflix", "identity", "security", "rag"] },
+      ],
     });
   }
 
@@ -131,7 +126,7 @@ Deno.serve(async (req: Request) => {
           artifactId: crypto.randomUUID(),
           name: "grounded-support-result",
           parts: [{ text: result.answer }],
-          metadata: { citations: result.citations },
+          metadata: { citations: result.citations, specialists: result.specialists },
         }],
       },
     });
