@@ -3,6 +3,7 @@ import {
   NETFLIX_SPECIALISTS,
   selectPrimarySpecialist,
   selectSpecialists,
+  specialistTaskMessage,
 } from "../supabase/functions/_shared/specialistRouter";
 
 describe("published Netflix specialist routing", () => {
@@ -26,5 +27,14 @@ describe("published Netflix specialist routing", () => {
 
   it("uses the existing general support agent only when no specialist domain matches", () => {
     expect(selectPrimarySpecialist("What Netflix help is available?")).toEqual(NETFLIX_SPECIALISTS.general);
+  });
+
+  it("decomposes a multi-domain request into focused specialist tasks", () => {
+    const specialists = selectSpecialists("My billing country, household TV and sign-in email are all wrong");
+    expect(specialists.map((specialist) => specialistTaskMessage(specialist, "original", true))).toEqual([
+      expect.stringContaining("billing country"),
+      expect.stringContaining("Netflix Household"),
+      expect.stringContaining("sign-in password"),
+    ]);
   });
 });

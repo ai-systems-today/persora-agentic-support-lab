@@ -88,16 +88,19 @@ export type RuntimeEvidence = {
   protocolEvents?: Array<Record<string, unknown> & { type: string }>;
   quality?: {
     executed: boolean;
-    method: "deterministic-grounding-v2";
+    method: "deterministic-grounding-v3";
     status: "passed" | "failed" | "not-evaluated";
     grounding: number | null;
     citationValidity: number | null;
     answerRelevance: number | null;
+    intentCoverage: number | null;
     correctness: null;
     claimCount: number;
     supportedClaimCount: number;
     referencedCitationCount: number;
     validCitationCount: number;
+    requiredIntentCount: number;
+    coveredIntentCount: number;
     retryCount: number;
     reason: string;
   };

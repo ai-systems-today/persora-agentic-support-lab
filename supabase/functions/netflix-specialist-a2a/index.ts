@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { selectSpecialists, type SpecialistSelection } from "../_shared/specialistRouter.ts";
+import { selectSpecialists, specialistTaskMessage, type SpecialistSelection } from "../_shared/specialistRouter.ts";
 
 const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
 const AGENT_URL = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
@@ -57,6 +57,10 @@ async function askPublishedSpecialist(specialist: SpecialistSelection, message: 
   }
   if (buffer.startsWith("data:")) applySsePayload(state, buffer.slice(5).trim());
   if (!state.answer.trim()) throw new Error("Published specialist returned no answer");
+  if (/^I do not have enough source evidence[.!]?$/i.test(state.answer.trim())) {
+    throw new Error(`Published ${specialist.domain} specialist returned no sourced answer`);
+  }
+  if (!state.citations.length) throw new Error(`Published ${specialist.domain} specialist returned no citations`);
   return { ...state, specialist };
 }
 
@@ -66,8 +70,13 @@ function shiftCitationReferences(answer: string, offset: number) {
 
 async function askSpecialistTask(message: string, taskId: string) {
   const specialists = selectSpecialists(message);
+  const multiDomain = specialists.length > 1;
   const results = await Promise.all(specialists.map((specialist, index) =>
-    askPublishedSpecialist(specialist, message, `${taskId}-${index + 1}`)
+    askPublishedSpecialist(
+      specialist,
+      specialistTaskMessage(specialist, message, multiDomain),
+      `${taskId}-${index + 1}`,
+    )
   ));
   let offset = 0;
   const answers: string[] = [];

@@ -100,6 +100,29 @@ describe("exact-run answer quality", () => {
     });
   });
 
+  it("fails a grounded mixed answer when it covers only one required intent", () => {
+    const quality = evaluateLiveAnswer({
+      question: "My billing country, household TV and sign-in email are wrong",
+      answer: "Change your billing country by starting a new membership [#1].",
+      citations: [{
+        label: "Moving with Netflix",
+        url: null,
+        snippet: "To change the billing country, cancel and start a new membership in the new country.",
+      }],
+      requiredTopics: [
+        { label: "billing", terms: ["billing", "currency"] },
+        { label: "household", terms: ["household", "TV"] },
+        { label: "identity", terms: ["email", "password", "sign in"] },
+      ],
+    });
+    expect(quality).toMatchObject({
+      status: "failed",
+      intentCoverage: 0.333,
+      requiredIntentCount: 3,
+      coveredIntentCount: 1,
+    });
+  });
+
   it("removes headings, filler, and uncited sentences before live display", () => {
     const answer = [
       "## Household help",

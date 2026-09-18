@@ -237,9 +237,21 @@ const qualityCitations = (values: unknown[]): QualityCitation[] => values.map((v
   };
 });
 
+const MULTI_INTENT_QUALITY_TOPICS: Record<SpecialistSelection["domain"], { label: string; terms: string[] }> = {
+  billing: { label: "billing", terms: ["billing", "payment", "currency", "charge", "invoice", "membership"] },
+  household: { label: "household", terms: ["household", "TV", "home internet"] },
+  identity: { label: "identity", terms: ["email", "password", "sign in", "login"] },
+  general: { label: "general support", terms: ["support", "help"] },
+};
+
+const requiredQualityTopics = (state: typeof State.State) => state.pattern === "group-chat"
+  ? state.a2a.specialists.map((specialist) => MULTI_INTENT_QUALITY_TOPICS[specialist.domain])
+  : [];
+
 async function callPublishedAgent(state: typeof State.State) {
   type PublishedResult = { answer: string; citations: unknown[]; eventTypes: string[]; specialist: SpecialistSelection | null };
   let first: PublishedResult | null = null;
+  const requiredTopics = requiredQualityTopics(state);
   try {
     first = state.pattern === "group-chat" && state.specialistContext.trim() && state.specialistCitations.length
       ? {
@@ -261,9 +273,19 @@ async function callPublishedAgent(state: typeof State.State) {
       answer: firstAnswer,
       citations: firstCitations,
       retryCount: 0,
+      requiredTopics,
     });
     if (firstQuality.status === "passed") {
       return { ...first, answer: firstAnswer, quality: firstQuality, eventTypes: [...first.eventTypes, "live_quality_passed"] };
+    }
+    if (state.pattern === "group-chat") {
+      return {
+        answer: "I couldn’t verify a source-backed answer for every part of this multi-topic request, so I’m not presenting a partial answer as complete. Please ask the billing, Household, and sign-in questions separately or use authenticated Netflix Support.",
+        citations: first.citations,
+        specialist: null,
+        quality: firstQuality,
+        eventTypes: [...first.eventTypes, "live_quality_multi_intent_failed_closed"],
+      };
     }
   }
 
@@ -287,6 +309,7 @@ async function callPublishedAgent(state: typeof State.State) {
     answer: repairedAnswer,
     citations: repairedCitations,
     retryCount: 1,
+    requiredTopics,
   });
   if (repairedQuality.status === "passed") {
     return { ...repaired, answer: repairedAnswer, quality: repairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_retry_passed"] };

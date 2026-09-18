@@ -453,10 +453,11 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   ] } : layer);
   return next.map((layer) => layer.id === "quality" ? { ...layer, fields: [
     { label: "Answer present", value: turn.answer.trim() ? "Passed" : "Failed", status: "runtime-proven", detail: "Programmatic validation checked that the live stream produced answer text." },
-    { label: "Exact-run quality gate", value: quality?.status === "passed" ? `Passed${quality.retryCount ? " after one retry" : ""}` : quality?.status === "failed" ? "Failed closed after one retry" : "Not evaluated", status: quality?.executed ? "runtime-proven" : "not-evaluated", detail: quality?.reason ?? "This path did not generate a published knowledge answer, so grounding and relevance were not evaluated.", metrics: quality?.executed ? [
+    { label: "Exact-run quality gate", value: quality?.status === "passed" ? `Passed${quality.retryCount ? " after one retry" : ""}` : quality?.status === "failed" ? `Failed closed${quality.retryCount ? " after one retry" : ""}` : "Not evaluated", status: quality?.executed ? "runtime-proven" : "not-evaluated", detail: quality?.reason ?? "This path did not generate a published knowledge answer, so grounding and relevance were not evaluated.", metrics: quality?.executed ? [
       { label: "Grounding", value: `${((quality.grounding ?? 0) * 100).toFixed(1)}%` },
       { label: "Citation validity", value: `${((quality.citationValidity ?? 0) * 100).toFixed(1)}%` },
       { label: "Answer relevance", value: `${((quality.answerRelevance ?? 0) * 100).toFixed(1)}%` },
+      ...(quality.intentCoverage === null ? [] : [{ label: "Intent coverage", value: `${(quality.intentCoverage * 100).toFixed(1)}% (${quality.coveredIntentCount}/${quality.requiredIntentCount})` }]),
       { label: "Supported claims", value: `${quality.supportedClaimCount}/${quality.claimCount}` },
     ] : undefined },
     { label: "Correctness", value: "Not evaluated for this live answer", status: "not-evaluated", detail: "Correctness requires a trusted reference answer or human judgment. Grounding and relevance are useful checks, but they are not relabelled as factual correctness." },

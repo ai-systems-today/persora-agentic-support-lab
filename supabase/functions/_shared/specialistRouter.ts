@@ -7,6 +7,13 @@ export type SpecialistSelection = {
   widgetId: string;
 };
 
+const MULTI_DOMAIN_TASKS: Record<SpecialistDomain, string> = {
+  billing: "According to Netflix Help, what should a customer do when moving to a new country and needing the billing country or currency changed?",
+  household: "According to Netflix Help, how can a customer update Netflix Household from the TV they want to use?",
+  identity: "How can a customer reset their Netflix sign-in password?",
+  general: "According to Netflix Help, what supported steps address this request?",
+};
+
 export const NETFLIX_SPECIALISTS: Record<SpecialistDomain, SpecialistSelection> = {
   billing: {
     domain: "billing",
@@ -49,4 +56,12 @@ export function selectSpecialists(message: string): SpecialistSelection[] {
 
 export function selectPrimarySpecialist(message: string): SpecialistSelection {
   return selectSpecialists(message)[0];
+}
+
+export function specialistTaskMessage(
+  specialist: SpecialistSelection,
+  originalMessage: string,
+  multiDomain: boolean,
+) {
+  return multiDomain ? MULTI_DOMAIN_TASKS[specialist.domain] : originalMessage;
 }

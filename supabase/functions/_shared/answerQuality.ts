@@ -6,16 +6,19 @@ export type QualityCitation = {
 
 export type LiveQuality = {
   executed: boolean;
-  method: "deterministic-grounding-v2";
+  method: "deterministic-grounding-v3";
   status: "passed" | "failed" | "not-evaluated";
   grounding: number | null;
   citationValidity: number | null;
   answerRelevance: number | null;
+  intentCoverage: number | null;
   correctness: null;
   claimCount: number;
   supportedClaimCount: number;
   referencedCitationCount: number;
   validCitationCount: number;
+  requiredIntentCount: number;
+  coveredIntentCount: number;
   retryCount: number;
   reason: string;
 };
@@ -119,16 +122,19 @@ export function extractGroundedClaims(answer: string, citations: QualityCitation
 
 export const notEvaluatedQuality = (reason: string): LiveQuality => ({
   executed: false,
-  method: "deterministic-grounding-v2",
+  method: "deterministic-grounding-v3",
   status: "not-evaluated",
   grounding: null,
   citationValidity: null,
   answerRelevance: null,
+  intentCoverage: null,
   correctness: null,
   claimCount: 0,
   supportedClaimCount: 0,
   referencedCitationCount: 0,
   validCitationCount: 0,
+  requiredIntentCount: 0,
+  coveredIntentCount: 0,
   retryCount: 0,
   reason,
 });
@@ -138,6 +144,7 @@ export function evaluateLiveAnswer(input: {
   answer: string;
   citations: QualityCitation[];
   retryCount?: number;
+  requiredTopics?: Array<{ label: string; terms: string[] }>;
 }): LiveQuality {
   const questionTokens = tokens(input.question);
   const answerTokens = tokens(input.answer);
@@ -146,6 +153,13 @@ export function evaluateLiveAnswer(input: {
   const validReferences = uniqueReferences.filter((reference) => reference >= 1 && reference <= input.citations.length);
   const citationValidity = round(validReferences.length / Math.max(uniqueReferences.length, 1));
   const claims = claimSegments(input.answer);
+  const requiredTopics = input.requiredTopics ?? [];
+  const coveredIntentCount = requiredTopics.filter((topic) =>
+    topic.terms.some((term) => overlap(answerTokens, tokens(term)) > 0)
+  ).length;
+  const intentCoverage = requiredTopics.length
+    ? round(coveredIntentCount / requiredTopics.length)
+    : null;
 
   let supportedClaimCount = 0;
   for (const claim of claims) {
@@ -159,7 +173,8 @@ export function evaluateLiveAnswer(input: {
 
   const grounding = round(supportedClaimCount / Math.max(claims.length, 1));
   const passed = input.answer.trim().length > 0 && input.citations.length > 0 &&
-    uniqueReferences.length > 0 && citationValidity === 1 && grounding === 1 && answerRelevance >= 0.2;
+    uniqueReferences.length > 0 && citationValidity === 1 && grounding === 1 && answerRelevance >= 0.2 &&
+    (intentCoverage === null || intentCoverage === 1);
   const reason = passed
     ? "Every substantive claim links to an existing source number, shares substantive terms with that source text, and the answer addresses the question."
     : input.citations.length === 0
@@ -170,20 +185,25 @@ export function evaluateLiveAnswer(input: {
           ? "One or more [#n] references do not exist in the returned source list."
           : grounding < 1
             ? "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
-            : "The answer did not contain enough of the question's substantive terms."
+            : intentCoverage !== null && intentCoverage < 1
+              ? `The answer covered ${coveredIntentCount} of ${requiredTopics.length} required request intents.`
+              : "The answer did not contain enough of the question's substantive terms."
 
   return {
     executed: true,
-    method: "deterministic-grounding-v2",
+    method: "deterministic-grounding-v3",
     status: passed ? "passed" : "failed",
     grounding,
     citationValidity,
     answerRelevance,
+    intentCoverage,
     correctness: null,
     claimCount: claims.length,
     supportedClaimCount,
     referencedCitationCount: uniqueReferences.length,
     validCitationCount: validReferences.length,
+    requiredIntentCount: requiredTopics.length,
+    coveredIntentCount,
     retryCount: input.retryCount ?? 0,
     reason,
   };
