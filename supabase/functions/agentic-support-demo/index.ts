@@ -13,6 +13,21 @@ const DEFAULT_WIDGET = "6a01cc31-ee9e-4977-aa8c-031894a71851";
 const PROMPT_VERSION = "netflix-support-demo@2026-09-16.1";
 const LANGGRAPH_VERSION = "1.4.15";
 
+const secureEqual = (left: string, right: string) => {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return difference === 0;
+};
+
+async function signReadback(traceId: string, sessionToken: string): Promise<string | null> {
+  const secret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+  if (!secret) return null;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${sessionToken}:${traceId}:langfuse-readback`));
+  return Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 type TraceEntry = { node: string; status: "complete" | "blocked" | "failed"; durationMs: number };
 type ProtocolEvent = Record<string, unknown> & { type: string; timestamp?: string };
 type A2AEvidence = {
@@ -28,6 +43,17 @@ type LangfuseEvidence = {
   traceId: string | null;
   traceUrl: string | null;
   error: string | null;
+  readback: "available" | "pending" | "failed" | "not-attempted";
+  observations: Array<{
+    name: string;
+    type: string;
+    status: string | null;
+    durationMs: number | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    totalCost: number | null;
+  }>;
+  readbackToken: string | null;
 };
 type LangfuseConfig = {
   publicKey: string;
@@ -311,7 +337,7 @@ async function emitLangfuseTrace(input: {
 }): Promise<LangfuseEvidence> {
   const loaded = await loadLangfuseConfig();
   if (!loaded.config) {
-    return { configured: false, executed: false, traceId: null, traceUrl: null, error: loaded.error };
+    return { configured: false, executed: false, traceId: null, traceUrl: null, error: loaded.error, readback: "not-attempted", observations: [], readbackToken: null };
   }
   const { publicKey, secretKey, baseUrl } = loaded.config;
 
@@ -396,17 +422,60 @@ async function emitLangfuseTrace(input: {
       }),
     });
     if (!response.ok) throw new Error(`Langfuse OTLP returned HTTP ${response.status}`);
+    const authorization = `Basic ${btoa(`${publicKey}:${secretKey}`)}`;
+    let readback: LangfuseEvidence["readback"] = "pending";
+    let observations: LangfuseEvidence["observations"] = [];
+    let readbackError: string | null = null;
+    for (const delayMs of [0]) {
+      if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+      try {
+        const observationsResponse = await fetch(`${baseUrl}/api/public/v2/observations?traceId=${traceId}&fields=core,basic,usage,metrics&limit=100`, {
+          headers: { Authorization: authorization },
+        });
+        if (!observationsResponse.ok) throw new Error(`Langfuse observations returned HTTP ${observationsResponse.status}`);
+        const payload = await observationsResponse.json() as { data?: unknown[] };
+        const records = Array.isArray(payload.data) ? payload.data : [];
+        observations = records.flatMap((value) => {
+          if (!value || typeof value !== "object") return [];
+          const record = value as Record<string, unknown>;
+          const usage = record.usageDetails && typeof record.usageDetails === "object" ? record.usageDetails as Record<string, unknown> : {};
+          const cost = record.costDetails && typeof record.costDetails === "object" ? record.costDetails as Record<string, unknown> : {};
+          const start = typeof record.startTime === "string" ? Date.parse(record.startTime) : NaN;
+          const end = typeof record.endTime === "string" ? Date.parse(record.endTime) : NaN;
+          return [{
+            name: typeof record.name === "string" ? record.name : "unnamed observation",
+            type: typeof record.type === "string" ? record.type : "SPAN",
+            status: typeof record.level === "string" ? record.level : null,
+            durationMs: Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : null,
+            inputTokens: typeof usage.input === "number" ? usage.input : null,
+            outputTokens: typeof usage.output === "number" ? usage.output : null,
+            totalCost: typeof cost.total === "number" ? cost.total : null,
+          }];
+        });
+        if (observations.length) {
+          readback = "available";
+          break;
+        }
+      } catch (error) {
+        readback = "failed";
+        readbackError = error instanceof Error ? error.message : "Langfuse observation read-back failed";
+        break;
+      }
+    }
     return {
       configured: true,
       executed: true,
       traceId,
       traceUrl: `${baseUrl}/trace/${traceId}`,
-      error: null,
+      error: readbackError,
+      readback,
+      observations,
+      readbackToken: await signReadback(traceId, input.sessionToken),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Langfuse export failed";
     console.error(JSON.stringify({ requestTraceId: input.requestTraceId, integration: "langfuse", error: message }));
-    return { configured: true, executed: false, traceId, traceUrl: null, error: message };
+    return { configured: true, executed: false, traceId, traceUrl: null, error: message, readback: "not-attempted", observations: [], readbackToken: null };
   }
 }
 
@@ -756,6 +825,33 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const sessionToken = typeof body.sessionToken === "string" ? body.sessionToken : crypto.randomUUID();
     const threadId = (await sha256(sessionToken)).slice(0, 32);
+    if (body.action === "langfuse-readback") {
+      const requestedTraceId = typeof body.langfuseTraceId === "string" ? body.langfuseTraceId : "";
+      const readbackToken = typeof body.readbackToken === "string" ? body.readbackToken : "";
+      if (!/^[a-f0-9]{32}$/i.test(requestedTraceId)) return new Response(JSON.stringify({ error: "Invalid trace identifier" }), { status: 400, headers: { ...cors(origin), "Content-Type": "application/json" } });
+      const expectedToken = await signReadback(requestedTraceId, sessionToken);
+      if (!expectedToken || !secureEqual(readbackToken, expectedToken)) return new Response(JSON.stringify({ error: "Read-back proof rejected" }), { status: 403, headers: { ...cors(origin), "Content-Type": "application/json" } });
+      const loaded = await loadLangfuseConfig();
+      if (!loaded.config) return new Response(JSON.stringify({ readback: "failed", observations: [], error: loaded.error }), { status: 503, headers: { ...cors(origin), "Content-Type": "application/json" } });
+      const authorization = `Basic ${btoa(`${loaded.config.publicKey}:${loaded.config.secretKey}`)}`;
+      try {
+        const observationsResponse = await fetch(`${loaded.config.baseUrl}/api/public/v2/observations?traceId=${requestedTraceId}&fields=core,basic,usage,metrics&limit=100`, { headers: { Authorization: authorization } });
+        if (!observationsResponse.ok) throw new Error(`Langfuse observations returned HTTP ${observationsResponse.status}`);
+        const payload = await observationsResponse.json() as { data?: unknown[] };
+        const observations = (Array.isArray(payload.data) ? payload.data : []).flatMap((value) => {
+          if (!value || typeof value !== "object") return [];
+          const record = value as Record<string, unknown>;
+          const usage = record.usageDetails && typeof record.usageDetails === "object" ? record.usageDetails as Record<string, unknown> : {};
+          const cost = record.costDetails && typeof record.costDetails === "object" ? record.costDetails as Record<string, unknown> : {};
+          const start = typeof record.startTime === "string" ? Date.parse(record.startTime) : NaN;
+          const end = typeof record.endTime === "string" ? Date.parse(record.endTime) : NaN;
+          return [{ name: typeof record.name === "string" ? record.name : "unnamed observation", type: typeof record.type === "string" ? record.type : "SPAN", status: typeof record.level === "string" ? record.level : null, durationMs: Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : null, inputTokens: typeof usage.input === "number" ? usage.input : null, outputTokens: typeof usage.output === "number" ? usage.output : null, totalCost: typeof cost.total === "number" ? cost.total : null }];
+        });
+        return new Response(JSON.stringify({ readback: observations.length ? "available" : "pending", observations, error: null }), { headers: { ...cors(origin), "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      } catch (error) {
+        return new Response(JSON.stringify({ readback: "failed", observations: [], error: error instanceof Error ? error.message : "Langfuse read-back failed" }), { status: 502, headers: { ...cors(origin), "Content-Type": "application/json", "Cache-Control": "no-store" } });
+      }
+    }
     const approvalId = typeof body.approvalId === "string" ? body.approvalId : "";
     const decision = body.decision === "approve" || body.decision === "reject" ? body.decision as ApprovalDecision : null;
 
@@ -782,7 +878,7 @@ Deno.serve(async (req: Request) => {
         protocolEvents: graphEvents,
         integrations: {
           langGraph: { executed: false, version: LANGGRAPH_VERSION },
-          langfuse: { configured: false, executed: false, traceId: null, traceUrl: null, error: "Decision continuation is persisted separately from the original observed run" },
+          langfuse: { configured: false, executed: false, traceId: null, traceUrl: null, error: "Decision continuation is persisted separately from the original observed run", readback: "not-attempted", observations: [], readbackToken: null },
           ragas: { executed: false, scope: null, version: null, sampleCount: null, scores: null },
           agUi: { executed: true, version: "1.0", eventCount: graphEvents.length + 6 },
           a2a: emptyA2A(),
