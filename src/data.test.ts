@@ -66,7 +66,38 @@ describe("demo evidence", () => {
     const result = JSON.parse(readFileSync(new URL("./generated/ragas-evaluation.json", import.meta.url), "utf8"));
     expect(workflow).toContain("python scripts/evaluate_ragas.py");
     expect(requirements).toContain("ragas==0.4.3");
-    expect(result).toMatchObject({ executed: true, scope: "benchmark", version: "0.4.3", sampleCount: 5 });
+    expect(result).toMatchObject({ executed: true, scope: "benchmark", version: "0.4.3", sampleCount: 5, metricCount: 6 });
+    expect(Object.keys(result.scores)).toEqual([
+      "non_llm_string_similarity",
+      "required_phrase_presence",
+      "exact_match",
+      "bleu_score",
+      "chrf_score",
+      "rouge_l",
+    ]);
+  });
+
+  it("returns a sanitized public trace and keeps the private Langfuse URL out of the evidence payload", () => {
+    const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    expect(orchestrator).toContain("publicTrace");
+    expect(orchestrator).toContain("privateObservabilityExported");
+    expect(orchestrator).toContain("langfuse: { ...langfuse, traceUrl: null }");
+    expect(orchestrator).toContain("persora.telemetry.redaction");
+    expect(orchestrator).toContain("[REDACTED_PAYMENT_NUMBER]");
+    expect(app).toContain("Public trace projection");
+    expect(app).toContain("Private Langfuse mirror");
+    expect(app).not.toContain("open it in Langfuse");
+  });
+
+  it("exposes the transparent routing decision with the run evidence", () => {
+    const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    expect(orchestrator).toContain("selectOrchestrationPattern");
+    expect(orchestrator).toContain('name: "persora.orchestration.route"');
+    expect(orchestrator).toContain('strategy: "deterministic-policy-router"');
+    expect(orchestrator).toContain('agUi: { executed: false, version: "1.0", eventCount: 0 }');
+    expect(app).toContain('selected === "sequential"');
   });
 
   it("keeps group-chat and human approval claims aligned with runtime behavior", () => {
@@ -75,7 +106,7 @@ describe("demo evidence", () => {
     const migration = readFileSync(new URL("../supabase/migrations/20260917080958_add_agentic_demo_approvals.sql", import.meta.url), "utf8");
     expect(app).toContain("one A2A specialist task result");
     expect(app).toContain("Approve safe continuation");
-    expect(app).toContain("Required-phrase coverage");
+    expect(app).toContain("Object.entries(ragas.scores ?? {})");
     expect(orchestrator).toContain("session-bound-demo-decision");
     expect(orchestrator).toContain("no account was cancelled and no refund was issued");
     expect(migration).toContain("enable row level security");

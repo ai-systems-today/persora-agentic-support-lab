@@ -59,9 +59,23 @@ export type RuntimeEvidence = {
   citations: Citation[];
   error: string | null;
   pattern?: Pattern;
+  routing?: {
+    strategy: "deterministic-policy-router";
+    reason: string;
+    signals: string[];
+    confidence: number;
+  };
   promptVersion?: string;
   guardrail?: { decision: "allow" | "block"; reason: string };
   nodeTrace?: Array<{ node: string; status: string; durationMs: number }>;
+  publicTrace?: {
+    schemaVersion: "1.0";
+    generatedAt: string;
+    nodeCount: number;
+    protocolEventCount: number;
+    citationCount: number;
+    privateObservabilityExported: boolean;
+  };
   protocolEvents?: Array<Record<string, unknown> & { type: string }>;
   followUps?: string[];
   retrieval?: {
