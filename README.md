@@ -75,8 +75,8 @@ Current execution truth:
 | Prompt version | Returned by every agentic run |
 | AG-UI lifecycle, step, text, subagent and custom evidence events | Progressively streamed by every agentic run; upstream answer text arrives as one delta after the graph completes |
 | A2A | Agent Card discovery and `message:send` execute on the group-chat route through `netflix-specialist-a2a` |
-| Langfuse | OTLP root span and generation observations implemented; the public response suppresses the private trace URL while presenting a sanitized trace projection |
-| RAGAS | Pinned `0.4.3` six-metric deterministic contract benchmark executes in CI; it is not presented as evaluation of an individual live answer |
+| Langfuse | OTLP root span and child observations implemented; the server reads the current trace back and returns an allow-listed observation projection without private URLs, content or identifiers |
+| RAGAS | Pinned `0.4.3` six-metric deterministic contract evaluation executes in CI; the matching demo question shows its own scores while free-form questions remain explicitly unevaluated |
 | Pinecone / Milvus | Not executed; the demo intentionally reuses Persora's current Supabase/Postgres vector retrieval and returned citations |
 | Neo4j GraphRAG | Not executed until a graph query returns records |
 
@@ -89,7 +89,7 @@ Current execution truth:
 
 ### RAGAS benchmark
 
-`scripts/evaluate_ragas.py` uses six pinned RAGAS metrics on five checked-in deterministic contract samples: `NonLLMStringSimilarity`, `StringPresence`, `ExactMatch`, `BleuScore`, `CHRFScore` and `RougeScore`. GitHub Actions regenerates `src/generated/ragas-evaluation.json` before tests and build. The UI labels these scores **benchmark evidence** so they cannot be mistaken for request-level RAG evaluation.
+`scripts/evaluate_ragas.py` uses six pinned RAGAS metrics on five checked-in deterministic contract samples: `NonLLMStringSimilarity`, `StringPresence`, `ExactMatch`, `BleuScore`, `CHRFScore` and `RougeScore`. GitHub Actions regenerates `src/generated/ragas-evaluation.json` before tests and build. The artifact contains a score set for each stable demo-case ID plus release-level averages. The UI selects only the score set mapped to the current demo question; arbitrary live answers are labelled **not evaluated** because they have no checked-in reference answer.
 
 ### Enable Langfuse execution proof
 
@@ -103,7 +103,7 @@ persora_langfuse_base_url=https://cloud.langfuse.com
 
 The migration grants `get_agentic_demo_secrets()` only to `service_role`, checks the JWT role again inside the function, and returns only the three allow-listed demo values. Local development may still use the `LANGFUSE_*` environment variables documented in `.env.example`.
 
-The Edge Function sends one OTLP root span plus one child span per executed LangGraph node to Langfuse's `/api/public/otel/v1/traces` endpoint. Session identifiers are SHA-256 hashed before export; blocked prompts are fully suppressed; and email addresses, payment-number-shaped values and common account identifiers are redacted from allowed prompts and answers before telemetry export. The public evidence drawer receives route reasoning, the LangGraph node trace, event counts, citation counts and whether the private export succeeded; it receives no Langfuse console URL or credential. Missing credentials, a denied Vault lookup, or an export failure remain visibly non-executed.
+The Edge Function sends one OTLP root span plus one child span per executed LangGraph node to Langfuse's `/api/public/otel/v1/traces` endpoint. Session identifiers are SHA-256 hashed before export; blocked prompts are fully suppressed; and email addresses, payment-number-shaped values and common account identifiers are redacted from allowed prompts and answers before telemetry export. It then performs a bounded server-side observation read-back for that exact trace. The public drawer receives only observation name, type, level, duration and optional aggregate usage/cost fields; it never receives observation IDs, private URLs, credentials, inputs, outputs, project IDs or user/session IDs. If ingestion is not queryable within the bounded retry window, the UI says read-back is pending rather than fabricating observations.
 
 ### Automatic orchestration routing
 
