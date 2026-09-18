@@ -25,6 +25,11 @@ describe("published Netflix specialist routing", () => {
     expect(new Set(specialists.map(({ widgetId }) => widgetId)).size).toBe(3);
   });
 
+  it("matches the exact mixed-domain starter wording", () => {
+    const specialists = selectSpecialists("My account is billed in another country, household verification fails, and I cannot access my original email.");
+    expect(specialists.map(({ domain }) => domain)).toEqual(["billing", "household", "identity"]);
+  });
+
   it("uses the existing general support agent only when no specialist domain matches", () => {
     expect(selectPrimarySpecialist("What Netflix help is available?")).toEqual(NETFLIX_SPECIALISTS.general);
   });

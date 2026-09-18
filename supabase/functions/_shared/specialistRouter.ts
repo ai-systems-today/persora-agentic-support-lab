@@ -42,7 +42,7 @@ export const NETFLIX_SPECIALISTS: Record<SpecialistDomain, SpecialistSelection> 
 };
 
 const domainSignals: Array<{ domain: Exclude<SpecialistDomain, "general">; expression: RegExp }> = [
-  { domain: "billing", expression: /\b(billing|payment|invoice|charge|refund|billing country|payment method)\b/i },
+  { domain: "billing", expression: /\b(bill(?:ed|ing)?|payment|invoice|charge|refund|currency|billing country|payment method)\b/i },
   { domain: "household", expression: /\b(household|travel|travelling|temporary access|temporary code|device|tv|location|moving)\b/i },
   { domain: "identity", expression: /\b(email|phone|sign[ -]?in|login|password|account access|verification|security|unauthori[sz]ed)\b/i },
 ];
