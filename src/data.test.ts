@@ -91,10 +91,13 @@ describe("demo evidence", () => {
   });
 
   it("exposes the transparent routing decision with the run evidence", () => {
+    const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
     const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
     expect(orchestrator).toContain("selectOrchestrationPattern");
     expect(orchestrator).toContain('name: "persora.orchestration.route"');
     expect(orchestrator).toContain('strategy: "deterministic-policy-router"');
+    expect(orchestrator).toContain('agUi: { executed: false, version: "1.0", eventCount: 0 }');
+    expect(app).toContain('selected === "sequential"');
   });
 
   it("keeps group-chat and human approval claims aligned with runtime behavior", () => {
