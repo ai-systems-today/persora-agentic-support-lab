@@ -5,6 +5,7 @@ import { cases } from "./data";
 import { askAgenticDemo, askPublishedAgent, resolveAgenticHandoff } from "./liveClient";
 import { formatRetrievalScore } from "./retrievalScore";
 import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern, RunProgress } from "./types";
+import { selectOrchestrationPattern } from "../supabase/functions/_shared/orchestrationRouter";
 
 const statusLabel: Record<EvidenceStatus, string> = {
   "runtime-proven": "Runtime-proven",
@@ -347,6 +348,7 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
 
   let next = replace("orchestration", [
     { label: agentic ? "Executed pattern" : "Demo pattern", value: turn.runtime.pattern ?? item.pattern, status: agentic ? "runtime-proven" : "fixture-replay", detail: agentic ? "Returned by the server-side LangGraph run for this request." : "The selected visual pattern remains an interview demonstration; it is not relabelled as the published agent's internal graph." },
+    { label: "Why this route", value: turn.runtime.routing?.reason ?? "Not captured", status: turn.runtime.routing ? "runtime-proven" : "not-captured", detail: turn.runtime.routing ? `Transparent ${turn.runtime.routing.strategy}; signals: ${turn.runtime.routing.signals.join(", ")}; confidence ${(turn.runtime.routing.confidence * 100).toFixed(0)}%.` : "The runtime did not return a routing decision." },
     { label: "Published execution", value: publishedExecuted ? "Persora orchestrate-chat" : "Skipped by guardrail", status: publishedExecuted ? "runtime-proven" : "not-executed", detail: publishedExecuted ? "This answer was received from the published agent endpoint." : "The deterministic authorization decision ended the graph before retrieval or model execution." },
     { label: "LangGraph node trace", value: agentic ? `${turn.runtime.nodeTrace?.length ?? 0} completed nodes` : "Not executed", status: agentic ? "runtime-proven" : "not-executed", detail: agentic ? `Server runtime: ${turn.runtime.integrations?.langGraph.version ?? "version not returned"}.` : "A LangGraph server adapter has not supplied node events for this run." },
   ]);
@@ -364,9 +366,10 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
   ] } : layer);
   next = next.map((layer) => layer.id === "observability" ? { ...layer, fields: [
     { label: "Trace identifier", value: turn.runtime.traceId, status: "runtime-proven", detail: "Generated for this request and sent as x-trace-id." },
+    { label: "Public trace projection", value: turn.runtime.publicTrace ? `${turn.runtime.publicTrace.nodeCount} nodes · ${turn.runtime.publicTrace.protocolEventCount} events` : "Not captured", status: turn.runtime.publicTrace ? "runtime-proven" : "not-captured", detail: turn.runtime.publicTrace ? `Sanitized trace schema ${turn.runtime.publicTrace.schemaVersion}; ${turn.runtime.publicTrace.citationCount} citations. The private Langfuse console and credentials are never exposed.` : "No sanitized trace projection was returned." },
     { label: "End-to-end latency", value: `${turn.runtime.totalMs} ms`, status: "runtime-proven", detail: "Measured in the browser from request start through stream completion." },
     { label: "Prompt version", value: turn.runtime.promptVersion ?? "Not captured", status: turn.runtime.promptVersion ? "runtime-proven" : "not-captured", detail: "Version returned by the server execution contract." },
-    { label: "Langfuse observation", value: langfuse?.executed ? langfuse.traceId ?? "Executed" : langfuse?.configured ? "Export failed" : "Not configured", href: langfuse?.executed ? langfuse.traceUrl ?? undefined : undefined, status: langfuse?.executed ? "runtime-proven" : "not-executed", detail: langfuse?.executed ? "The server accepted an OTLP trace for this exact run; open it in Langfuse." : langfuse?.error ?? "Server-side Langfuse credentials are absent; no trace is claimed." },
+    { label: "Private Langfuse mirror", value: langfuse?.executed ? "Export accepted" : langfuse?.configured ? "Export failed" : "Not configured", status: langfuse?.executed ? "runtime-proven" : "not-executed", detail: langfuse?.executed ? "The private project accepted this run. This public UI shows its sanitized trace projection without exposing the Langfuse console or credentials." : langfuse?.error ?? "Server-side Langfuse credentials are absent; no trace is claimed." },
   ] } : layer);
   return next.map((layer) => layer.id === "quality" ? { ...layer, fields: [
     { label: "Answer present", value: turn.answer.trim() ? "Passed" : "Failed", status: "runtime-proven", detail: "Programmatic validation checked that the live stream produced answer text." },
@@ -374,8 +377,10 @@ function layersForTurn(turn: ChatTurn): EvidenceLayer[] {
     { label: "Authorization guardrail", value: turn.runtime.guardrail ? `${turn.runtime.guardrail.decision}: ${turn.runtime.guardrail.reason}` : "Not captured", status: turn.runtime.guardrail ? "runtime-proven" : "not-captured", detail: "A deterministic server-side decision runs before retrieval." },
     { label: "RAGAS benchmark", value: ragas?.executed ? "CI benchmark completed" : "Not executed", status: ragas?.executed ? "runtime-proven" : "not-executed", detail: ragas?.executed ? `Pinned RAGAS ${ragas.version} evaluated the checked-in deterministic benchmark. These are suite-level metrics, not a score for this answer.` : "No metric is displayed without an evaluator run.", metrics: ragas?.executed ? [
       { label: "Benchmark cases", value: String(ragas.sampleCount ?? 0) },
-      { label: "Response similarity", value: `${((ragas.scores?.non_llm_string_similarity ?? 0) * 100).toFixed(2)}%` },
-      { label: "Required-phrase coverage", value: `${((ragas.scores?.required_phrase_presence ?? 0) * 100).toFixed(0)}%` },
+      ...Object.entries(ragas.scores ?? {}).map(([name, score]) => ({
+        label: name.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" "),
+        value: `${(score * 100).toFixed(2)}%`,
+      })),
     ] : undefined },
   ] } : layer);
 }
@@ -463,15 +468,8 @@ function ExplainDrawer({ turn, onClose, onHandoffDecision }: { turn: ChatTurn; o
 }
 
 function routeFixtureQuestion(question: string): DemoCase | null {
-  const text = question.toLowerCase();
-  const has = (...terms: string[]) => terms.some((term) => text.includes(term));
-  const issueCount = [has("billing", "payment", "country"), has("household", "device"), has("email", "sign in", "access")].filter(Boolean).length;
-  if (issueCount >= 2) return cases.find((item) => item.id === "group-chat") ?? null;
-  if (has("cancel", "refund")) return cases.find((item) => item.id === "approval-required") ?? null;
-  if (has("another account", "other account", "reveal", "payment card")) return cases.find((item) => item.id === "access-blocked") ?? null;
-  if (has("tried", "failed", "still does not", "temporary code")) return cases.find((item) => item.id === "recovery") ?? null;
-  if (has("travel", "household", "stream")) return cases.find((item) => item.id === "grounded-answer") ?? null;
-  return null;
+  const selected = selectOrchestrationPattern(question).pattern;
+  return cases.find((item) => item.pattern === selected) ?? null;
 }
 
 export default function App() {
