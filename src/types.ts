@@ -106,6 +106,17 @@ export type RuntimeEvidence = {
       traceId: string | null;
       traceUrl: string | null;
       error: string | null;
+      readback: "available" | "pending" | "failed" | "not-attempted";
+      observations: Array<{
+        name: string;
+        type: string;
+        status: string | null;
+        durationMs: number | null;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        totalCost: number | null;
+      }>;
+      readbackToken: string | null;
     };
     ragas: {
       executed: boolean;
@@ -113,6 +124,7 @@ export type RuntimeEvidence = {
       version: string | null;
       sampleCount: number | null;
       scores: Record<string, number> | null;
+      cases?: Record<string, { question: string; scores: Record<string, number> }>;
     };
     agUi: { executed: boolean; version: string; eventCount: number };
     a2a: {
