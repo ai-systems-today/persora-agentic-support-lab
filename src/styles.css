@@ -270,7 +270,7 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
 .status.runtime-proven { background: #123d34; color: #69e4bd; }
 .status.repo-defined { background: #18395e; color: #93c4ff; }
 .status.fixture-replay { background: #38295a; color: #c3adff; }
-.status.not-captured, .status.not-executed { background: #2c3340; color: #9eabba; }
+.status.not-captured, .status.not-executed, .status.not-evaluated { background: #2c3340; color: #9eabba; }
 .stack-map { padding: 20px; }
 .stack-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 18px; }
 .stack-grid article { border: 1px solid #223a59; background: #0d1e33; border-radius: 11px; padding: 12px; min-height: 105px; }

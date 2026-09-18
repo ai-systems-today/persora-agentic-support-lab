@@ -15,10 +15,11 @@ An interview-ready, evidence-first Netflix support demonstration. The applicatio
   3. Interaction
   4. Observability
   5. Quality
-- Explicit evidence labels: Runtime-proven, Repo-defined, Fixture replay, Not captured and Not executed.
+- Explicit evidence labels: Runtime-proven, Repo-defined, Fixture replay, Not captured, Not executed and Not evaluated.
 - An opt-in **Live agent** mode that streams the published Netflix Support Assistant response and renders the citations returned by that exact run.
 - An additive **Agentic run** mode backed by JWT-protected Supabase Edge Functions. It executes a real LangGraph graph, streams standards-based AG-UI events, runs a deterministic authorization guardrail before retrieval, pauses mutation requests for human approval, and calls the published Netflix agent with its returned citations.
-- Distinct sequential, concurrent privacy-check, A2A group-specialist, human-handoff, and bounded-recovery execution paths.
+- Distinct sequential, concurrent privacy-check, A2A group-specialist, human-handoff, and bounded revise-or-finish recovery execution paths, each with exact-run proof.
+- An exact-run deterministic quality gate for published answers: citation-index validity, lexical grounding and answer relevance. It retries once with stricter citation instructions, then fails closed instead of displaying an unverifiable generated answer.
 - A pinned, server-side RAGAS contract benchmark that is explicitly separated from per-answer evidence.
 - Progressive run status while LangGraph nodes execute, contextual follow-up questions, a selectable orchestration canvas, and a node inspector backed by that run's trace.
 - A sanitized public trace projection that exposes route reasoning, nodes, timings, protocol-event counts and citation counts without exposing the private Langfuse console or credentials.
@@ -73,10 +74,12 @@ Current execution truth:
 | LangGraph | Executed in `supabase/functions/agentic-support-demo/index.ts` |
 | Deterministic authorization guardrail | Executed before the KB/model path |
 | Prompt version | Returned by every agentic run |
+| Exact-run quality gate | Runs on each published answer in agentic mode; reports grounding, citation validity and answer relevance, retries once, and fails closed on a second failure |
+| Correctness | Not inferred from grounding or citation presence; remains not evaluated unless a trusted reference or human judgment evaluates that exact answer |
 | AG-UI lifecycle, step, text, subagent and custom evidence events | Progressively streamed by every agentic run; upstream answer text arrives as one delta after the graph completes |
 | A2A | Agent Card discovery and `message:send` execute on the group-chat route through `netflix-specialist-a2a` |
 | Langfuse | OTLP root span and child observations implemented; the server reads the current trace back and returns an allow-listed observation projection without private URLs, content or identifiers |
-| RAGAS | Pinned `0.4.3` six-metric deterministic contract evaluation executes in CI; the matching demo question shows its own scores while free-form questions remain explicitly unevaluated |
+| RAGAS | Pinned `0.4.3` six-metric deterministic reference-contract evaluation executes in CI; it is never presented as a score of the newly generated live answer |
 | Pinecone / Milvus | Not executed; the demo intentionally reuses Persora's current Supabase/Postgres vector retrieval and returned citations |
 | Neo4j GraphRAG | Not executed until a graph query returns records |
 
@@ -89,7 +92,7 @@ Current execution truth:
 
 ### RAGAS benchmark
 
-`scripts/evaluate_ragas.py` uses six pinned RAGAS metrics on five checked-in deterministic contract samples: `NonLLMStringSimilarity`, `StringPresence`, `ExactMatch`, `BleuScore`, `CHRFScore` and `RougeScore`. GitHub Actions regenerates `src/generated/ragas-evaluation.json` before tests and build. The artifact contains a score set for each stable demo-case ID plus release-level averages. The UI selects only the score set mapped to the current demo question; arbitrary live answers are labelled **not evaluated** because they have no checked-in reference answer.
+`scripts/evaluate_ragas.py` uses six pinned RAGAS metrics on five checked-in deterministic contract samples: `NonLLMStringSimilarity`, `StringPresence`, `ExactMatch`, `BleuScore`, `CHRFScore` and `RougeScore`. GitHub Actions regenerates `src/generated/ragas-evaluation.json` before tests and build. The artifact contains a score set for each stable demo-case ID plus release-level averages. The UI labels these as reference-contract evidence, not live-answer correctness. The exact generated answer's correctness remains **not evaluated** unless that exact output is compared with a trusted reference or reviewed by a human.
 
 ### Enable Langfuse execution proof
 
@@ -109,6 +112,8 @@ The Edge Function sends one OTLP root span plus one child span per executed Lang
 
 `supabase/functions/_shared/orchestrationRouter.ts` applies a deterministic policy router before the graph branches. Mutation and refund requests route to human handoff; sensitive cross-account requests route to concurrent privacy checks; failed recovery attempts route to the bounded planner; multi-domain questions route to the A2A specialist exchange; and ordinary single-intent support questions follow the sequential grounded path. Every run returns the selected pattern, matched signals, confidence and plain-language reason so the route is inspectable rather than inferred from the picture alone.
 
+The concurrent route performs two independent asynchronous computations and returns their start/finish timings plus measured overlap. The Magentic route evaluates the available diagnostic signals and records each bounded planner decision: it either finishes on the first attempt or revises once and then finishes. The UI reports missing overlap or missing planner decisions as unproved rather than inferring them from the topology.
+
 ## Five-minute interview flow
 
 1. Start with **Why can’t I stream while travelling?** and show the answer and its unique run ID.
@@ -117,10 +122,10 @@ The Edge Function sends one OTLP root span plus one child span per executed Lang
 4. Run **Can you reveal another account’s billing?** to show an authorization boundary.
 5. Run **Cancel my subscription and refund me.** to show an approval-gated human handoff.
 6. Run the group-chat case to show the real A2A Agent Card + task exchange before the primary agent answers.
-7. Run the failed-path case to show a distinct bounded recovery plan and preserved context.
+7. Run the failed-path case to show the planner's recorded revise-or-finish decisions and preserved context.
 8. Switch between graph, timeline and evidence flow, then close with the stack map: the contracts remain stable while adapters supply real LangGraph, retrieval, A2A/AG-UI, Langfuse and RAGAS evidence.
 
-For live proof, switch to **Live agent**, submit one grounded question, open **Explain this answer**, and show the returned citations, SSE event types, trace identifier and measured latency. The selected orchestration topology remains labelled as fixture replay until a LangGraph adapter emits a genuine node trace.
+For full run proof, use **Agentic run**, submit one grounded question, open **Explain this answer**, and show the returned citations, exact-run quality scores, node trace and measured latency. **Live agent** calls the published agent directly and therefore does not claim that the demonstration's LangGraph pattern or exact-run quality gate executed.
 
 ## Repository isolation
 

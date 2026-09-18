@@ -13,6 +13,7 @@ const statusLabel: Record<EvidenceStatus, string> = {
   "fixture-replay": "Fixture replay",
   "not-captured": "Not captured",
   "not-executed": "Not executed",
+  "not-evaluated": "Not evaluated",
 };
 
 const patternDescription: Record<Pattern, string> = {
@@ -20,7 +21,7 @@ const patternDescription: Record<Pattern, string> = {
   concurrent: "Independent checks run side by side, then converge.",
   "group-chat": "A coordinator obtains one A2A specialist task result before grounded synthesis.",
   handoff: "Control transfers when authorization or human judgment is required.",
-  magentic: "A planner selects and revises the next specialist step from state.",
+  magentic: "A bounded planner either finishes or revises once from request state, then stops.",
 };
 
 type AnswerSource = "fixture" | "live" | "agentic";
@@ -121,7 +122,7 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
                   </ReactMarkdown>
                 </div>
                 {turn.runtime.citations.length > 0 && <div className="citations">
-                  <strong>Sources used</strong>
+                  <strong>{turn.runtime.quality?.status === "failed" ? "Sources checked (answer withheld)" : "Sources used"}</strong>
                   <div>{turn.runtime.citations.map((citation, index) => citation.url
                     ? <a key={`${citation.url}-${index}`} href={citation.url} target="_blank" rel="noreferrer">{index + 1}. {citation.label}</a>
                     : <span key={`${citation.label}-${index}`}>{index + 1}. {citation.label}</span>)}</div>
@@ -243,9 +244,17 @@ function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
   const [view, setView] = useState<"graph" | "timeline" | "evidence">("graph");
   const source = item.layers.find((layer) => layer.id === "content")?.fields[0]?.value ?? "Fixture source";
   const pattern = turn.runtime.pattern ?? item.pattern;
+  const publishedExecuted = turn.runtime.mode === "live" || Boolean(turn.runtime.nodeTrace?.some((entry) => entry.node === "published_netflix_agent"));
+  const retrievalExecuted = publishedExecuted && turn.runtime.citations.length > 0;
   const runtimeNodes: GraphNode[] = turn.runtime.nodeTrace?.map((entry) => ({ id: entry.node, label: entry.node.replaceAll("_", " "), role: `${entry.durationMs} ms`, state: entry.status === "complete" ? "complete" : entry.status === "blocked" ? "waiting" : "active", kind: nodeKind(entry.node) })) ?? [];
   const nodes = runtimeNodes.length ? runtimeNodes : item.graph;
-  const evidenceLabel = turn.runtime.mode === "agentic" ? "Runtime-proven" : "Fixture replay";
+  const responseEvidenceLabel = turn.runtime.mode === "fixture" ? "Fixture replay" : "Runtime-proven";
+  const routeEvidenceLabel = turn.runtime.mode === "agentic" ? "Runtime-proven" : "Fixture replay";
+  const qualityLabel = turn.runtime.quality?.status === "passed"
+    ? "Passed · Runtime-proven"
+    : turn.runtime.quality?.status === "failed"
+      ? "Failed closed · Runtime-proven"
+      : "Not evaluated";
   const [selectedNodeId, setSelectedNodeId] = useState(nodes[0]?.id ?? "");
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? nodes[0];
   const nodeEvents = turn.runtime.protocolEvents?.filter((event) =>
@@ -291,10 +300,10 @@ function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
       {view === "evidence" && <div className="visual-card evidence-flow-card">
         <div className="card-heading"><div><span>Evidence lineage</span><strong>Source to answer</strong></div><p>Every stage retains its evidence classification.</p></div>
         <div className="flow-line">
-          <article><span>01</span><strong>{turn.runtime.mode === "agentic" ? "Published Netflix KB" : source}</strong><small>{evidenceLabel}</small></article><i>→</i>
-          <article><span>02</span><strong>{pattern} route</strong><small>{evidenceLabel}</small></article><i>→</i>
-          <article><span>03</span><strong>Case response</strong><small>{evidenceLabel}</small></article><i>→</i>
-          <article><span>04</span><strong>Required-field check</strong><small>Runtime-proven</small></article>
+          <article><span>01</span><strong>{turn.runtime.mode === "fixture" ? source : retrievalExecuted ? "Published Netflix KB" : "No KB retrieval"}</strong><small>{retrievalExecuted || turn.runtime.mode === "fixture" ? responseEvidenceLabel : "Not executed"}</small></article><i>→</i>
+          <article><span>02</span><strong>{pattern} route</strong><small>{routeEvidenceLabel}</small></article><i>→</i>
+          <article><span>03</span><strong>Case response</strong><small>{responseEvidenceLabel}</small></article><i>→</i>
+          <article><span>04</span><strong>{turn.runtime.quality?.executed ? "Live quality gate" : "Quality evaluation"}</strong><small>{turn.runtime.quality ? qualityLabel : turn.runtime.mode === "fixture" ? "Fixture replay" : "Not evaluated"}</small></article>
         </div>
         {turn.runtime.retrieval && <div className="retrieval-results">
           <div><span>Retrieval provider</span><strong>{turn.runtime.retrieval.provider}</strong><small>{turn.runtime.retrieval.returnedCount} ranked sources · retrieval-only latency not captured</small></div>
@@ -342,7 +351,59 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   const a2a = turn.runtime.integrations?.a2a;
   const ragas = turn.runtime.integrations?.ragas;
   const handoff = turn.runtime.handoff;
+  const quality = turn.runtime.quality;
+  const orchestrationProof = turn.runtime.orchestrationProof;
   const caseEvaluation = turn.ragasCaseId ? ragas?.cases?.[turn.ragasCaseId] : undefined;
+  const skipReason = turn.runtime.guardrail?.decision === "block"
+    ? { value: "Blocked before model call", detail: "The authorization guardrail ended the graph before retrieval or model execution." }
+    : handoff?.required
+      ? { value: "Paused for human approval", detail: "The handoff route intentionally stops before retrieval or model execution." }
+      : { value: "Not executed", detail: "No published-agent node was present in this run." };
+  let patternProof: EvidenceLayer["fields"][number] = {
+    label: "Pattern execution proof",
+    value: "Not executed",
+    status: "not-executed",
+    detail: "Direct live mode does not claim that the demonstration's orchestration pattern ran.",
+  };
+  if (agentic && (turn.runtime.pattern ?? item.pattern) === "concurrent") {
+    const proof = orchestrationProof?.concurrent;
+    patternProof = {
+      label: "Pattern execution proof",
+      value: proof?.proved ? `${proof.checks.length} checks overlapped ${proof.overlapMs.toFixed(3)} ms` : "Concurrency not proved",
+      status: proof?.proved ? "runtime-proven" : "not-captured",
+      detail: proof?.proved ? "Independent policy and safe-alternative checks both started before either finished; timestamps come from this run." : "Both checks may have completed, but this run did not record positive execution overlap.",
+      metrics: proof?.checks.map((check) => ({ label: check.name, value: `${check.durationMs.toFixed(3)} ms` })),
+    };
+  } else if (agentic && (turn.runtime.pattern ?? item.pattern) === "magentic") {
+    const proof = orchestrationProof?.recovery;
+    patternProof = {
+      label: "Pattern execution proof",
+      value: proof?.executed ? `${proof.iterations.length}/${proof.maxIterations} planner decisions · ${proof.revised ? "revised then finished" : "finished without revision"}` : "Planner proof missing",
+      status: proof?.executed ? "runtime-proven" : "not-captured",
+      detail: proof?.executed ? proof.iterations.map((iteration) => `Attempt ${iteration.attempt}: ${iteration.decision} — ${iteration.reason}`).join(" ") : "No bounded planner decisions were returned.",
+    };
+  } else if (agentic && (turn.runtime.pattern ?? item.pattern) === "group-chat") {
+    patternProof = {
+      label: "Pattern execution proof",
+      value: a2a?.executed ? `A2A task ${a2a.taskId} completed before synthesis` : "A2A task not proved",
+      status: a2a?.executed ? "runtime-proven" : "not-captured",
+      detail: a2a?.executed ? "The node trace and A2A task artifact prove the specialist-to-synthesis sequence." : a2a?.error ?? "No A2A task artifact was returned.",
+    };
+  } else if (agentic && (turn.runtime.pattern ?? item.pattern) === "handoff") {
+    patternProof = {
+      label: "Pattern execution proof",
+      value: handoff?.required ? "Human interrupt emitted" : "Handoff not proved",
+      status: handoff?.required ? "runtime-proven" : "not-captured",
+      detail: handoff?.required ? "The run paused with a persisted, session-bound approval record before any account action." : "No human-approval interrupt was returned.",
+    };
+  } else if (agentic) {
+    patternProof = {
+      label: "Pattern execution proof",
+      value: `${turn.runtime.nodeTrace?.length ?? 0} ordered nodes`,
+      status: turn.runtime.nodeTrace?.length ? "runtime-proven" : "not-captured",
+      detail: `Execution order: ${turn.runtime.nodeTrace?.map((entry) => entry.node).join(" → ") || "not captured"}.`,
+    };
+  }
 
   const replace = (id: EvidenceLayer["id"], fields: EvidenceLayer["fields"]): EvidenceLayer[] =>
     item.layers.map((layer) => layer.id === id ? { ...layer, fields } : layer);
@@ -350,11 +411,12 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   let next = replace("orchestration", [
     { label: agentic ? "Executed pattern" : "Demo pattern", value: turn.runtime.pattern ?? item.pattern, status: agentic ? "runtime-proven" : "fixture-replay", detail: agentic ? "Returned by the server-side LangGraph run for this request." : "The selected visual pattern remains an interview demonstration; it is not relabelled as the published agent's internal graph." },
     { label: "Why this route", value: turn.runtime.routing?.reason ?? "Not captured", status: turn.runtime.routing ? "runtime-proven" : "not-captured", detail: turn.runtime.routing ? `Transparent ${turn.runtime.routing.strategy}; signals: ${turn.runtime.routing.signals.join(", ")}; confidence ${(turn.runtime.routing.confidence * 100).toFixed(0)}%.` : "The runtime did not return a routing decision." },
-    { label: "Published execution", value: publishedExecuted ? "Persora orchestrate-chat" : "Skipped by guardrail", status: publishedExecuted ? "runtime-proven" : "not-executed", detail: publishedExecuted ? "This answer was received from the published agent endpoint." : "The deterministic authorization decision ended the graph before retrieval or model execution." },
+    patternProof,
+    { label: "Published execution", value: publishedExecuted ? "Persora orchestrate-chat" : skipReason.value, status: publishedExecuted ? "runtime-proven" : "not-executed", detail: publishedExecuted ? "This answer was received from the published agent endpoint." : skipReason.detail },
     { label: "LangGraph node trace", value: agentic ? `${turn.runtime.nodeTrace?.length ?? 0} completed nodes` : "Not executed", status: agentic ? "runtime-proven" : "not-executed", detail: agentic ? `Server runtime: ${turn.runtime.integrations?.langGraph.version ?? "version not returned"}.` : "A LangGraph server adapter has not supplied node events for this run." },
   ]);
   next = next.map((layer) => layer.id === "content" ? { ...layer, fields: [
-    { label: "Knowledge source", value: publishedExecuted ? "help.netflix.com Website Knowledge" : "Not queried", status: publishedExecuted ? "runtime-proven" : "not-executed", detail: publishedExecuted ? "The signed-in agent configuration shows this Domain Library knowledge base selected." : "The guardrail prevented retrieval." },
+    { label: "Knowledge source", value: publishedExecuted ? "help.netflix.com Website Knowledge" : "Not queried", status: publishedExecuted ? "runtime-proven" : "not-executed", detail: publishedExecuted ? "The published agent returned this answer and its source records." : skipReason.detail },
     { label: "Returned citations", value: `${turn.runtime.citations.length}`, status: "runtime-proven", detail: "Counted from citation events in this answer's stream." },
     { label: "Vector store", value: "Supabase/Postgres vector retrieval", status: "repo-defined", detail: "The inspected Persora implementation calls search_kb_chunks; this browser run does not expose the SQL payload." },
     { label: "Neo4j / GraphRAG", value: "Not executed", status: "not-executed", detail: "No graph database event was present in this run." },
@@ -374,9 +436,15 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   ] } : layer);
   return next.map((layer) => layer.id === "quality" ? { ...layer, fields: [
     { label: "Answer present", value: turn.answer.trim() ? "Passed" : "Failed", status: "runtime-proven", detail: "Programmatic validation checked that the live stream produced answer text." },
-    { label: "Citation presence", value: turn.runtime.citations.length ? "Passed" : "No citations returned", status: "runtime-proven", detail: "Validated directly from the streamed citations event." },
+    { label: "Exact-run quality gate", value: quality?.status === "passed" ? `Passed${quality.retryCount ? " after one retry" : ""}` : quality?.status === "failed" ? "Failed closed after one retry" : "Not evaluated", status: quality?.executed ? "runtime-proven" : "not-evaluated", detail: quality?.reason ?? "This path did not generate a published knowledge answer, so grounding and relevance were not evaluated.", metrics: quality?.executed ? [
+      { label: "Grounding", value: `${((quality.grounding ?? 0) * 100).toFixed(1)}%` },
+      { label: "Citation validity", value: `${((quality.citationValidity ?? 0) * 100).toFixed(1)}%` },
+      { label: "Answer relevance", value: `${((quality.answerRelevance ?? 0) * 100).toFixed(1)}%` },
+      { label: "Supported claims", value: `${quality.supportedClaimCount}/${quality.claimCount}` },
+    ] : undefined },
+    { label: "Correctness", value: "Not evaluated for this live answer", status: "not-evaluated", detail: "Correctness requires a trusted reference answer or human judgment. Grounding and relevance are useful checks, but they are not relabelled as factual correctness." },
     { label: "Authorization guardrail", value: turn.runtime.guardrail ? `${turn.runtime.guardrail.decision}: ${turn.runtime.guardrail.reason}` : "Not captured", status: turn.runtime.guardrail ? "runtime-proven" : "not-captured", detail: "A deterministic server-side decision runs before retrieval." },
-    { label: "RAGAS case evaluation", value: caseEvaluation ? `Evaluated contract: ${caseEvaluation.question}` : "Not evaluated", status: caseEvaluation ? "runtime-proven" : "not-executed", detail: caseEvaluation ? `Pinned RAGAS ${ragas?.version} evaluated this checked-in deterministic contract sample. It does not score the newly generated live answer.` : "This free-form question has no checked-in RAGAS reference answer, so no case score is inferred from the suite average.", metrics: caseEvaluation ? Object.entries(caseEvaluation.scores).map(([name, score]) => ({
+    { label: "Reference contract benchmark", value: caseEvaluation ? `Checked-in case: ${caseEvaluation.question}` : "No matching reference case", status: caseEvaluation ? "repo-defined" : "not-evaluated", detail: caseEvaluation ? `Pinned RAGAS ${ragas?.version} evaluated the checked-in reference output, not this live generated answer.` : "This free-form question has no checked-in trusted reference, so no correctness score is inferred.", metrics: caseEvaluation ? Object.entries(caseEvaluation.scores).map(([name, score]) => ({
         label: name.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" "),
         value: `${(score * 100).toFixed(2)}%`,
       })) : undefined },
@@ -420,7 +488,7 @@ function ExplainDrawer({ turn, onClose, onHandoffDecision }: { turn: ChatTurn; o
     return {
       proven: fields.filter((entry) => entry.status === "runtime-proven" || entry.status === "repo-defined").length,
       fixture: fields.filter((entry) => entry.status === "fixture-replay").length,
-      absent: fields.filter((entry) => entry.status === "not-captured" || entry.status === "not-executed").length,
+      absent: fields.filter((entry) => entry.status === "not-captured" || entry.status === "not-executed" || entry.status === "not-evaluated").length,
     };
   }, [evidenceLayers]);
 
