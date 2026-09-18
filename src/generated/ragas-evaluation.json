@@ -3,8 +3,13 @@
   "scope": "benchmark",
   "version": "0.4.3",
   "sampleCount": 5,
+  "metricCount": 6,
   "scores": {
     "non_llm_string_similarity": 0.9863,
-    "required_phrase_presence": 1.0
+    "required_phrase_presence": 1.0,
+    "exact_match": 0.8,
+    "bleu_score": 0.9572,
+    "chrf_score": 0.992,
+    "rouge_l": 0.9636
   }
 }
