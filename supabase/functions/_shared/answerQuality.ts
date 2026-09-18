@@ -6,7 +6,7 @@ export type QualityCitation = {
 
 export type LiveQuality = {
   executed: boolean;
-  method: "deterministic-grounding-v1";
+  method: "deterministic-grounding-v2";
   status: "passed" | "failed" | "not-evaluated";
   grounding: number | null;
   citationValidity: number | null;
@@ -27,6 +27,11 @@ const STOP_WORDS = new Set([
   "please", "should", "so", "that", "the", "their", "then", "there", "they", "this", "to", "use", "was",
   "we", "what", "when", "where", "which", "who", "why", "will", "with", "would", "you", "your",
 ]);
+const SUPPORT_STOP_WORDS = new Set([
+  ...STOP_WORDS,
+  "account", "help", "information", "issue", "issues", "netflix", "problem", "problems", "support",
+  "customer", "customers", "different", "each", "first", "must", "one", "same", "update", "updated", "using",
+]);
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
 const round = (value: number) => Math.round(clamp(value) * 1000) / 1000;
@@ -37,15 +42,17 @@ const normalizeToken = (token: string) => {
   return token;
 };
 
-const tokens = (value: string) => new Set(
+const tokenize = (value: string, stopWords: Set<string>) => new Set(
   value.toLowerCase()
     .replace(/https?:\/\/\S+/g, " ")
     .replace(/\[#\d+\]/g, " ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .split(/\s+/)
-    .filter((token) => token.length > 2 && !STOP_WORDS.has(token))
+    .filter((token) => token.length > 2 && !stopWords.has(token))
     .map(normalizeToken),
 );
+const tokens = (value: string) => tokenize(value, STOP_WORDS);
+const supportTokens = (value: string) => tokenize(value, SUPPORT_STOP_WORDS);
 
 const overlap = (left: Set<string>, right: Set<string>) => {
   if (!left.size || !right.size) return 0;
@@ -65,13 +72,13 @@ const claimSegments = (answer: string) => answer
   .filter((claim) => tokens(claim).size >= 3);
 
 const citationSupport = (claim: string, citation: QualityCitation) => {
-  const claimTokens = tokens(claim);
-  const sourceTokens = tokens(`${citation.label} ${citation.snippet ?? ""}`);
+  const claimTokens = supportTokens(claim);
+  const sourceTokens = supportTokens(`${citation.label} ${citation.snippet ?? ""}`);
   const shared = overlap(claimTokens, sourceTokens);
   return {
     shared,
     ratio: shared / Math.max(Math.min(claimTokens.size, 8), 1),
-    supported: shared >= Math.min(2, claimTokens.size) && shared / Math.max(Math.min(claimTokens.size, 8), 1) >= 0.16,
+    supported: shared >= Math.min(3, claimTokens.size) && shared / Math.max(Math.min(claimTokens.size, 8), 1) >= 0.375,
   };
 };
 
@@ -86,10 +93,9 @@ const appendReference = (claim: string, reference: number) => {
 };
 
 /**
- * Keeps only cited, lexically supported factual sentences. If the model cited the
- * wrong returned source number, a sentence is re-anchored only when another
- * returned source is a materially stronger match (at least 3 shared terms and
- * 37.5% overlap across the first 8 substantive terms).
+ * Keeps only cited, lexically supported factual sentences and anchors each one
+ * to the strongest returned source (at least 3 shared substantive terms and
+ * 37.5% overlap across the first 8 terms). The model's source wins exact ties.
  */
 export function extractGroundedClaims(answer: string, citations: QualityCitation[]): string {
   const grounded: string[] = [];
@@ -98,26 +104,22 @@ export function extractGroundedClaims(answer: string, citations: QualityCitation
       .filter((reference) => reference >= 1 && reference <= citations.length);
     if (!validReferences.length) continue;
 
-    const existing = validReferences
-      .map((reference) => ({ reference, ...citationSupport(claim, citations[reference - 1]) }))
-      .sort((left, right) => right.shared - left.shared || right.ratio - left.ratio)[0];
-    if (existing?.supported) {
-      grounded.push(appendReference(claim, existing.reference));
-      continue;
-    }
-
-    const reanchored = citations
+    const bestSupported = citations
       .map((citation, index) => ({ reference: index + 1, ...citationSupport(claim, citation) }))
-      .filter((candidate) => candidate.shared >= 3 && candidate.ratio >= 0.375)
-      .sort((left, right) => right.shared - left.shared || right.ratio - left.ratio)[0];
-    if (reanchored) grounded.push(appendReference(claim, reanchored.reference));
+      .filter((candidate) => candidate.supported)
+      .sort((left, right) =>
+        right.shared - left.shared ||
+        right.ratio - left.ratio ||
+        Number(validReferences.includes(right.reference)) - Number(validReferences.includes(left.reference))
+      )[0];
+    if (bestSupported) grounded.push(appendReference(claim, bestSupported.reference));
   }
   return grounded.join(" ");
 }
 
 export const notEvaluatedQuality = (reason: string): LiveQuality => ({
   executed: false,
-  method: "deterministic-grounding-v1",
+  method: "deterministic-grounding-v2",
   status: "not-evaluated",
   grounding: null,
   citationValidity: null,
@@ -172,7 +174,7 @@ export function evaluateLiveAnswer(input: {
 
   return {
     executed: true,
-    method: "deterministic-grounding-v1",
+    method: "deterministic-grounding-v2",
     status: passed ? "passed" : "failed",
     grounding,
     citationValidity,

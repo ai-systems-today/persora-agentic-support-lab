@@ -80,7 +80,7 @@ export type RuntimeEvidence = {
   protocolEvents?: Array<Record<string, unknown> & { type: string }>;
   quality?: {
     executed: boolean;
-    method: "deterministic-grounding-v1";
+    method: "deterministic-grounding-v2";
     status: "passed" | "failed" | "not-evaluated";
     grounding: number | null;
     citationValidity: number | null;

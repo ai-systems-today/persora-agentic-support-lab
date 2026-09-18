@@ -64,6 +64,8 @@ describe("demo evidence", () => {
     expect(specialist).toContain("/.well-known/agent-card.json");
     expect(specialist).toContain("/message:send");
     expect(specialist).toContain('"A2A-Version": A2A_VERSION');
+    expect(specialist).toContain("const domainQuestions");
+    expect(specialist).toContain("shiftCitationReferences");
   });
 
   it("runs the pinned RAGAS benchmark before the Pages build", () => {

@@ -46,6 +46,39 @@ describe("exact-run answer quality", () => {
     expect(quality.grounding).toBe(0);
   });
 
+  it("does not treat generic Netflix and account words as source support", () => {
+    const quality = evaluateLiveAnswer({
+      question: "How do I review a billing charge?",
+      answer: "Check whether Netflix charged your account last month [#1].",
+      citations: [{
+        label: "How to update Netflix account information",
+        url: null,
+        snippet: "Update your account information and confirm changes by email.",
+      }],
+    });
+    expect(quality.status).toBe("failed");
+    expect(quality.grounding).toBe(0);
+  });
+
+  it("anchors a supported claim to the strongest returned source", () => {
+    const citations = [
+      {
+        label: "Phishing or suspicious emails or texts claiming to be from Netflix",
+        url: null,
+        snippet: "Do not select links in an unexpected email or text asking for your Netflix password.",
+      },
+      {
+        label: "How to change or reset your password",
+        url: null,
+        snippet: "Reset your Netflix password by getting a password reset email or text message.",
+      },
+    ];
+    expect(extractGroundedClaims(
+      "You can reset your Netflix password using a password reset email or text message [#1].",
+      citations,
+    )).toBe("You can reset your Netflix password using a password reset email or text message [#2].");
+  });
+
   it("counts an uncited substantive sentence as unsupported", () => {
     const quality = evaluateLiveAnswer({
       question: "How do I update my Netflix Household from my TV?",

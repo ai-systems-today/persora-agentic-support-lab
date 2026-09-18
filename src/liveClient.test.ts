@@ -38,7 +38,7 @@ describe("Persora event stream", () => {
         evidence: {
           traceId: "trace-1",
           eventTypes: [],
-          quality: { executed: true, status: "passed", method: "deterministic-grounding-v1", grounding: 1 },
+          quality: { executed: true, status: "passed", method: "deterministic-grounding-v2", grounding: 1 },
           orchestrationProof: { concurrent: null, recovery: { executed: true, maxIterations: 2, iterations: [], revised: false } },
         },
         citations: [{ title: "Netflix Help", url: "https://help.netflix.com/en/node/100262" }],
