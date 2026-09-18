@@ -1,7 +1,14 @@
 import json
 from pathlib import Path
 
-from ragas.metrics.collections import NonLLMStringSimilarity, StringPresence
+from ragas.metrics.collections import (
+    BleuScore,
+    CHRFScore,
+    ExactMatch,
+    NonLLMStringSimilarity,
+    RougeScore,
+    StringPresence,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,25 +18,34 @@ OUTPUT = ROOT / "src" / "generated" / "ragas-evaluation.json"
 
 def main() -> None:
     samples = json.loads(DATASET.read_text(encoding="utf-8"))
-    similarity = NonLLMStringSimilarity()
-    presence = StringPresence()
-    similarity_scores = [
-        similarity.score(reference=sample["reference"], response=sample["response"])
-        for sample in samples
-    ]
-    presence_scores = [
-        presence.score(reference=sample["required_phrase"], response=sample["response"])
-        for sample in samples
-    ]
+    metrics = {
+        "non_llm_string_similarity": (NonLLMStringSimilarity(), "reference"),
+        "required_phrase_presence": (StringPresence(), "required_phrase"),
+        "exact_match": (ExactMatch(), "reference"),
+        "bleu_score": (BleuScore(), "reference"),
+        "chrf_score": (CHRFScore(), "reference"),
+        "rouge_l": (RougeScore(rouge_type="rougeL"), "reference"),
+    }
+
+    def numeric(value: object) -> float:
+        resolved = getattr(value, "value", value)
+        return float(resolved)
+
+    scores = {}
+    for name, (metric, reference_field) in metrics.items():
+        values = [
+            numeric(metric.score(reference=sample[reference_field], response=sample["response"]))
+            for sample in samples
+        ]
+        scores[name] = round(sum(values) / len(values), 4)
+
     result = {
         "executed": True,
         "scope": "benchmark",
         "version": "0.4.3",
         "sampleCount": len(samples),
-        "scores": {
-            "non_llm_string_similarity": round(sum(similarity_scores) / len(similarity_scores), 4),
-            "required_phrase_presence": round(sum(presence_scores) / len(presence_scores), 4),
-        },
+        "metricCount": len(metrics),
+        "scores": scores,
     }
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
