@@ -162,6 +162,8 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("live_rag_evaluation_candidate_rejected");
     expect(orchestrator).toContain("live_rag_evaluation_unavailable_failed_closed");
     expect(orchestrator).toContain("The generated candidate failed the live exact-run evaluator");
+    expect(orchestrator).toContain("ragas: ragas.executed ? ragas : notEvaluatedLiveRag(rejectionReason)");
+    expect(orchestrator).toContain("executed: ragas.executed");
     expect(orchestrator).toContain("citations: update.citations ?? state.citations");
     expect(a2a).toContain("stabilizeGroundedMarkdown");
   });
