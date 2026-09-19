@@ -28,7 +28,7 @@ const rules: RouteRule[] = [
     signals: [
       {
         label: "account mutation",
-        expression: /\b(?:cancel|close|delete)\b.{0,48}\b(?:subscription|membership|account)\b|\b(?:subscription|membership|account)\b.{0,48}\b(?:cancelled|canceled|closed|deleted)\b/i,
+        expression: /\b(?:cancel|close|delete)\s+(?:my\s+|the\s+)?(?:subscription|membership|account)\b|\b(?:subscription|membership|account)\b\s+(?:is\s+|was\s+|has\s+been\s+)?(?:cancelled|canceled|closed|deleted)\b/i,
       },
       { label: "financial decision", expression: /\b(refund|chargeback|reverse (?:a )?charge)\b/i },
     ],
