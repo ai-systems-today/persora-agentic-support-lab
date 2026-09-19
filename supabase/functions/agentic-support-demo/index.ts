@@ -283,6 +283,16 @@ async function callPublishedAgent(state: typeof State.State) {
   type PublishedResult = { answer: string; citations: unknown[]; eventTypes: string[]; specialist: SpecialistSelection | null };
   let first: PublishedResult | null = null;
   const requiredTopics = requiredQualityTopics(state);
+  if (state.pattern === "group-chat" && !state.a2a.executed) {
+    const answer = "I couldn’t complete the required specialist exchange for this multi-topic request, so I’m not presenting a single-agent fallback as an orchestrated answer. Please retry or ask the billing, Household, and account-access questions separately.";
+    return {
+      answer,
+      citations: [],
+      specialist: null,
+      quality: evaluateLiveAnswer({ question: state.message, answer, citations: [], retryCount: 0, requiredTopics }),
+      eventTypes: ["a2a_required_for_group_chat", "live_quality_multi_intent_failed_closed"],
+    };
+  }
   try {
     first = state.pattern === "group-chat" && state.specialistContext.trim() && state.specialistCitations.length
       ? {
@@ -651,7 +661,21 @@ async function runA2ASpecialist(state: typeof State.State) {
         configuration: { acceptedOutputModes: ["text/plain"] },
       }),
     });
-    if (!response.ok) throw new Error(`A2A message:send returned HTTP ${response.status}`);
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const failure = await response.json() as { error?: { code?: unknown; message?: unknown } };
+        const code = typeof failure.error?.code === "string" ? failure.error.code : "";
+        const candidate = typeof failure.error?.message === "string" ? failure.error.message : "";
+        const safeMessage = /^Published (?:billing|household|identity|general) specialist [\w\s-]{1,160}$/i.test(candidate)
+          ? candidate
+          : "";
+        detail = [code, safeMessage].filter(Boolean).join(": ");
+      } catch {
+        // Preserve the HTTP status when the upstream error is not JSON.
+      }
+      throw new Error(`A2A message:send returned HTTP ${response.status}${detail ? ` (${detail})` : ""}`);
+    }
     const payload = await response.json() as {
       task?: { id?: unknown; artifacts?: Array<{ parts?: Array<{ text?: unknown }>; metadata?: { citations?: unknown; specialists?: unknown } }> };
     };

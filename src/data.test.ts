@@ -147,6 +147,9 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("This is the one repair attempt");
     expect(orchestrator).toContain("live_quality_failed_closed");
     expect(orchestrator).toContain("I couldn’t verify a sufficiently grounded answer");
+    expect(orchestrator).toContain("a2a_required_for_group_chat");
+    expect(orchestrator).toContain("not presenting a single-agent fallback as an orchestrated answer");
+    expect(orchestrator).toContain("failure.error?.message");
     expect(app).toContain("Exact-run quality gate");
     expect(app).toContain("Citation validity");
     expect(app).toContain("Reference-dependent correctness");
