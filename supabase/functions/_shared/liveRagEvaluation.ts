@@ -10,7 +10,7 @@ export type LiveRagEvaluation = {
   scope: "request" | null;
   implementation: "azure-openai-ragas-compatible-v1";
   evaluatorModel: string | null;
-  evaluatorVersion: "2026-09-19.6";
+  evaluatorVersion: "2026-09-19.7";
   status: "passed" | "failed" | "not-evaluated";
   referenceId: string | null;
   metrics: Record<LiveRagMetricName, number | null>;
@@ -75,7 +75,7 @@ export const notEvaluatedLiveRag = (reason: string): LiveRagEvaluation => ({
   scope: null,
   implementation: "azure-openai-ragas-compatible-v1",
   evaluatorModel: null,
-  evaluatorVersion: "2026-09-19.6",
+  evaluatorVersion: "2026-09-19.7",
   status: "not-evaluated",
   referenceId: null,
   metrics: emptyMetrics(),
@@ -216,7 +216,7 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
         scope: "request",
         implementation: "azure-openai-ragas-compatible-v1",
         evaluatorModel: model,
-        evaluatorVersion: "2026-09-19.6",
+        evaluatorVersion: "2026-09-19.7",
         status: passed ? "passed" : "failed",
         referenceId: reference?.id ?? null,
         metrics,

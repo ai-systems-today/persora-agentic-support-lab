@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { Annotation, END, START, StateGraph } from "npm:@langchain/langgraph@1.4.15";
-import { evaluateLiveAnswer, notEvaluatedQuality, stabilizeGroundedMarkdown, type LiveQuality, type QualityCitation } from "../_shared/answerQuality.ts";
-import { citationEvidenceText, normalizeCitationBundle, selectReferencedContexts } from "../_shared/citationEvidence.ts";
+import { evaluateLiveAnswer, notEvaluatedQuality, type LiveQuality, type QualityCitation } from "../_shared/answerQuality.ts";
+import { citationEvidenceText, normalizeCitationBundle } from "../_shared/citationEvidence.ts";
 import { evaluateExactRun, notEvaluatedLiveRag, referenceForQuestion, type LiveRagEvaluation } from "../_shared/liveRagEvaluation.ts";
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
@@ -192,7 +192,10 @@ async function requestPublishedAgent(state: typeof State.State, repair: boolean)
   const question = state.pattern === "group-chat"
     ? "Give one verified step for each of these Netflix issues: billing, Netflix Household, and account email access."
     : state.message;
-  const qualityInstruction = "Answer completely but concisely in Markdown. Use a short heading and bullets or numbered steps when they improve clarity. Begin directly with the cited facts or steps: do not add an uncited introduction, transition, or conclusion. Headings may be uncited, but every factual sentence or bullet must end with its matching [#n] citation. Use only facts directly stated in the returned Netflix knowledge sources. Do not add uncited factual clauses or external links. If the sources do not support an answer, say only: I do not have enough source evidence.";
+  const qualityInstruction = "Answer completely but concisely in Markdown. Use a short heading and bullets or numbered steps when they improve clarity. Every bullet must be a complete, self-contained sentence that names its subject; never begin with a dangling transition or pronoun whose referent is missing. Begin directly with the cited facts or steps: do not add an uncited introduction, transition, or conclusion. Headings may be uncited, but every factual sentence or bullet must end with its matching [#n] citation. Use only facts directly stated in the returned Netflix knowledge sources. Do not add uncited factual clauses or external links. If the sources do not support an answer, say only: I do not have enough source evidence.";
+  const repairInstruction = repair
+    ? " This is the one repair attempt. Rewrite the whole answer from scratch so it directly answers every part of the question with complete standalone sentences and preserves valid Markdown structure."
+    : "";
   const specialist = selectPrimarySpecialist(state.message);
   const response = await fetch(UPSTREAM, {
     method: "POST",
@@ -203,7 +206,7 @@ async function requestPublishedAgent(state: typeof State.State, repair: boolean)
     },
     body: JSON.stringify({
       widgetId: specialist.widgetId,
-      message: `${question}\n\n${qualityInstruction}`,
+      message: `${question}\n\n${qualityInstruction}${repairInstruction}`,
       sessionToken: `${state.sessionToken}:${state.traceId}:${repair ? "retry" : "primary"}`,
       deviceId: state.deviceId,
       mode: "chat",
@@ -302,17 +305,6 @@ async function callPublishedAgent(state: typeof State.State) {
     if (firstQuality.status === "passed") {
       return { ...first, answer: firstAnswer, quality: firstQuality, eventTypes: [...first.eventTypes, "live_quality_passed"] };
     }
-    const groundedAnswer = stabilizeGroundedMarkdown(firstAnswer, firstCitations);
-    const groundedQuality = evaluateLiveAnswer({
-      question: state.message,
-      answer: groundedAnswer,
-      citations: firstCitations,
-      retryCount: 0,
-      requiredTopics,
-    });
-    if (groundedQuality.status === "passed") {
-      return { ...first, answer: groundedAnswer, quality: groundedQuality, eventTypes: [...first.eventTypes, "live_quality_sanitized_passed"] };
-    }
     if (state.pattern === "group-chat") {
       return {
         answer: "I couldn’t verify a source-backed answer for every part of this multi-topic request, so I’m not presenting a partial answer as complete. Please ask the billing, Household, and sign-in questions separately or use authenticated Netflix Support.",
@@ -320,11 +312,6 @@ async function callPublishedAgent(state: typeof State.State) {
         specialist: null,
         quality: firstQuality,
         eventTypes: [...first.eventTypes, "live_quality_multi_intent_failed_closed"],
-        protocolEvents: [{
-          type: "CUSTOM",
-          name: "persora.quality.sanitized-candidate",
-          value: { quality: groundedQuality, answer: groundedAnswer },
-        }],
       };
     }
   }
@@ -353,18 +340,6 @@ async function callPublishedAgent(state: typeof State.State) {
   });
   if (repairedQuality.status === "passed") {
     return { ...repaired, answer: repairedAnswer, quality: repairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_retry_passed"] };
-  }
-
-  const groundedRepairedAnswer = stabilizeGroundedMarkdown(repairedAnswer, repairedCitations);
-  const groundedRepairedQuality = evaluateLiveAnswer({
-    question: state.message,
-    answer: groundedRepairedAnswer,
-    citations: repairedCitations,
-    retryCount: 1,
-    requiredTopics,
-  });
-  if (groundedRepairedQuality.status === "passed") {
-    return { ...repaired, answer: groundedRepairedAnswer, quality: groundedRepairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_sanitized_retry_passed"] };
   }
 
   return {
@@ -778,7 +753,7 @@ async function runExactEvaluation(state: typeof State.State) {
   }
   const allContexts = (await qualityCitations(state.citations))
     .map((citation, index) => `[#${index + 1}] ${citation.label}\n${citation.snippet ?? ""}`.trim());
-  const contexts = selectReferencedContexts(state.answer, allContexts);
+  const contexts = allContexts;
   const ragas = await evaluateExactRun({
     question: state.message,
     answer: state.answer,

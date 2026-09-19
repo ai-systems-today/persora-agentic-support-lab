@@ -141,8 +141,10 @@ describe("demo evidence", () => {
   it("validates each published answer, retries once, and fails closed", () => {
     const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
     const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    const a2a = readFileSync(new URL("../supabase/functions/netflix-specialist-a2a/index.ts", import.meta.url), "utf8");
     expect(orchestrator).toContain("evaluateLiveAnswer");
     expect(orchestrator).toContain("requestPublishedAgent(state, true)");
+    expect(orchestrator).toContain("This is the one repair attempt");
     expect(orchestrator).toContain("live_quality_failed_closed");
     expect(orchestrator).toContain("I couldn’t verify a sufficiently grounded answer");
     expect(app).toContain("Exact-run quality gate");
@@ -151,6 +153,8 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain('addNode("exact_run_evaluation"');
     expect(orchestrator).toContain("evaluateExactRun");
     expect(orchestrator).not.toContain("extractGroundedClaims(first.answer");
+    expect(orchestrator).not.toContain("stabilizeGroundedMarkdown");
+    expect(a2a).not.toContain("stabilizeGroundedMarkdown");
   });
 
   it("routes agentic questions to distinct published Persora specialist widgets", () => {
@@ -162,6 +166,7 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("specialist: result.specialist");
     expect(a2a).toContain("selectSpecialists(message)");
     expect(a2a).toContain("specialists: result.specialists");
+    expect(a2a).toContain("failed the exact-run quality gate after one repair attempt");
     expect(router).toContain('domain: "billing"');
     expect(router).toContain('domain: "household"');
     expect(router).toContain('domain: "identity"');
