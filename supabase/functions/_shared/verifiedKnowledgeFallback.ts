@@ -6,6 +6,11 @@ export function verifiedKnowledgeRequiredText(topic: VerifiedKnowledgeTopic): st
   return "Watch Temporarily";
 }
 
+export function passesQuestionSpecificAnswerContract(question: string, answer: string): boolean {
+  if (!/\bgps\b/i.test(question)) return true;
+  return /\b(?:does not|doesn(?:'|’)t|no)\b[^.\n]{0,100}\bgps\b|\bgps\b[^.\n]{0,100}\b(?:is not|isn(?:'|’)t|not used|not collect)/i.test(answer);
+}
+
 export function verifiedKnowledgeTopic(message: string): VerifiedKnowledgeTopic | null {
   if (/\bgps\b/i.test(message)) return "household-gps";
   if (/temporary.*(?:failed|fails|doesn(?:'|’)t work|didn(?:'|’)t work)|(?:failed|fails).*temporary/i.test(message)) {
