@@ -81,3 +81,16 @@ export function specialistTaskMessage(
   const scopedDetail = specialistEvaluationQuestion(specialist, originalMessage, multiDomain);
   return `According to Netflix Help, answer only the ${MULTI_DOMAIN_SCOPES[specialist.domain]} part of this customer request and do not answer the other domains: ${scopedDetail}`;
 }
+
+export function specialistRetrievalHint(message: string): string {
+  if (/\bgps\b/i.test(message)) {
+    return "Prioritize the attached source titled ‘Netflix Household and travel: verified support facts’ and the Netflix Help source titled ‘What is a Netflix Household?’.";
+  }
+  if (/temporary.*(?:failed|fails|doesn(?:'|’)t work|didn(?:'|’)t work)|(?:failed|fails).*temporary/i.test(message)) {
+    return "Prioritize the attached source titled ‘Netflix Household and travel: verified support facts’ and its cited Netflix Help article ‘Using Netflix outside of your home’.";
+  }
+  if (/\btravell?(?:ing)?\b.*\b(?:household|tv|device)\b|\b(?:household|tv|device)\b.*\btravell?(?:ing)?\b/i.test(message)) {
+    return "Prioritize the Netflix Help sources titled ‘Netflix says, Your TV/device isn’t part of the Netflix Household’ and ‘How to update a Netflix Household’.";
+  }
+  return "";
+}
