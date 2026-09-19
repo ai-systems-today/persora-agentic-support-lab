@@ -4,6 +4,7 @@ import {
   selectPrimarySpecialist,
   selectSpecialists,
   specialistEvaluationQuestion,
+  specialistRetrievalHint,
   specialistTaskMessage,
 } from "../supabase/functions/_shared/specialistRouter";
 
@@ -68,5 +69,16 @@ describe("published Netflix specialist routing", () => {
       "household verification fails",
       "I cannot access my original email",
     ]);
+  });
+
+  it("adds narrow source-title guidance for the three retrieval failure topics", () => {
+    expect(specialistRetrievalHint("I am travelling and this TV is not part of my household"))
+      .toContain("How to update a Netflix Household");
+    expect(specialistRetrievalHint("My temporary travel access failed. Can I use a hotel TV?"))
+      .toContain("Using Netflix outside of your home");
+    expect(specialistRetrievalHint("Does Netflix use GPS for my Household?"))
+      .toContain("What is a Netflix Household?");
+    expect(specialistRetrievalHint("How do I review a billing charge?"))
+      .toBe("");
   });
 });
