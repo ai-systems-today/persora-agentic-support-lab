@@ -10,7 +10,7 @@ export type LiveRagEvaluation = {
   scope: "request" | null;
   implementation: "azure-openai-ragas-compatible-v1";
   evaluatorModel: string | null;
-  evaluatorVersion: "2026-09-19.7";
+  evaluatorVersion: "2026-09-19.8";
   status: "passed" | "failed" | "not-evaluated";
   referenceId: string | null;
   metrics: Record<LiveRagMetricName, number | null>;
@@ -22,7 +22,11 @@ export type LiveRagEvaluation = {
   error: string | null;
 };
 
-export type LiveRagReference = { id: string; answer: string };
+export type LiveRagReference = {
+  id: string;
+  answer: string;
+  requiredTopics: Array<{ label: string; terms: string[] }>;
+};
 
 const LIVE_REFERENCES = new Map<string, LiveRagReference>([
   [
@@ -30,6 +34,11 @@ const LIVE_REFERENCES = new Map<string, LiveRagReference>([
     {
       id: "grounded-answer@2026-09-19",
       answer: "Use Netflix's travelling or temporary-access path for a TV away from home, verify through the account contact method, and update the Netflix Household from the primary home TV when required.",
+      requiredTopics: [
+        { label: "temporary travel access", terms: ["temporary"] },
+        { label: "verification", terms: ["verify", "verification"] },
+        { label: "Household update", terms: ["update"] },
+      ],
     },
   ],
   [
@@ -37,6 +46,11 @@ const LIVE_REFERENCES = new Map<string, LiveRagReference>([
     {
       id: "group-chat@2026-09-19",
       answer: "Handle the request as three bounded issues: follow Netflix's country-change membership process for billing, update the Household from a TV on the home internet, and use authenticated password or account-recovery support for lost email access.",
+      requiredTopics: [
+        { label: "billing country", terms: ["billing", "currency", "country"] },
+        { label: "Household", terms: ["household", "home internet"] },
+        { label: "email access", terms: ["email", "account recovery"] },
+      ],
     },
   ],
   [
@@ -44,6 +58,11 @@ const LIVE_REFERENCES = new Map<string, LiveRagReference>([
     {
       id: "recovery@2026-09-19",
       answer: "Netflix can be used while travelling on mobile devices and computers, and users can sign in on a hotel or holiday-rental TV; availability can vary by country.",
+      requiredTopics: [
+        { label: "mobile device", terms: ["mobile", "phone", "tablet"] },
+        { label: "computer", terms: ["computer", "laptop"] },
+        { label: "hotel TV", terms: ["hotel", "holiday rental"] },
+      ],
     },
   ],
 ]);
@@ -75,7 +94,7 @@ export const notEvaluatedLiveRag = (reason: string): LiveRagEvaluation => ({
   scope: null,
   implementation: "azure-openai-ragas-compatible-v1",
   evaluatorModel: null,
-  evaluatorVersion: "2026-09-19.7",
+  evaluatorVersion: "2026-09-19.8",
   status: "not-evaluated",
   referenceId: null,
   metrics: emptyMetrics(),
@@ -205,6 +224,11 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
       const reasons = Object.fromEntries(
         Object.entries(parsedReasons).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
       ) as LiveRagEvaluation["reasons"];
+      const derivedContextPrecision = Math.round((relevantContextIndices.length / contexts.length) * 1000) / 1000;
+      if (metrics.contextPrecision !== derivedContextPrecision) {
+        reasons.contextPrecision = `${reasons.contextPrecision ?? "Relevant contexts were identified by the evaluator."} Contract normalization computed ${relevantContextIndices.length}/${contexts.length} relevant supplied contexts.`;
+        metrics.contextPrecision = derivedContextPrecision;
+      }
       if (metrics.faithfulness < 1 && unsupportedClaims.length === 0) {
         metrics.faithfulness = 1;
         reasons.faithfulness = `${reasons.faithfulness ?? "No unsupported claim was identified."} Contract normalization set faithfulness to 1 because zero unsupported claims means every evaluated claim was supported.`;
@@ -216,7 +240,7 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
         scope: "request",
         implementation: "azure-openai-ragas-compatible-v1",
         evaluatorModel: model,
-        evaluatorVersion: "2026-09-19.7",
+        evaluatorVersion: "2026-09-19.8",
         status: passed ? "passed" : "failed",
         referenceId: reference?.id ?? null,
         metrics,
