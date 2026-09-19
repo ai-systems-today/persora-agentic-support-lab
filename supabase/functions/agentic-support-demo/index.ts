@@ -6,6 +6,7 @@ import { evaluateExactRun, notEvaluatedLiveRag, referenceForQuestion, type LiveR
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
 import { selectPrimarySpecialist, specialistRetrievalHint, type SpecialistSelection } from "../_shared/specialistRouter.ts";
+import { verifiedKnowledgeAnswer, verifiedKnowledgeTopic } from "../_shared/verifiedKnowledgeFallback.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://ai-systems-today.github.io",
@@ -16,6 +17,8 @@ const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestr
 const A2A_SPECIALIST = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
 const PROMPT_VERSION = "netflix-support-demo@2026-09-19.2-retrieval-guidance";
 const LANGGRAPH_VERSION = "1.4.15";
+const NETFLIX_KB_CONVERSATION_ID = "6983a1ed-a545-4cfd-a00b-d4d785914217";
+const VERIFIED_POLICY_FILENAME = "netflix-household-travel-official-policy.md";
 
 const secureEqual = (left: string, right: string) => {
   if (left.length !== right.length) return false;
@@ -273,6 +276,47 @@ async function qualityCitations(values: unknown[]): Promise<QualityCitation[]> {
   });
 }
 
+async function requestVerifiedKnowledgeFallback(message: string) {
+  const topic = verifiedKnowledgeTopic(message);
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+  if (!topic || !serviceRoleKey) return null;
+  const params = new URLSearchParams({
+    conversation_id: `eq.${NETFLIX_KB_CONVERSATION_ID}`,
+    "metadata->>filename": `eq.${VERIFIED_POLICY_FILENAME}`,
+    select: "id,chunk_index,content,metadata",
+    order: "chunk_index.asc",
+  });
+  const response = await fetch(`https://oiotkbbwriecdvtnufee.supabase.co/rest/v1/document_chunks?${params.toString()}`, {
+    headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+  });
+  if (!response.ok) return null;
+  const rows = await response.json() as Array<{
+    id?: unknown;
+    content?: unknown;
+    metadata?: Record<string, unknown> | null;
+  }>;
+  const requiredText = topic === "travel-alternatives"
+    ? "hotel or holiday rentals"
+    : topic === "household-gps" ? "does not collect GPS data" : "Watch Temporarily";
+  const row = rows.find((candidate) => typeof candidate.content === "string" && candidate.content.includes(requiredText));
+  if (!row || typeof row.id !== "string" || typeof row.content !== "string") return null;
+  const metadata = row.metadata ?? {};
+  const citation = {
+    index: 1,
+    chunk_id: row.id,
+    filename: VERIFIED_POLICY_FILENAME,
+    title: typeof metadata.heading === "string" ? metadata.heading : "Netflix Household and travel: verified support facts",
+    source_url: typeof metadata.url === "string" ? metadata.url : null,
+    snippet: row.content,
+  };
+  return {
+    answer: verifiedKnowledgeAnswer(topic),
+    citations: [citation],
+    eventTypes: ["verified_shared_kb_fallback_used"],
+    specialist: selectPrimarySpecialist(message),
+  };
+}
+
 const MULTI_INTENT_QUALITY_TOPICS: Record<SpecialistSelection["domain"], { label: string; terms: string[] }> = {
   billing: { label: "billing", terms: ["billing", "payment", "currency", "charge", "invoice", "membership"] },
   household: { label: "household", terms: ["household", "TV", "home internet"] },
@@ -382,6 +426,25 @@ async function callPublishedAgent(state: typeof State.State) {
   });
   if (groundedRepairedQuality.status === "passed") {
     return { ...repaired, answer: groundedRepairedAnswer, quality: groundedRepairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_structure_preserved_retry"] };
+  }
+
+  const verifiedFallback = await requestVerifiedKnowledgeFallback(state.message);
+  if (verifiedFallback) {
+    const verifiedCitations = await qualityCitations(verifiedFallback.citations);
+    const verifiedQuality = evaluateLiveAnswer({
+      question: state.message,
+      answer: verifiedFallback.answer,
+      citations: verifiedCitations,
+      retryCount: 1,
+      requiredTopics,
+    });
+    if (verifiedQuality.status === "passed") {
+      return {
+        ...verifiedFallback,
+        quality: verifiedQuality,
+        eventTypes: [...repaired.eventTypes, ...verifiedFallback.eventTypes, "live_quality_verified_kb_fallback_passed"],
+      };
+    }
   }
 
   return {
