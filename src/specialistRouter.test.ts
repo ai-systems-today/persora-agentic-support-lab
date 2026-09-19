@@ -42,7 +42,12 @@ describe("published Netflix specialist routing", () => {
       expect.stringContaining("Netflix Household"),
       expect.stringContaining("account-email"),
     ]);
-    expect(tasks).toEqual(tasks.map((task) => expect.stringContaining(original)));
+    expect(tasks[0]).toContain("My billing country");
+    expect(tasks[0]).not.toContain("household TV");
+    expect(tasks[1]).toContain("household TV");
+    expect(tasks[1]).not.toContain("sign-in email");
+    expect(tasks[2]).toContain("original sign-in email are all wrong");
+    expect(tasks[2]).not.toContain("billing country");
   });
 
   it("preserves the original account-email problem for the identity specialist", () => {

@@ -64,5 +64,11 @@ export function specialistTaskMessage(
   multiDomain: boolean,
 ) {
   if (!multiDomain) return originalMessage;
-  return `According to Netflix Help, answer only the ${MULTI_DOMAIN_SCOPES[specialist.domain]} part of this customer request. Preserve the customer's exact problem details and do not answer the other domains: ${originalMessage}`;
+  const signal = domainSignals.find(({ domain }) => domain === specialist.domain)?.expression;
+  const matchingDetails = originalMessage
+    .split(/\s*(?:,|;|\band\b)\s*/i)
+    .map((detail) => detail.trim())
+    .filter((detail) => detail && signal?.test(detail));
+  const scopedDetail = matchingDetails.length ? matchingDetails.join("; ") : originalMessage;
+  return `According to Netflix Help, answer only the ${MULTI_DOMAIN_SCOPES[specialist.domain]} part of this customer request and do not answer the other domains: ${scopedDetail}`;
 }
