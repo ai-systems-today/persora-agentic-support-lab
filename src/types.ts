@@ -88,7 +88,7 @@ export type RuntimeEvidence = {
   protocolEvents?: Array<Record<string, unknown> & { type: string }>;
   quality?: {
     executed: boolean;
-    method: "deterministic-grounding-v3";
+    method: "deterministic-grounding-v5-negative-claim";
     status: "passed" | "failed" | "not-evaluated";
     grounding: number | null;
     citationValidity: number | null;
@@ -167,11 +167,25 @@ export type RuntimeEvidence = {
     };
     ragas: {
       executed: boolean;
-      scope: "benchmark" | "request" | null;
-      version: string | null;
-      sampleCount: number | null;
-      scores: Record<string, number> | null;
-      cases?: Record<string, { question: string; scores: Record<string, number> }>;
+      scope: "request" | null;
+      implementation: "azure-openai-ragas-compatible-v1";
+      evaluatorModel: string | null;
+      evaluatorVersion: "2026-09-19.6";
+      status: "passed" | "failed" | "not-evaluated";
+      referenceId: string | null;
+      metrics: {
+        faithfulness: number | null;
+        responseRelevancy: number | null;
+        contextPrecision: number | null;
+        contextRecall: number | null;
+        factualCorrectness: number | null;
+      };
+      reasons: Partial<Record<"faithfulness" | "responseRelevancy" | "contextPrecision" | "contextRecall" | "factualCorrectness", string>>;
+      unsupportedClaims: string[];
+      relevantContextIndices: number[];
+      inputHashes: { question: string; answer: string; contexts: string } | null;
+      durationMs: number | null;
+      error: string | null;
     };
     agUi: { executed: boolean; version: string; eventCount: number };
     a2a: {
@@ -193,7 +207,6 @@ export type ChatTurn = {
   runId: string | null;
   createdAt: string;
   demoCase: DemoCase | null;
-  ragasCaseId: string | null;
   runtime: RuntimeEvidence;
 };
 

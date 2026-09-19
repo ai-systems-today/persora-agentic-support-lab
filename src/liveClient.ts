@@ -1,5 +1,4 @@
 import type { Citation, RunProgress, RuntimeEvidence } from "./types";
-import ragasBenchmark from "./generated/ragas-evaluation.json";
 
 export const NETFLIX_WIDGET_ID = "6a01cc31-ee9e-4977-aa8c-031894a71851";
 export const PERSORA_CHAT_URL = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
@@ -114,9 +113,6 @@ async function requestAgenticDemo(
   if (buffer.startsWith("data:")) state = applyAgUiPayload(state, buffer.slice(5).trim());
   if (state.streamError) throw new Error(state.streamError);
   if (!state.answer.trim() || !state.evidence) throw new Error("AG-UI stream completed without answer or runtime evidence.");
-  const integrations = state.evidence.integrations
-    ? { ...state.evidence.integrations, ragas: ragasBenchmark as NonNullable<RuntimeEvidence["integrations"]>["ragas"] }
-    : undefined;
   return {
     answer: state.answer.trim(),
     runtime: {
@@ -140,7 +136,7 @@ async function requestAgenticDemo(
       orchestrationProof: state.evidence.orchestrationProof,
       followUps: state.followUps,
       retrieval: state.evidence.retrieval,
-      integrations,
+      integrations: state.evidence.integrations,
     },
   };
 }

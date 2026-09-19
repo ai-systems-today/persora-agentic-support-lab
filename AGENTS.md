@@ -88,13 +88,14 @@ The UI must never present a technology or capability as executed merely because 
 - A human-handoff run must not claim that a refund, cancellation, or account mutation occurred unless the mutation is independently proven.
 - The repository must remain standalone and must not modify or imply changes to LibreChat.
 
-## 8. Per-Question RAGAS Contract
+## 8. Per-Question Evaluation Contract
 
-- Show RAGAS scores only for the exact stable demo-case ID mapped to the current question and its checked-in reference answer.
-- Never reuse one question's scores for another question.
-- Free-form or unmatched live questions must be labeled `Not evaluated`.
+- Every generated knowledge answer must run the server-side exact-run evaluator on that run's question, displayed answer, and retrieved contexts.
+- Never reuse one question's scores, contexts, answer, or reference for another question.
+- Reference-free metrics must execute for free-form questions. Reference-dependent correctness and context-recall metrics must be `Not applicable` unless the exact question has an approved trusted reference.
+- The UI must expose the evaluator implementation, model, version, execution status, and hashes of the exact inputs used.
+- The Python RAGAS release benchmark is CI evidence only and must never populate a live-run metric object.
 - Any metric, input set, reference answer, score, version, or generated artifact change requires evidence and explicit human approval.
-- Keep release-level benchmark averages separate from per-answer evidence.
 
 ## 9. Private-Safe Langfuse Contract
 

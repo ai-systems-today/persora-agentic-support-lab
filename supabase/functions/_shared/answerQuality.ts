@@ -6,7 +6,7 @@ export type QualityCitation = {
 
 export type LiveQuality = {
   executed: boolean;
-  method: "deterministic-grounding-v3";
+  method: "deterministic-grounding-v5-negative-claim";
   status: "passed" | "failed" | "not-evaluated";
   grounding: number | null;
   citationValidity: number | null;
@@ -70,7 +70,27 @@ const citationReferences = (value: string) => Array.from(
 );
 
 const claimSegments = (answer: string) => answer
-  .split(/(?<=[.!?])\s+|\n+/)
+  .split(/\n+/)
+  .flatMap((line) => {
+    if (/^\s{0,3}#{1,6}\s+/.test(line)) return [];
+    const structuralText = line
+      .replace(/^\s{0,3}(?:[-*+]\s+|\d+[.)]\s+)/, "")
+      .replace(/[*_`]/g, "")
+      .trim();
+    if (!structuralText || /:\s*$/.test(structuralText)) return [];
+    return line.split(/(?<=[.!?])\s+/);
+  })
+  .flatMap((sentence) => {
+    const parentReferences = citationReferences(sentence);
+    return sentence
+      .replace(/^\s{0,3}(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)/, "")
+      .split(/\s+(?:but|however|although|while)\s+|\s*;\s*/i)
+      .map((claim) => {
+        const trimmed = claim.trim();
+        if (!trimmed || citationReferences(trimmed).length || !parentReferences.length) return trimmed;
+        return `${trimmed} ${parentReferences.map((reference) => `[#${reference}]`).join(" ")}`;
+      });
+  })
   .map((claim) => claim.trim())
   .filter((claim) => tokens(claim).size >= 3);
 
@@ -78,10 +98,12 @@ const citationSupport = (claim: string, citation: QualityCitation) => {
   const claimTokens = supportTokens(claim);
   const sourceTokens = supportTokens(`${citation.label} ${citation.snippet ?? ""}`);
   const shared = overlap(claimTokens, sourceTokens);
+  const ratio = shared / Math.max(Math.min(claimTokens.size, 8), 1);
+  const negativeClaim = /\b(?:no|not|never|without|doesn(?:'|’)t|isn(?:'|’)t|aren(?:'|’)t|won(?:'|’)t|cannot|can(?:'|’)t)\b/i.test(claim);
   return {
     shared,
-    ratio: shared / Math.max(Math.min(claimTokens.size, 8), 1),
-    supported: shared >= Math.min(3, claimTokens.size) && shared / Math.max(Math.min(claimTokens.size, 8), 1) >= 0.375,
+    ratio,
+    supported: shared >= Math.min(3, claimTokens.size) && ratio >= (negativeClaim ? 0.75 : 0.375),
   };
 };
 
@@ -101,6 +123,10 @@ const appendReference = (claim: string, reference: number) => {
  * 37.5% overlap across the first 8 terms). The model's source wins exact ties.
  */
 export function extractGroundedClaims(answer: string, citations: QualityCitation[]): string {
+  return groundedClaimList(answer, citations).join(" ");
+}
+
+const groundedClaimList = (answer: string, citations: QualityCitation[]): string[] => {
   const grounded: string[] = [];
   for (const claim of claimSegments(answer)) {
     const validReferences = [...new Set(citationReferences(claim))]
@@ -117,12 +143,44 @@ export function extractGroundedClaims(answer: string, citations: QualityCitation
       )[0];
     if (bestSupported) grounded.push(appendReference(claim, bestSupported.reference));
   }
-  return grounded.join(" ");
+  return grounded;
+};
+
+export function extractGroundedMarkdown(answer: string, citations: QualityCitation[]): string {
+  const heading = answer.split(/\n+/)
+    .map((line) => line.trim())
+    .find((line) => /^#{1,6}\s+/.test(line));
+  const claims = groundedClaimList(answer, citations);
+  if (!claims.length) return "";
+  return [heading ?? "## Verified Netflix guidance", "", ...claims.map((claim) => `- ${claim}`)].join("\n");
+}
+
+export function stabilizeGroundedMarkdown(answer: string, citations: QualityCitation[]): string {
+  let current = answer;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const next = extractGroundedMarkdown(current, citations);
+    if (next === current || !next) return next;
+    current = next;
+  }
+  return current;
+}
+
+export function sourceFallbackMarkdown(heading: string, citation: QualityCitation, reference = 1): string {
+  const source = (citation.snippet ?? "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/#{1,6}\s+/g, " ")
+    .replace(/[*_`]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const sentences = source.match(/[^.!?]+[.!?]+/g)?.slice(0, 2).join(" ").trim() ?? source.slice(0, 360).trim();
+  if (!sentences) return "";
+  return [`## ${heading}`, "", `- ${appendReference(sentences, reference)}`].join("\n");
 }
 
 export const notEvaluatedQuality = (reason: string): LiveQuality => ({
   executed: false,
-  method: "deterministic-grounding-v3",
+  method: "deterministic-grounding-v5-negative-claim",
   status: "not-evaluated",
   grounding: null,
   citationValidity: null,
@@ -157,6 +215,9 @@ export function evaluateLiveAnswer(input: {
   const coveredIntentCount = requiredTopics.filter((topic) =>
     topic.terms.some((term) => overlap(answerTokens, tokens(term)) > 0)
   ).length;
+  const missingTopicLabels = requiredTopics.filter((topic) =>
+    !topic.terms.some((term) => overlap(answerTokens, tokens(term)) > 0)
+  ).map((topic) => topic.label);
   const intentCoverage = requiredTopics.length
     ? round(coveredIntentCount / requiredTopics.length)
     : null;
@@ -186,12 +247,12 @@ export function evaluateLiveAnswer(input: {
           : grounding < 1
             ? "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
             : intentCoverage !== null && intentCoverage < 1
-              ? `The answer covered ${coveredIntentCount} of ${requiredTopics.length} required request intents.`
+              ? `The answer covered ${coveredIntentCount} of ${requiredTopics.length} required request intents. Missing: ${missingTopicLabels.join(", ")}.`
               : "The answer did not contain enough of the question's substantive terms."
 
   return {
     executed: true,
-    method: "deterministic-grounding-v3",
+    method: "deterministic-grounding-v5-negative-claim",
     status: passed ? "passed" : "failed",
     grounding,
     citationValidity,

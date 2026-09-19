@@ -65,7 +65,7 @@ export function selectOrchestrationPattern(message: string): RoutingDecision {
   if (domains.length >= 2) {
     return {
       pattern: "group-chat",
-      reason: "The question spans multiple support domains, so an A2A specialist result is gathered before grounded synthesis.",
+      reason: "The question spans multiple support domains, so the matching A2A specialist results are gathered and transparently aggregated.",
       signals: domains,
       confidence: Math.min(0.96, 0.8 + domains.length * 0.05),
     };
