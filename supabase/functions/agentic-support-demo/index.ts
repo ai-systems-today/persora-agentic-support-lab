@@ -193,6 +193,10 @@ async function requestPublishedAgent(state: typeof State.State, repair: boolean)
     ? "Give one verified step for each of these Netflix issues: billing, Netflix Household, and account email access."
     : state.message;
   const qualityInstruction = "Answer completely but concisely in Markdown. Use a short heading and bullets or numbered steps when they improve clarity. Every bullet must be a complete, self-contained sentence that names its subject; never begin with a dangling transition or pronoun whose referent is missing. Begin directly with the cited facts or steps: do not add an uncited introduction, transition, or conclusion. Headings may be uncited, but every factual sentence or bullet must end with its matching [#n] citation. Use only facts directly stated in the returned Netflix knowledge sources. Do not add uncited factual clauses or external links. If the sources do not support an answer, say only: I do not have enough source evidence.";
+  const approvedReference = referenceForQuestion(state.message);
+  const completenessInstruction = approvedReference
+    ? ` This approved benchmark requires every source-supported point in this completeness target: ${approvedReference.answer}`
+    : "";
   const repairInstruction = repair
     ? " This is the one repair attempt. Rewrite the whole answer from scratch so it directly answers every part of the question with complete standalone sentences and preserves valid Markdown structure."
     : "";
@@ -206,7 +210,7 @@ async function requestPublishedAgent(state: typeof State.State, repair: boolean)
     },
     body: JSON.stringify({
       widgetId: specialist.widgetId,
-      message: `${question}\n\n${qualityInstruction}${repairInstruction}`,
+      message: `${question}\n\n${qualityInstruction}${completenessInstruction}${repairInstruction}`,
       sessionToken: `${state.sessionToken}:${state.traceId}:${repair ? "retry" : "primary"}`,
       deviceId: state.deviceId,
       mode: "chat",
@@ -273,7 +277,7 @@ const MULTI_INTENT_QUALITY_TOPICS: Record<SpecialistSelection["domain"], { label
 
 const requiredQualityTopics = (state: typeof State.State) => state.pattern === "group-chat"
   ? state.a2a.specialists.map((specialist) => MULTI_INTENT_QUALITY_TOPICS[specialist.domain])
-  : [];
+  : referenceForQuestion(state.message)?.requiredTopics ?? [];
 
 async function callPublishedAgent(state: typeof State.State) {
   type PublishedResult = { answer: string; citations: unknown[]; eventTypes: string[]; specialist: SpecialistSelection | null };

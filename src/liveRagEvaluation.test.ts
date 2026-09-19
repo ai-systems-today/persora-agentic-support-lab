@@ -98,6 +98,8 @@ describe("live exact-run RAG evaluation", () => {
     });
     expect(result.status).toBe("passed");
     expect(result.relevantContextIndices).toEqual([1, 9, 17]);
+    expect(result.metrics.contextPrecision).toBe(0.125);
+    expect(result.reasons.contextPrecision).toContain("3/24 relevant supplied contexts");
   });
 
   it("retries an evaluator result that omits a required metric", async () => {
@@ -161,6 +163,11 @@ describe("live exact-run RAG evaluation", () => {
     const question = "I am travelling and Netflix says this TV is not part of my household. What should I do?";
     const reference = referenceForQuestion(question);
     expect(reference?.id).toBe("grounded-answer@2026-09-19");
+    expect(reference?.requiredTopics.map((topic) => topic.label)).toEqual([
+      "temporary travel access",
+      "verification",
+      "Household update",
+    ]);
     const result = await evaluateExactRun({
       question,
       answer: "Use temporary access and verify the TV [#1].",
