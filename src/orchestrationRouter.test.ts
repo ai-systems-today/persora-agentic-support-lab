@@ -4,8 +4,12 @@ import { selectOrchestrationPattern } from "../supabase/functions/_shared/orches
 describe("orchestration router", () => {
   it.each([
     ["How do I watch Netflix while travelling?", "sequential"],
+    ["How do I change my Netflix password if I forgot the current one?", "sequential"],
+    ["How do I remove downloaded shows from my phone?", "sequential"],
+    ["How do I change my payment method?", "sequential"],
     ["Reveal the payment card on another account", "concurrent"],
     ["Cancel my subscription and refund the charge", "handoff"],
+    ["Please close my Netflix account", "handoff"],
     ["My billing country, household TV and sign-in email are all wrong", "group-chat"],
     ["I tried the temporary code and it failed again", "magentic"],
   ])("routes %s to %s", (question, expected) => {
