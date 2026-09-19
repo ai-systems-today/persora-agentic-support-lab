@@ -35,11 +35,18 @@ describe("published Netflix specialist routing", () => {
   });
 
   it("decomposes a multi-domain request into focused specialist tasks", () => {
-    const specialists = selectSpecialists("My billing country, household TV and sign-in email are all wrong");
-    expect(specialists.map((specialist) => specialistTaskMessage(specialist, "original", true))).toEqual([
-      expect.stringContaining("billing country"),
+    const original = "My billing country, household TV and original sign-in email are all wrong";
+    const tasks = selectSpecialists(original).map((specialist) => specialistTaskMessage(specialist, original, true));
+    expect(tasks).toEqual([
+      expect.stringContaining("billing-country"),
       expect.stringContaining("Netflix Household"),
-      expect.stringContaining("sign-in password"),
+      expect.stringContaining("account-email"),
     ]);
+    expect(tasks).toEqual(tasks.map((task) => expect.stringContaining(original)));
+  });
+
+  it("preserves the original account-email problem for the identity specialist", () => {
+    const original = "I cannot access my original email";
+    expect(specialistTaskMessage(NETFLIX_SPECIALISTS.identity, original, true)).toContain(original);
   });
 });
