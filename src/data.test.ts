@@ -153,8 +153,8 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain('addNode("exact_run_evaluation"');
     expect(orchestrator).toContain("evaluateExactRun");
     expect(orchestrator).not.toContain("extractGroundedClaims(first.answer");
-    expect(orchestrator).not.toContain("stabilizeGroundedMarkdown");
-    expect(a2a).not.toContain("stabilizeGroundedMarkdown");
+    expect(orchestrator).toContain("live_quality_structure_preserved");
+    expect(a2a).toContain("stabilizeGroundedMarkdown");
   });
 
   it("routes agentic questions to distinct published Persora specialist widgets", () => {

@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { evaluateLiveAnswer, type QualityCitation } from "../_shared/answerQuality.ts";
+import { evaluateLiveAnswer, stabilizeGroundedMarkdown, type QualityCitation } from "../_shared/answerQuality.ts";
 import { citationEvidenceText, normalizeCitationBundle } from "../_shared/citationEvidence.ts";
 import { selectSpecialists, specialistTaskMessage, type SpecialistSelection } from "../_shared/specialistRouter.ts";
 
@@ -112,8 +112,13 @@ async function verifySpecialistResult(result: Awaited<ReturnType<typeof askPubli
   const citations = await qualityCitations(result.citations);
   const answer = result.answer.trim();
   const quality = evaluateLiveAnswer({ question, answer, citations });
-  return answer && domainTerms[result.specialist.domain].test(answer) && quality.status === "passed"
-    ? { ...result, answer }
+  if (answer && domainTerms[result.specialist.domain].test(answer) && quality.status === "passed") {
+    return { ...result, answer };
+  }
+  const groundedAnswer = stabilizeGroundedMarkdown(answer, citations);
+  const groundedQuality = evaluateLiveAnswer({ question, answer: groundedAnswer, citations });
+  return groundedAnswer && domainTerms[result.specialist.domain].test(groundedAnswer) && groundedQuality.status === "passed"
+    ? { ...result, answer: groundedAnswer }
     : null;
 }
 

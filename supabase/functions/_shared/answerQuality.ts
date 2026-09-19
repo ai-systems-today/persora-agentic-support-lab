@@ -79,18 +79,19 @@ const claimSegments = (answer: string) => answer
       .replace(/[*_`]/g, "")
       .trim();
     if (!structuralText || /:\s*$/.test(structuralText)) return [];
-    return line.split(/(?<=[.!?])\s+/);
-  })
-  .flatMap((sentence) => {
-    const parentReferences = citationReferences(sentence);
-    return sentence
-      .replace(/^\s{0,3}(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)/, "")
-      .split(/\s+(?:but|however|although|while)\s+|\s*;\s*/i)
-      .map((claim) => {
-        const trimmed = claim.trim();
-        if (!trimmed || citationReferences(trimmed).length || !parentReferences.length) return trimmed;
-        return `${trimmed} ${parentReferences.map((reference) => `[#${reference}]`).join(" ")}`;
-      });
+    const lineReferences = citationReferences(line);
+    return line.split(/(?<=[.!?])\s+/).flatMap((sentence) => {
+      const sentenceReferences = citationReferences(sentence);
+      const inheritedReferences = sentenceReferences.length ? sentenceReferences : lineReferences;
+      return sentence
+        .replace(/^\s{0,3}(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)/, "")
+        .split(/\s+(?:but|however|although|while)\s+|\s*;\s*/i)
+        .map((claim) => {
+          const trimmed = claim.trim();
+          if (!trimmed || citationReferences(trimmed).length || !inheritedReferences.length) return trimmed;
+          return `${trimmed} ${inheritedReferences.map((reference) => `[#${reference}]`).join(" ")}`;
+        });
+    });
   })
   .map((claim) => claim.trim())
   .filter((claim) => tokens(claim).size >= 3);
@@ -148,12 +149,27 @@ const groundedClaimList = (answer: string, citations: QualityCitation[]): string
 };
 
 export function extractGroundedMarkdown(answer: string, citations: QualityCitation[]): string {
-  const heading = answer.split(/\n+/)
-    .map((line) => line.trim())
-    .find((line) => /^#{1,6}\s+/.test(line));
-  const claims = groundedClaimList(answer, citations);
-  if (!claims.length) return "";
-  return [heading ?? "## Verified Netflix guidance", "", ...claims.map((claim) => `- ${claim}`)].join("\n");
+  let factualLineCount = 0;
+  const lines = answer.split(/\r?\n/).map((line) => {
+    // A previous aggregation bug could append the next specialist heading to the
+    // preceding bullet. Keep the supported text before that marker, but never
+    // expose the malformed inline heading as part of the answer.
+    return line.replace(/\s+#{1,6}\s+.*$/, "").trimEnd();
+  }).filter((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || /^\s{0,3}#{1,6}\s+/.test(line) || /:\s*$/.test(trimmed)) return true;
+    const claims = claimSegments(line);
+    if (!claims.length) return false;
+    const supported = claims.every((claim) => {
+      const references = [...new Set(citationReferences(claim))]
+        .filter((reference) => reference >= 1 && reference <= citations.length);
+      return references.some((reference) => citationSupport(claim, citations[reference - 1]).supported);
+    });
+    if (supported) factualLineCount += 1;
+    return supported;
+  });
+  if (!factualLineCount) return "";
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 export function stabilizeGroundedMarkdown(answer: string, citations: QualityCitation[]): string {
