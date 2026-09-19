@@ -138,19 +138,19 @@ describe("demo evidence", () => {
     expect(app).toContain("Continue this conversation");
   });
 
-  it("validates each published answer, retries once, and fails closed", () => {
+  it("evaluates each published answer without rewriting or replacing it", () => {
     const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
     const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
     const a2a = readFileSync(new URL("../supabase/functions/netflix-specialist-a2a/index.ts", import.meta.url), "utf8");
     expect(orchestrator).toContain("evaluateLiveAnswer");
-    expect(orchestrator).toContain("requestPublishedAgent(state, true)");
-    expect(orchestrator).toContain("This is the one repair attempt");
-    expect(orchestrator).toContain("live_quality_failed_closed");
-    expect(orchestrator).toContain("I couldn’t verify a sufficiently grounded answer");
+    expect(orchestrator).toContain("message: state.message");
+    expect(orchestrator).not.toContain("qualityInstruction");
+    expect(orchestrator).not.toContain("repairInstruction");
     expect(orchestrator).toContain("a2a_required_for_group_chat");
     expect(orchestrator).toContain("not presenting a single-agent fallback as an orchestrated answer");
     expect(orchestrator).toContain("failure.error?.message");
-    expect(app).toContain("Exact-run quality gate");
+    expect(app).toContain("Exact-run quality evaluation");
+    expect(app).toContain("Failed — answer preserved");
     expect(app).toContain("Citation validity");
     expect(app).toContain("Reference-dependent correctness");
     expect(orchestrator).toContain('addNode("exact_run_evaluation"');
@@ -158,14 +158,15 @@ describe("demo evidence", () => {
     expect(orchestrator).not.toContain("extractGroundedClaims(first.answer");
     expect(orchestrator).not.toContain("stabilizeGroundedMarkdown(firstAnswer");
     expect(orchestrator).not.toContain("stabilizeGroundedMarkdown(repairedAnswer");
-    expect(orchestrator).toContain("live_rag_evaluation_repair_passed");
-    expect(orchestrator).toContain("live_rag_evaluation_candidate_rejected");
-    expect(orchestrator).toContain("live_rag_evaluation_unavailable_failed_closed");
-    expect(orchestrator).toContain("The generated candidate failed the live exact-run evaluator");
-    expect(orchestrator).toContain("ragas: ragas.executed ? ragas : notEvaluatedLiveRag(rejectionReason)");
+    expect(orchestrator).toContain("live_rag_evaluation_${ragas.status}_observed");
+    expect(orchestrator).toContain("live_rag_evaluation_unavailable_observed");
+    expect(orchestrator).not.toContain("live_rag_evaluation_repair_passed");
+    expect(orchestrator).not.toContain("live_rag_evaluation_candidate_rejected");
     expect(orchestrator).toContain("executed: ragas.executed");
     expect(orchestrator).toContain("citations: update.citations ?? state.citations");
-    expect(a2a).toContain("stabilizeGroundedMarkdown");
+    expect(a2a).toContain("message,");
+    expect(a2a).not.toContain("qualityInstruction");
+    expect(a2a).not.toContain("repairInstruction");
   });
 
   it("routes agentic questions to distinct published Persora specialist widgets", () => {
@@ -177,7 +178,7 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("specialist: result.specialist");
     expect(a2a).toContain("selectSpecialists(message)");
     expect(a2a).toContain("specialists: result.specialists");
-    expect(a2a).toContain("failed the exact-run quality gate after one repair attempt");
+    expect(a2a).not.toContain("failed the exact-run quality gate after one repair attempt");
     expect(router).toContain('domain: "billing"');
     expect(router).toContain('domain: "household"');
     expect(router).toContain('domain: "identity"');
@@ -199,10 +200,10 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain('action: "concurrent-check"');
     expect(orchestrator).toContain("planRecoveryEvidence(state.message)");
     expect(orchestrator).toContain("state.specialistContext.trim()");
-    expect(orchestrator).toContain("Follow this bounded orchestration plan");
-    expect(orchestrator).toContain("specialistRetrievalHint(state.message)");
-    expect(orchestrator).toContain("requestVerifiedKnowledgeFallback(state.message)");
-    expect(orchestrator).toContain("live_quality_verified_kb_fallback_passed");
+    expect(orchestrator).not.toContain("Follow this bounded orchestration plan");
+    expect(orchestrator).not.toContain("specialistRetrievalHint(state.message)");
+    expect(orchestrator).not.toContain("requestVerifiedKnowledgeFallback(state.message)");
+    expect(orchestrator).not.toContain("live_quality_verified_kb_fallback_passed");
     expect(app).toContain("Pattern execution proof");
     expect(app).toContain("planner decisions");
   });
