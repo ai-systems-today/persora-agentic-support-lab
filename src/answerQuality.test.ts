@@ -227,6 +227,19 @@ describe("exact-run answer quality", () => {
     ].join("\n"));
   });
 
+  it("repairs a wrong citation number while preserving Markdown structure", () => {
+    const returned = [
+      { label: "Identity checks", url: null, snippet: "Confirm important account changes with a security code." },
+      { label: "Account recovery", url: null, snippet: "Recover a Netflix account without the registered email by providing billing information online." },
+    ];
+    expect(extractGroundedMarkdown(
+      "## Account recovery\n\n1. Recover your Netflix account without the registered email by providing billing information online [#1].",
+      returned,
+    )).toBe(
+      "## Account recovery\n\n1. Recover your Netflix account without the registered email by providing billing information online [#2].",
+    );
+  });
+
   it("preserves complete numbered steps when a citation applies to the whole line", () => {
     const travelCitations = [
       {

@@ -155,19 +155,26 @@ export function extractGroundedMarkdown(answer: string, citations: QualityCitati
     // preceding bullet. Keep the supported text before that marker, but never
     // expose the malformed inline heading as part of the answer.
     return line.replace(/\s+#{1,6}\s+.*$/, "").trimEnd();
-  }).filter((line) => {
+  }).map((line) => {
     const trimmed = line.trim();
-    if (!trimmed || /^\s{0,3}#{1,6}\s+/.test(line) || /:\s*$/.test(trimmed)) return true;
+    if (!trimmed || /^\s{0,3}#{1,6}\s+/.test(line) || /:\s*$/.test(trimmed)) return line;
     const claims = claimSegments(line);
-    if (!claims.length) return false;
-    const supported = claims.every((claim) => {
+    if (!claims.length) return null;
+    const existingReferencesSupportEveryClaim = claims.every((claim) => {
       const references = [...new Set(citationReferences(claim))]
         .filter((reference) => reference >= 1 && reference <= citations.length);
       return references.some((reference) => citationSupport(claim, citations[reference - 1]).supported);
     });
-    if (supported) factualLineCount += 1;
-    return supported;
-  });
+    if (existingReferencesSupportEveryClaim) {
+      factualLineCount += 1;
+      return line;
+    }
+    const grounded = groundedClaimList(line, citations);
+    if (grounded.length !== claims.length) return null;
+    factualLineCount += 1;
+    const prefix = line.match(/^\s{0,3}(?:[-*+]\s+|\d+[.)]\s+)/)?.[0] ?? "";
+    return `${prefix}${grounded.join(" ")}`;
+  }).filter((line): line is string => line !== null);
   if (!factualLineCount) return "";
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
