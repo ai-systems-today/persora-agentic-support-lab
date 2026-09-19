@@ -190,6 +190,9 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
       if (missingMetrics.length) {
         throw new Error(`Azure evaluator omitted required metrics: ${missingMetrics.join(", ")}`);
       }
+      if (metrics.faithfulness === null || metrics.responseRelevancy === null || metrics.contextPrecision === null) {
+        throw new Error("Azure evaluator omitted a required live metric");
+      }
       const unsupportedClaims = Array.isArray(parsed.unsupportedClaims)
         ? parsed.unsupportedClaims.filter((value): value is string => typeof value === "string").slice(0, 20)
         : [];
