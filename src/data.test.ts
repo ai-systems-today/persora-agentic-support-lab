@@ -193,6 +193,8 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("state.specialistContext.trim()");
     expect(orchestrator).toContain("Follow this bounded orchestration plan");
     expect(orchestrator).toContain("specialistRetrievalHint(state.message)");
+    expect(orchestrator).toContain("requestVerifiedKnowledgeFallback(state.message)");
+    expect(orchestrator).toContain("live_quality_verified_kb_fallback_passed");
     expect(app).toContain("Pattern execution proof");
     expect(app).toContain("planner decisions");
   });
