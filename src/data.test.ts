@@ -151,6 +151,10 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("failure.error?.message");
     expect(app).toContain("Exact-run quality evaluation");
     expect(app).toContain("Failed — answer preserved");
+    expect(app).toContain("Sources used (format check failed)");
+    expect(app).toContain("Failed · answer preserved · Runtime-proven");
+    expect(app).not.toContain("Sources checked (answer withheld)");
+    expect(app).not.toContain("Failed closed · Runtime-proven");
     expect(app).toContain("Citation validity");
     expect(app).toContain("Reference-dependent correctness");
     expect(orchestrator).toContain('addNode("exact_run_evaluation"');

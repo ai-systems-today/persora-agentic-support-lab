@@ -122,7 +122,7 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
                   </ReactMarkdown>
                 </div>
                 {turn.runtime.citations.length > 0 && <div className="citations">
-                  <strong>{turn.runtime.quality?.status === "failed" ? "Sources checked (answer withheld)" : "Sources used"}</strong>
+                  <strong>{turn.runtime.quality?.status === "failed" ? "Sources used (format check failed)" : "Sources used"}</strong>
                   <div>{turn.runtime.citations.map((citation, index) => <article key={`${citation.url ?? citation.label}-${index}`}>
                     {citation.url
                       ? <a href={citation.url} target="_blank" rel="noreferrer">{index + 1}. {citation.label}</a>
@@ -263,7 +263,7 @@ function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
   const qualityLabel = turn.runtime.quality?.status === "passed"
     ? "Passed · Runtime-proven"
     : turn.runtime.quality?.status === "failed"
-      ? "Failed closed · Runtime-proven"
+      ? "Failed · answer preserved · Runtime-proven"
       : "Not evaluated";
   const [selectedNodeId, setSelectedNodeId] = useState(nodes[0]?.id ?? "");
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? nodes[0];
