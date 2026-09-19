@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { sourceFallbackMarkdown, stabilizeGroundedMarkdown, type QualityCitation } from "../_shared/answerQuality.ts";
+import { evaluateLiveAnswer, type QualityCitation } from "../_shared/answerQuality.ts";
 import { citationEvidenceText, normalizeCitationBundle } from "../_shared/citationEvidence.ts";
 import { selectSpecialists, specialistTaskMessage, type SpecialistSelection } from "../_shared/specialistRouter.ts";
 
@@ -27,8 +27,11 @@ function applySsePayload(state: { answer: string; citations: unknown[] }, payloa
   if (typeof first?.delta?.content === "string") state.answer += first.delta.content;
 }
 
-async function askPublishedSpecialist(specialist: SpecialistSelection, message: string, taskId: string) {
-  const qualityInstruction = "Answer completely but concisely in Markdown for your assigned support domain. Use a short heading and bullets or numbered steps when useful. Begin directly with the cited facts or steps: do not add an uncited introduction, transition, or conclusion. Headings may be uncited, but every factual sentence or bullet must end with its matching [#n] citation. Use only facts directly stated in the returned Netflix knowledge sources. Do not add uncited factual clauses or external links. If the sources do not support an answer, say only: I do not have enough source evidence.";
+async function askPublishedSpecialist(specialist: SpecialistSelection, message: string, taskId: string, repair: boolean) {
+  const qualityInstruction = "Answer completely but concisely in Markdown for your assigned support domain. Use a short heading and bullets or numbered steps when useful. Every bullet must be a complete, self-contained sentence that names its subject; never begin with a dangling transition or pronoun whose referent is missing. Begin directly with the cited facts or steps: do not add an uncited introduction, transition, or conclusion. Headings may be uncited, but every factual sentence or bullet must end with its matching [#n] citation. Use only facts directly stated in the returned Netflix knowledge sources. Do not add uncited factual clauses or external links. If the sources do not support an answer, say only: I do not have enough source evidence.";
+  const repairInstruction = repair
+    ? " This is the one repair attempt. Rewrite the whole answer from scratch so it directly answers the assigned question with complete standalone sentences and preserves valid Markdown structure."
+    : "";
   const response = await fetch(UPSTREAM, {
     method: "POST",
     headers: {
@@ -38,7 +41,7 @@ async function askPublishedSpecialist(specialist: SpecialistSelection, message: 
     },
     body: JSON.stringify({
       widgetId: specialist.widgetId,
-      message: `${message}\n\n${qualityInstruction}`,
+      message: `${message}\n\n${qualityInstruction}${repairInstruction}`,
       sessionToken: `a2a-${taskId}`,
       deviceId: `a2a-${taskId}`,
       mode: "chat",
@@ -105,16 +108,13 @@ const domainTerms: Record<SpecialistSelection["domain"], RegExp> = {
   general: /\b(netflix|support|account)\b/i,
 };
 
-async function groundSpecialistResult(result: Awaited<ReturnType<typeof askPublishedSpecialist>>) {
+async function verifySpecialistResult(result: Awaited<ReturnType<typeof askPublishedSpecialist>>, question: string) {
   const citations = await qualityCitations(result.citations);
-  let answer = stabilizeGroundedMarkdown(result.answer, citations);
-  if (!answer || !domainTerms[result.specialist.domain].test(answer)) {
-    answer = citations[0]
-      ? sourceFallbackMarkdown(`${result.specialist.agentName} · verified source`, citations[0], 1)
-      : "";
-  }
-  if (!answer) throw new Error(`Published ${result.specialist.domain} specialist returned no verifiable source statement`);
-  return { ...result, answer };
+  const answer = result.answer.trim();
+  const quality = evaluateLiveAnswer({ question, answer, citations });
+  return answer && domainTerms[result.specialist.domain].test(answer) && quality.status === "passed"
+    ? { ...result, answer }
+    : null;
 }
 
 function shiftCitationReferences(answer: string, offset: number) {
@@ -124,14 +124,22 @@ function shiftCitationReferences(answer: string, offset: number) {
 async function askSpecialistTask(message: string, taskId: string) {
   const specialists = selectSpecialists(message);
   const multiDomain = specialists.length > 1;
-  const rawResults = await Promise.all(specialists.map((specialist, index) =>
-    askPublishedSpecialist(
-      specialist,
-      specialistTaskMessage(specialist, message, multiDomain),
-      `${taskId}-${index + 1}`,
-    )
-  ));
-  const results = await Promise.all(rawResults.map(groundSpecialistResult));
+  const results = await Promise.all(specialists.map(async (specialist, index) => {
+    const question = specialistTaskMessage(specialist, message, multiDomain);
+    const specialistTaskId = `${taskId}-${index + 1}`;
+    let first: Awaited<ReturnType<typeof askPublishedSpecialist>> | null = null;
+    try {
+      first = await askPublishedSpecialist(specialist, question, specialistTaskId, false);
+    } catch {
+      first = null;
+    }
+    const firstVerified = first ? await verifySpecialistResult(first, question) : null;
+    if (firstVerified) return firstVerified;
+    const repaired = await askPublishedSpecialist(specialist, question, `${specialistTaskId}-retry`, true);
+    const repairedVerified = await verifySpecialistResult(repaired, question);
+    if (repairedVerified) return repairedVerified;
+    throw new Error(`Published ${specialist.domain} specialist failed the exact-run quality gate after one repair attempt`);
+  }));
   let offset = 0;
   const answers: string[] = [];
   const citations: unknown[] = [];

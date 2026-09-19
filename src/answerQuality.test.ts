@@ -21,7 +21,7 @@ describe("exact-run answer quality", () => {
       citationValidity: 1,
       retryCount: 0,
     });
-    expect(quality.answerRelevance).toBeGreaterThanOrEqual(0.2);
+    expect(quality.answerRelevance).toBeGreaterThanOrEqual(0.5);
   });
 
   it("fails an answer that references a source number that was not returned", () => {
@@ -153,6 +153,23 @@ describe("exact-run answer quality", () => {
     expect(quality).toMatchObject({ status: "passed", claimCount: 1, supportedClaimCount: 1 });
   });
 
+  it("rejects a cited answer that mentions too little of the actual question", () => {
+    const quality = evaluateLiveAnswer({
+      question: "I am travelling and Netflix says this TV is not part of my household. What should I do?",
+      answer: [
+        "## Steps to access Netflix while travelling",
+        "- This is typically done from a TV connected to your home internet [#1].",
+        "- Available shows can differ by country [#2].",
+      ].join("\n"),
+      citations: [
+        { label: "Netflix Household", url: null, snippet: "Update a Netflix Household from a TV connected to the home internet." },
+        { label: "Using Netflix outside your home", url: null, snippet: "Available shows can differ by country while travelling." },
+      ],
+    });
+    expect(quality.answerRelevance).toBeLessThan(0.5);
+    expect(quality.status).toBe("failed");
+  });
+
   it("keeps correctness null and non-answer routes explicitly not evaluated", () => {
     expect(notEvaluatedQuality("guardrail blocked")).toMatchObject({
       executed: false,
@@ -186,7 +203,7 @@ describe("exact-run answer quality", () => {
     expect(quality.reason).toContain("Missing: household, identity");
   });
 
-  it("removes headings, filler, and uncited sentences before live display", () => {
+  it("can extract cited diagnostic claims without changing the displayed answer", () => {
     const answer = [
       "## Household help",
       "Here are the steps:",
@@ -198,7 +215,7 @@ describe("exact-run answer quality", () => {
     );
   });
 
-  it("preserves a heading and bullet formatting while removing an unsupported claim", () => {
+  it("can build a diagnostic grounded Markdown candidate", () => {
     const answer = [
       "## Household help",
       "- Update your Netflix Household from a TV connected to your home internet [#1].",

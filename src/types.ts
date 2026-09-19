@@ -170,7 +170,7 @@ export type RuntimeEvidence = {
       scope: "request" | null;
       implementation: "azure-openai-ragas-compatible-v1";
       evaluatorModel: string | null;
-      evaluatorVersion: "2026-09-19.6";
+      evaluatorVersion: "2026-09-19.7";
       status: "passed" | "failed" | "not-evaluated";
       referenceId: string | null;
       metrics: {

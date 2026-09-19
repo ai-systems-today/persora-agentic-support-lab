@@ -38,6 +38,7 @@ const SUPPORT_STOP_WORDS = new Set([
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
 const round = (value: number) => Math.round(clamp(value) * 1000) / 1000;
+const MIN_ANSWER_RELEVANCE = 0.5;
 const normalizeToken = (token: string) => {
   if (/^travell?ing$/.test(token)) return "travel";
   if (token.length > 4 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
@@ -234,7 +235,7 @@ export function evaluateLiveAnswer(input: {
 
   const grounding = round(supportedClaimCount / Math.max(claims.length, 1));
   const passed = input.answer.trim().length > 0 && input.citations.length > 0 &&
-    uniqueReferences.length > 0 && citationValidity === 1 && grounding === 1 && answerRelevance >= 0.2 &&
+    uniqueReferences.length > 0 && citationValidity === 1 && grounding === 1 && answerRelevance >= MIN_ANSWER_RELEVANCE &&
     (intentCoverage === null || intentCoverage === 1);
   const reason = passed
     ? "Every substantive claim links to an existing source number, shares substantive terms with that source text, and the answer addresses the question."
