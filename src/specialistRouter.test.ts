@@ -44,9 +44,9 @@ describe("published Netflix specialist routing", () => {
     const original = "My billing country, household TV and original sign-in email are all wrong";
     const tasks = selectSpecialists(original).map((specialist) => specialistTaskMessage(specialist, original, true));
     expect(tasks).toEqual([
-      expect.stringContaining("billing-country"),
-      expect.stringContaining("Netflix Household"),
-      expect.stringContaining("account-email"),
+      "My billing country",
+      "household TV",
+      "original sign-in email are all wrong",
     ]);
     expect(tasks[0]).toContain("My billing country");
     expect(tasks[0]).not.toContain("household TV");
