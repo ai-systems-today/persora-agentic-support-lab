@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { evaluateLiveAnswer, stabilizeGroundedMarkdown, type QualityCitation } from "../_shared/answerQuality.ts";
 import { citationEvidenceText, normalizeCitationBundle } from "../_shared/citationEvidence.ts";
-import { selectSpecialists, specialistTaskMessage, type SpecialistSelection } from "../_shared/specialistRouter.ts";
+import { selectSpecialists, specialistEvaluationQuestion, specialistTaskMessage, type SpecialistSelection } from "../_shared/specialistRouter.ts";
 
 const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
 const AGENT_URL = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
@@ -131,6 +131,7 @@ async function askSpecialistTask(message: string, taskId: string) {
   const multiDomain = specialists.length > 1;
   const results = await Promise.all(specialists.map(async (specialist, index) => {
     const question = specialistTaskMessage(specialist, message, multiDomain);
+    const evaluationQuestion = specialistEvaluationQuestion(specialist, message, multiDomain);
     const specialistTaskId = `${taskId}-${index + 1}`;
     let first: Awaited<ReturnType<typeof askPublishedSpecialist>> | null = null;
     try {
@@ -138,10 +139,10 @@ async function askSpecialistTask(message: string, taskId: string) {
     } catch {
       first = null;
     }
-    const firstVerified = first ? await verifySpecialistResult(first, question) : null;
+    const firstVerified = first ? await verifySpecialistResult(first, evaluationQuestion) : null;
     if (firstVerified) return firstVerified;
     const repaired = await askPublishedSpecialist(specialist, question, `${specialistTaskId}-retry`, true);
-    const repairedVerified = await verifySpecialistResult(repaired, question);
+    const repairedVerified = await verifySpecialistResult(repaired, evaluationQuestion);
     if (repairedVerified) return repairedVerified;
     throw new Error(`Published ${specialist.domain} specialist failed the exact-run quality gate after one repair attempt`);
   }));
