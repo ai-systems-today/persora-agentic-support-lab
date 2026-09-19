@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { evaluateLiveAnswer } from "../supabase/functions/_shared/answerQuality";
-import { verifiedKnowledgeAnswer, verifiedKnowledgeRequiredText, verifiedKnowledgeTopic } from "../supabase/functions/_shared/verifiedKnowledgeFallback";
+import { passesQuestionSpecificAnswerContract, verifiedKnowledgeAnswer, verifiedKnowledgeRequiredText, verifiedKnowledgeTopic } from "../supabase/functions/_shared/verifiedKnowledgeFallback";
 
 const chunkOne = `# Netflix Household and travel: verified support facts
 ## Temporary access while traveling
@@ -45,5 +45,21 @@ describe("verified shared-KB fallback", () => {
 
   it("does not activate for an unrelated billing question", () => {
     expect(verifiedKnowledgeTopic("How do I review a billing charge?")).toBeNull();
+  });
+
+  it("requires a direct GPS denial instead of accepting an implied answer", () => {
+    const question = "Does Netflix use GPS to decide which devices belong to my Netflix Household?";
+    expect(passesQuestionSpecificAnswerContract(
+      question,
+      "Netflix relies on IP addresses, device IDs, and account activity.",
+    )).toBe(false);
+    expect(passesQuestionSpecificAnswerContract(
+      question,
+      "Netflix does not collect GPS data to determine a device's precise physical location.",
+    )).toBe(true);
+    expect(passesQuestionSpecificAnswerContract(
+      "How do I review a billing charge?",
+      "Review the charge in billing history.",
+    )).toBe(true);
   });
 });
