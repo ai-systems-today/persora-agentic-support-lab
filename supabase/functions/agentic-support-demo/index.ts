@@ -6,7 +6,7 @@ import { evaluateExactRun, notEvaluatedLiveRag, referenceForQuestion, type LiveR
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
 import { selectPrimarySpecialist, specialistRetrievalHint, type SpecialistSelection } from "../_shared/specialistRouter.ts";
-import { verifiedKnowledgeAnswer, verifiedKnowledgeRequiredText, verifiedKnowledgeTopic } from "../_shared/verifiedKnowledgeFallback.ts";
+import { passesQuestionSpecificAnswerContract, verifiedKnowledgeAnswer, verifiedKnowledgeRequiredText, verifiedKnowledgeTopic } from "../_shared/verifiedKnowledgeFallback.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://ai-systems-today.github.io",
@@ -363,7 +363,7 @@ async function callPublishedAgent(state: typeof State.State) {
       retryCount: 0,
       requiredTopics,
     });
-    if (firstQuality.status === "passed") {
+    if (firstQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, firstAnswer)) {
       return { ...first, answer: firstAnswer, quality: firstQuality, eventTypes: [...first.eventTypes, "live_quality_passed"] };
     }
     const groundedAnswer = stabilizeGroundedMarkdown(firstAnswer, firstCitations);
@@ -374,7 +374,7 @@ async function callPublishedAgent(state: typeof State.State) {
       retryCount: 0,
       requiredTopics,
     });
-    if (groundedQuality.status === "passed") {
+    if (groundedQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, groundedAnswer)) {
       return { ...first, answer: groundedAnswer, quality: groundedQuality, eventTypes: [...first.eventTypes, "live_quality_structure_preserved"] };
     }
     if (state.pattern === "group-chat") {
@@ -410,7 +410,7 @@ async function callPublishedAgent(state: typeof State.State) {
     retryCount: 1,
     requiredTopics,
   });
-  if (repairedQuality.status === "passed") {
+  if (repairedQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, repairedAnswer)) {
     return { ...repaired, answer: repairedAnswer, quality: repairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_retry_passed"] };
   }
 
@@ -422,7 +422,7 @@ async function callPublishedAgent(state: typeof State.State) {
     retryCount: 1,
     requiredTopics,
   });
-  if (groundedRepairedQuality.status === "passed") {
+  if (groundedRepairedQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, groundedRepairedAnswer)) {
     return { ...repaired, answer: groundedRepairedAnswer, quality: groundedRepairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_structure_preserved_retry"] };
   }
 
@@ -436,7 +436,7 @@ async function callPublishedAgent(state: typeof State.State) {
       retryCount: 1,
       requiredTopics,
     });
-    if (verifiedQuality.status === "passed") {
+    if (verifiedQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, verifiedFallback.answer)) {
       return {
         ...verifiedFallback,
         quality: verifiedQuality,
