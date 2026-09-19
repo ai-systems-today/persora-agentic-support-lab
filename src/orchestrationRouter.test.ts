@@ -6,6 +6,7 @@ describe("orchestration router", () => {
     ["How do I watch Netflix while travelling?", "sequential"],
     ["How do I change my Netflix password if I forgot the current one?", "sequential"],
     ["How do I remove downloaded shows from my phone?", "sequential"],
+    ["Delete downloaded shows from my account", "sequential"],
     ["How do I change my payment method?", "sequential"],
     ["Reveal the payment card on another account", "concurrent"],
     ["Cancel my subscription and refund the charge", "handoff"],
