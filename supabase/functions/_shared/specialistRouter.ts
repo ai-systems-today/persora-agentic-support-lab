@@ -44,7 +44,7 @@ export const NETFLIX_SPECIALISTS: Record<SpecialistDomain, SpecialistSelection> 
 const domainSignals: Array<{ domain: Exclude<SpecialistDomain, "general">; expression: RegExp }> = [
   { domain: "billing", expression: /\b(bill(?:ed|ing)?|payment|invoice|charge|refund|currency|billing country|payment method)\b/i },
   { domain: "household", expression: /\b(household|travel|travelling|temporary access|temporary code|device|tv|location|moving)\b/i },
-  { domain: "identity", expression: /\b(email|phone|sign[ -]?in|login|password|account access|verification|security|unauthori[sz]ed)\b/i },
+  { domain: "identity", expression: /\b(email|phone|sign[ -]?in|login|password|account access|security|unauthori[sz]ed)\b/i },
 ];
 
 export function selectSpecialists(message: string): SpecialistSelection[] {
@@ -58,7 +58,7 @@ export function selectPrimarySpecialist(message: string): SpecialistSelection {
   return selectSpecialists(message)[0];
 }
 
-export function specialistTaskMessage(
+export function specialistEvaluationQuestion(
   specialist: SpecialistSelection,
   originalMessage: string,
   multiDomain: boolean,
@@ -69,6 +69,15 @@ export function specialistTaskMessage(
     .split(/\s*(?:,|;|\band\b)\s*/i)
     .map((detail) => detail.trim())
     .filter((detail) => detail && signal?.test(detail));
-  const scopedDetail = matchingDetails.length ? matchingDetails.join("; ") : originalMessage;
+  return matchingDetails.length ? matchingDetails.join("; ") : originalMessage;
+}
+
+export function specialistTaskMessage(
+  specialist: SpecialistSelection,
+  originalMessage: string,
+  multiDomain: boolean,
+) {
+  if (!multiDomain) return originalMessage;
+  const scopedDetail = specialistEvaluationQuestion(specialist, originalMessage, multiDomain);
   return `According to Netflix Help, answer only the ${MULTI_DOMAIN_SCOPES[specialist.domain]} part of this customer request and do not answer the other domains: ${scopedDetail}`;
 }

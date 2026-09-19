@@ -3,6 +3,7 @@ import {
   NETFLIX_SPECIALISTS,
   selectPrimarySpecialist,
   selectSpecialists,
+  specialistEvaluationQuestion,
   specialistTaskMessage,
 } from "../supabase/functions/_shared/specialistRouter";
 
@@ -30,6 +31,10 @@ describe("published Netflix specialist routing", () => {
     expect(specialists.map(({ domain }) => domain)).toEqual(["billing", "household", "identity"]);
   });
 
+  it("does not misroute Household verification as a separate identity issue", () => {
+    expect(selectSpecialists("My household verification fails").map(({ domain }) => domain)).toEqual(["household"]);
+  });
+
   it("uses the existing general support agent only when no specialist domain matches", () => {
     expect(selectPrimarySpecialist("What Netflix help is available?")).toEqual(NETFLIX_SPECIALISTS.general);
   });
@@ -53,5 +58,15 @@ describe("published Netflix specialist routing", () => {
   it("preserves the original account-email problem for the identity specialist", () => {
     const original = "I cannot access my original email";
     expect(specialistTaskMessage(NETFLIX_SPECIALISTS.identity, original, true)).toContain(original);
+  });
+
+  it("scores each specialist against only its matching customer clause", () => {
+    const original = "My account is billed in another country, household verification fails, and I cannot access my original email";
+    const specialists = selectSpecialists(original);
+    expect(specialists.map((specialist) => specialistEvaluationQuestion(specialist, original, true))).toEqual([
+      "My account is billed in another country",
+      "household verification fails",
+      "I cannot access my original email",
+    ]);
   });
 });
