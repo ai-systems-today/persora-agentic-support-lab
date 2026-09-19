@@ -223,9 +223,51 @@ describe("exact-run answer quality", () => {
     ].join("\n");
     expect(extractGroundedMarkdown(answer, citations)).toBe([
       "## Household help",
-      "",
       "- Update your Netflix Household from a TV connected to your home internet [#1].",
     ].join("\n"));
+  });
+
+  it("preserves complete numbered steps when a citation applies to the whole line", () => {
+    const travelCitations = [
+      {
+        label: "Netflix Household on a TV",
+        url: null,
+        snippet: "A TV outside your Netflix Household is not recognized as part of the account's main location. Sign in to Netflix on the TV with your account credentials.",
+      },
+      {
+        label: "Using Netflix while traveling",
+        url: null,
+        snippet: "You can use Netflix while traveling on mobile devices and computers.",
+      },
+      {
+        label: "Update your Netflix Household",
+        url: null,
+        snippet: "If you move, update your Netflix Household from a TV connected to the internet at the new location.",
+      },
+    ];
+    const answer = [
+      "## Steps to Use Netflix While Traveling",
+      "",
+      "1. Sign into Netflix on the TV using your account credentials. If the TV is outside your Netflix Household, it will not be recognized as part of your account's main location [#1].",
+      "2. Watch Netflix on mobile devices or computers while traveling [#2].",
+      "3. You never need to update your Household while traveling [#2].",
+      "4. If you permanently move, update your Netflix Household from a TV connected to the internet at your new location [#3].",
+      "",
+      "Contact support if the issue continues.",
+    ].join("\n");
+
+    const stable = stabilizeGroundedMarkdown(answer, travelCitations);
+    expect(stable).toContain("1. Sign into Netflix on the TV using your account credentials. If the TV is outside your Netflix Household");
+    expect(stable).toContain("2. Watch Netflix on mobile devices or computers while traveling [#2].");
+    expect(stable).toContain("4. If you permanently move");
+    expect(stable).not.toContain("3. You never need");
+    expect(stable).not.toContain("Contact support");
+    expect(stable).not.toContain("- If the TV");
+    expect(evaluateLiveAnswer({
+      question: "I am traveling and this TV is outside my Netflix Household. What should I do?",
+      answer: stable,
+      citations: travelCitations,
+    }).status).toBe("passed");
   });
 
   it("converges malformed aggregated Markdown before it is accepted", () => {

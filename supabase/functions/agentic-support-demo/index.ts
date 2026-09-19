@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { Annotation, END, START, StateGraph } from "npm:@langchain/langgraph@1.4.15";
-import { evaluateLiveAnswer, notEvaluatedQuality, type LiveQuality, type QualityCitation } from "../_shared/answerQuality.ts";
+import { evaluateLiveAnswer, notEvaluatedQuality, stabilizeGroundedMarkdown, type LiveQuality, type QualityCitation } from "../_shared/answerQuality.ts";
 import { citationEvidenceText, normalizeCitationBundle } from "../_shared/citationEvidence.ts";
 import { evaluateExactRun, notEvaluatedLiveRag, referenceForQuestion, type LiveRagEvaluation } from "../_shared/liveRagEvaluation.ts";
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
@@ -305,6 +305,17 @@ async function callPublishedAgent(state: typeof State.State) {
     if (firstQuality.status === "passed") {
       return { ...first, answer: firstAnswer, quality: firstQuality, eventTypes: [...first.eventTypes, "live_quality_passed"] };
     }
+    const groundedAnswer = stabilizeGroundedMarkdown(firstAnswer, firstCitations);
+    const groundedQuality = evaluateLiveAnswer({
+      question: state.message,
+      answer: groundedAnswer,
+      citations: firstCitations,
+      retryCount: 0,
+      requiredTopics,
+    });
+    if (groundedQuality.status === "passed") {
+      return { ...first, answer: groundedAnswer, quality: groundedQuality, eventTypes: [...first.eventTypes, "live_quality_structure_preserved"] };
+    }
     if (state.pattern === "group-chat") {
       return {
         answer: "I couldn’t verify a source-backed answer for every part of this multi-topic request, so I’m not presenting a partial answer as complete. Please ask the billing, Household, and sign-in questions separately or use authenticated Netflix Support.",
@@ -340,6 +351,18 @@ async function callPublishedAgent(state: typeof State.State) {
   });
   if (repairedQuality.status === "passed") {
     return { ...repaired, answer: repairedAnswer, quality: repairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_retry_passed"] };
+  }
+
+  const groundedRepairedAnswer = stabilizeGroundedMarkdown(repairedAnswer, repairedCitations);
+  const groundedRepairedQuality = evaluateLiveAnswer({
+    question: state.message,
+    answer: groundedRepairedAnswer,
+    citations: repairedCitations,
+    retryCount: 1,
+    requiredTopics,
+  });
+  if (groundedRepairedQuality.status === "passed") {
+    return { ...repaired, answer: groundedRepairedAnswer, quality: groundedRepairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_structure_preserved_retry"] };
   }
 
   return {
