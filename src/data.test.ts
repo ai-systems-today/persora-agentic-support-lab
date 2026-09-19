@@ -190,6 +190,9 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("executeRemoteConcurrentCheck");
     expect(orchestrator).toContain('action: "concurrent-check"');
     expect(orchestrator).toContain("planRecoveryEvidence(state.message)");
+    expect(orchestrator).toContain("state.specialistContext.trim()");
+    expect(orchestrator).toContain("Follow this bounded orchestration plan");
+    expect(orchestrator).toContain("specialistRetrievalHint(state.message)");
     expect(app).toContain("Pattern execution proof");
     expect(app).toContain("planner decisions");
   });
