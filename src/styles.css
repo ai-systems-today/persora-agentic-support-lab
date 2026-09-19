@@ -97,9 +97,11 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
 .follow-ups button span { color: var(--mint); margin-left: 6px; }
 .citations { margin-top: 10px; border: 1px solid #233c5a; background: #0a1829; border-radius: 12px; padding: 12px 14px; }
 .citations > strong { display: block; color: #7890ad; text-transform: uppercase; letter-spacing: .1em; font-size: 9px; margin-bottom: 8px; }
-.citations > div { display: flex; flex-wrap: wrap; gap: 7px; }
-.citations a, .citations span { color: #a9cfff; text-decoration: none; border: 1px solid #2f5279; border-radius: 99px; padding: 6px 9px; font-size: 10px; }
+.citations > div { display: grid; gap: 8px; }
+.citations a, .citations span { width: fit-content; color: #a9cfff; text-decoration: none; border: 1px solid #2f5279; border-radius: 99px; padding: 6px 9px; font-size: 10px; }
 .citations a:hover { background: #132e4d; }
+.citations article { display: grid; gap: 4px; }
+.citations article small { color: #8fa6c1; line-height: 1.45; }
 .composer-dock { position: sticky; bottom: 18px; z-index: 8; margin-top: 34px; border: 1px solid #2a4262; background: rgba(8, 18, 31, .96); backdrop-filter: blur(18px); border-radius: 16px; box-shadow: 0 24px 70px #0009; overflow: hidden; }
 .answer-source-bar { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 12px 14px; border-bottom: 1px solid #203753; background: #0a192b; }
 .composer-dock.live .answer-source-bar { background: linear-gradient(90deg, #0a1f26, #0a192b 58%); box-shadow: inset 3px 0 var(--mint); }

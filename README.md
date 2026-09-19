@@ -21,7 +21,7 @@ An interview-ready, evidence-first Netflix support demonstration. The applicatio
 - Distinct sequential, concurrent privacy-check, A2A group-specialist, human-handoff, and bounded revise-or-finish recovery execution paths, each with exact-run proof.
 - Distinct published Billing, Household & Travel, and Account Access & Security Persora agents. Each has its own agent ID, prompt and widget ID while sharing the same Netflix Help knowledge corpus; every agentic run returns the exact specialist identities it executed.
 - An exact-run deterministic quality gate for published answers: citation-index validity, lexical grounding, answer relevance and multi-intent coverage. It retries single-agent answers once with stricter citation instructions and fails closed instead of displaying an unverifiable or incomplete generated answer.
-- A pinned, server-side RAGAS contract benchmark that is explicitly separated from per-answer evidence.
+- A live, exact-run, RAGAS-compatible evaluator for every generated knowledge answer, plus a pinned Python RAGAS release benchmark that remains explicitly separate.
 - Progressive run status while LangGraph nodes execute, contextual follow-up questions, a selectable orchestration canvas, and a node inspector backed by that run's trace.
 - A sanitized public trace projection that exposes route reasoning, nodes, timings, protocol-event counts and citation counts without exposing the private Langfuse console or credentials.
 - Ranked retrieval evidence derived from the exact citations returned by the existing Persora KB path; no second vector database is implied.
@@ -76,11 +76,12 @@ Current execution truth:
 | Deterministic authorization guardrail | Executed before the KB/model path |
 | Prompt version | Returned by every agentic run |
 | Exact-run quality gate | Runs on each published answer in agentic mode; reports grounding, citation validity and answer relevance, retries once, and fails closed on a second failure |
-| Correctness | Not inferred from grounding or citation presence; remains not evaluated unless a trusted reference or human judgment evaluates that exact answer |
+| Correctness | Evaluated only when the exact question has an approved trusted reference; new/free-form questions report it as not applicable rather than inventing a score |
 | AG-UI lifecycle, step, text, subagent and custom evidence events | Progressively streamed by every agentic run; upstream answer text arrives as one delta after the graph completes |
 | A2A | Agent Card discovery and `message:send` execute on the group-chat route through `netflix-specialist-a2a`; the task artifact identifies every published specialist widget that ran |
 | Langfuse | OTLP root span and child observations implemented; the server reads the current trace back and returns an allow-listed observation projection without private URLs, content or identifiers |
-| RAGAS | Pinned `0.4.3` six-metric deterministic reference-contract evaluation executes in CI; it is never presented as a score of the newly generated live answer |
+| Live RAG evaluation | Azure OpenAI evaluates the exact question, displayed answer and exact returned citation snippets on every generated knowledge-answer route; the response records evaluator model/version, input hashes, reasons and unsupported claims |
+| Python RAGAS | Pinned `0.4.3` six-metric deterministic reference-contract evaluation executes in CI only; it is never substituted for live-run scores |
 | Pinecone / Milvus | Not executed; the demo intentionally reuses Persora's current Supabase/Postgres vector retrieval and returned citations |
 | Neo4j GraphRAG | Not executed until a graph query returns records |
 
@@ -91,9 +92,13 @@ Current execution truth:
 - The group-chat route discovers the specialist-team Agent Card and sends an A2A 1.0 `message:send` request. The service fans the question out only to the matched Billing, Household/Travel and Identity/Access widgets, then returns their identities, answers and citations in one bounded task artifact.
 - The A2A specialist endpoint is JWT-protected and invokes the existing published Persora Netflix agent. Browser clients never receive a service-role credential.
 
-### RAGAS benchmark
+### Live evaluation and Python RAGAS benchmark
 
-`scripts/evaluate_ragas.py` uses six pinned RAGAS metrics on five checked-in deterministic contract samples: `NonLLMStringSimilarity`, `StringPresence`, `ExactMatch`, `BleuScore`, `CHRFScore` and `RougeScore`. GitHub Actions regenerates `src/generated/ragas-evaluation.json` before tests and build. The artifact contains a score set for each stable demo-case ID plus release-level averages. The UI labels these as reference-contract evidence, not live-answer correctness. The exact generated answer's correctness remains **not evaluated** unless that exact output is compared with a trusted reference or reviewed by a human.
+`supabase/functions/_shared/liveRagEvaluation.ts` performs the live evaluation. It sends the exact question, the exact displayed answer and the full retrieved chunks referenced by that answer's `[#n]` citations to the configured Azure OpenAI evaluator. Faithfulness, response relevancy and context precision execute for every generated knowledge answer. Context recall and factual correctness execute only when that exact question has a checked-in approved reference; otherwise those two values are `null` and the UI says **Not applicable**. The result includes SHA-256 hashes of all inputs so a score can be tied to one immutable run.
+
+The evaluator validates its own JSON contract and retries once when a required metric is missing. Because “zero unsupported claims” logically means every evaluated claim was supported, a contradictory lower faithfulness value is normalized to `1.0` and that normalization is recorded in the faithfulness reason. Unsupported claims are never normalized away.
+
+This is deliberately described as **RAGAS-compatible**, not as the Python Ragas package running inside Supabase. Supabase Edge Functions execute TypeScript on Deno. The actual Python Ragas `0.4.3` package remains a CI release benchmark: `scripts/evaluate_ragas.py` runs six pinned deterministic metrics over five checked-in contract samples, and GitHub Actions regenerates `src/generated/ragas-evaluation.json`. The browser never substitutes that static artifact into a live answer.
 
 ### Enable Langfuse execution proof
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { cases, matchRagasCaseId } from "./data";
+import { cases } from "./data";
 import { askAgenticDemo, askPublishedAgent, readLangfuseMirror, resolveAgenticHandoff } from "./liveClient";
 import { formatRetrievalScore } from "./retrievalScore";
 import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern, RunProgress } from "./types";
@@ -19,7 +19,7 @@ const statusLabel: Record<EvidenceStatus, string> = {
 const patternDescription: Record<Pattern, string> = {
   sequential: "Each step completes before the next begins.",
   concurrent: "Independent checks run side by side, then converge.",
-  "group-chat": "A coordinator obtains one A2A specialist task result before grounded synthesis.",
+  "group-chat": "A coordinator gathers distinct A2A specialist results and returns their grounded aggregation.",
   handoff: "Control transfers when authorization or human judgment is required.",
   magentic: "A bounded planner either finishes or revises once from request state, then stops.",
 };
@@ -123,9 +123,12 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
                 </div>
                 {turn.runtime.citations.length > 0 && <div className="citations">
                   <strong>{turn.runtime.quality?.status === "failed" ? "Sources checked (answer withheld)" : "Sources used"}</strong>
-                  <div>{turn.runtime.citations.map((citation, index) => citation.url
-                    ? <a key={`${citation.url}-${index}`} href={citation.url} target="_blank" rel="noreferrer">{index + 1}. {citation.label}</a>
-                    : <span key={`${citation.label}-${index}`}>{index + 1}. {citation.label}</span>)}</div>
+                  <div>{turn.runtime.citations.map((citation, index) => <article key={`${citation.url ?? citation.label}-${index}`}>
+                    {citation.url
+                      ? <a href={citation.url} target="_blank" rel="noreferrer">{index + 1}. {citation.label}</a>
+                      : <span>{index + 1}. {citation.label}</span>}
+                    {citation.snippet && <small>{citation.snippet}</small>}
+                  </article>)}</div>
                 </div>}
                 <div className="answer-footer">
                   <div><i /> {turn.runId ?? "No run"} · {turn.runtime.mode} · {turn.runtime.totalMs} ms</div>
@@ -168,10 +171,10 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
 }
 
 const nodeKind = (id: string): NonNullable<GraphNode["kind"]> => {
-  if (/published_netflix_agent|group_a2a_specialist|specialist|synthesis/.test(id)) return "agent";
+  if (/published_netflix_agent|group_a2a_specialist|specialist/.test(id)) return "agent";
   if (/knowledge|retrieval|kb/.test(id)) return "knowledge";
   if (/human|handoff|approval|decision/.test(id)) return "human";
-  if (/validation|quality/.test(id)) return "quality";
+  if (/validation|quality|evaluation/.test(id)) return "quality";
   return "orchestrator";
 };
 
@@ -352,7 +355,8 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   if (turn.runtime.mode === "fixture") return item.layers;
 
   const agentic = turn.runtime.mode === "agentic";
-  const publishedExecuted = !agentic || Boolean(turn.runtime.nodeTrace?.some((entry) => entry.node === "published_netflix_agent"));
+  const groupAggregation = agentic && (turn.runtime.pattern ?? item.pattern) === "group-chat";
+  const publishedExecuted = !agentic || (!groupAggregation && Boolean(turn.runtime.nodeTrace?.some((entry) => entry.node === "published_netflix_agent")));
   const citationEvidenceReturned = turn.runtime.citations.length > 0;
   const langfuse = langfuseOverride ?? turn.runtime.integrations?.langfuse;
   const agUi = turn.runtime.integrations?.agUi;
@@ -364,7 +368,6 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   const executedSpecialists = turn.runtime.specialist
     ? [turn.runtime.specialist]
     : a2a?.specialists ?? [];
-  const caseEvaluation = turn.ragasCaseId ? ragas?.cases?.[turn.ragasCaseId] : undefined;
   const skipReason = turn.runtime.guardrail?.decision === "block"
     ? { value: "Blocked before model call", detail: "The authorization guardrail ended the graph before retrieval or model execution." }
     : handoff?.required
@@ -396,9 +399,9 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   } else if (agentic && (turn.runtime.pattern ?? item.pattern) === "group-chat") {
     patternProof = {
       label: "Pattern execution proof",
-      value: a2a?.executed ? `A2A task ${a2a.taskId} completed before synthesis` : "A2A task not proved",
+      value: a2a?.executed ? `A2A task ${a2a.taskId} completed before aggregation` : "A2A task not proved",
       status: a2a?.executed ? "runtime-proven" : "not-captured",
-      detail: a2a?.executed ? "The node trace and A2A task artifact prove the specialist-to-synthesis sequence." : a2a?.error ?? "No A2A task artifact was returned.",
+      detail: a2a?.executed ? "The node trace and A2A task artifact prove that distinct specialist results were gathered and aggregated; no separate synthesis-agent call is claimed." : a2a?.error ?? "No A2A task artifact was returned.",
     };
   } else if (agentic && (turn.runtime.pattern ?? item.pattern) === "handoff") {
     patternProof = {
@@ -424,7 +427,7 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
     { label: "Why this route", value: turn.runtime.routing?.reason ?? "Not captured", status: turn.runtime.routing ? "runtime-proven" : "not-captured", detail: turn.runtime.routing ? `Transparent ${turn.runtime.routing.strategy}; signals: ${turn.runtime.routing.signals.join(", ")}; confidence ${(turn.runtime.routing.confidence * 100).toFixed(0)}%.` : "The runtime did not return a routing decision." },
     { label: "Executed specialist agents", value: executedSpecialists.length ? executedSpecialists.map((specialist) => specialist.agentName).join(" + ") : "Not captured", status: executedSpecialists.length ? "runtime-proven" : "not-captured", detail: executedSpecialists.length ? executedSpecialists.map((specialist) => `${specialist.domain}: agent ${specialist.agentId}, widget ${specialist.widgetId}`).join("; ") : "This run returned no specialist identity, so the UI does not infer one from the question." },
     patternProof,
-    { label: "Published execution", value: publishedExecuted ? "Persora orchestrate-chat" : skipReason.value, status: publishedExecuted ? "runtime-proven" : "not-executed", detail: publishedExecuted ? "This answer was received from the published agent endpoint." : skipReason.detail },
+    { label: groupAggregation ? "Final answer step" : "Published execution", value: groupAggregation ? "Specialist aggregation" : publishedExecuted ? "Persora orchestrate-chat" : skipReason.value, status: groupAggregation || publishedExecuted ? "runtime-proven" : "not-executed", detail: groupAggregation ? "The final answer is the validated aggregation of the three A2A specialist results; no fourth synthesis call executed." : publishedExecuted ? "This answer was received from the published agent endpoint." : skipReason.detail },
     { label: "LangGraph node trace", value: agentic ? `${turn.runtime.nodeTrace?.length ?? 0} completed nodes` : "Not executed", status: agentic ? "runtime-proven" : "not-executed", detail: agentic ? `Server runtime: ${turn.runtime.integrations?.langGraph.version ?? "version not returned"}.` : "A LangGraph server adapter has not supplied node events for this run." },
   ]);
   next = next.map((layer) => layer.id === "content" ? { ...layer, fields: [
@@ -460,13 +463,14 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
       ...(quality.intentCoverage === null ? [] : [{ label: "Intent coverage", value: `${(quality.intentCoverage * 100).toFixed(1)}% (${quality.coveredIntentCount}/${quality.requiredIntentCount})` }]),
       { label: "Supported claims", value: `${quality.supportedClaimCount}/${quality.claimCount}` },
     ] : undefined },
-    { label: "Correctness", value: "Not evaluated for this live answer", status: "not-evaluated", detail: "Correctness requires a trusted reference answer or human judgment. Grounding and relevance are useful checks, but they are not relabelled as factual correctness." },
+    { label: "Live exact-run RAG evaluation", value: ragas?.executed ? `${ragas.status} · ${ragas.durationMs ?? 0} ms` : "Not evaluated", status: ragas?.executed ? "runtime-proven" : "not-evaluated", detail: ragas?.executed ? `${ragas.implementation}; model ${ragas.evaluatorModel}; evaluator ${ragas.evaluatorVersion}. Exact input hashes: question ${ragas.inputHashes?.question.slice(0, 10)}, answer ${ragas.inputHashes?.answer.slice(0, 10)}, contexts ${ragas.inputHashes?.contexts.slice(0, 10)}.` : ragas?.error ?? "The exact-run evaluator did not execute.", metrics: ragas?.metrics ? Object.entries(ragas.metrics).map(([name, score]) => ({
+      label: name.replace(/([A-Z])/g, " $1").replace(/^./, (value) => value.toUpperCase()),
+      value: score === null ? "Not applicable" : `${(score * 100).toFixed(1)}%`,
+    })) : undefined },
+    { label: "Unsupported claims", value: ragas?.executed ? `${ragas.unsupportedClaims.length}` : "Not evaluated", status: ragas?.executed ? "runtime-proven" : "not-evaluated", detail: ragas?.unsupportedClaims.length ? ragas.unsupportedClaims.join(" · ") : ragas?.executed ? "The evaluator returned no unsupported factual claim." : "No evaluator result was returned." },
+    { label: "Reference-dependent correctness", value: ragas?.metrics.factualCorrectness === null || ragas?.metrics.factualCorrectness === undefined ? "Not applicable" : `${(ragas.metrics.factualCorrectness * 100).toFixed(1)}%`, status: ragas?.metrics.factualCorrectness === null || ragas?.metrics.factualCorrectness === undefined ? "not-evaluated" : "runtime-proven", detail: ragas?.referenceId ? `Compared this exact answer with trusted reference ${ragas.referenceId}.` : "This was a new/free-form question with no approved reference. Faithfulness and relevancy still executed; correctness was not invented." },
     { label: "Authorization guardrail", value: turn.runtime.guardrail ? `${turn.runtime.guardrail.decision}: ${turn.runtime.guardrail.reason}` : "Not captured", status: turn.runtime.guardrail ? "runtime-proven" : "not-captured", detail: "A deterministic server-side decision runs before retrieval." },
-    { label: "Reference contract benchmark", value: caseEvaluation ? `Checked-in case: ${caseEvaluation.question}` : "No matching reference case", status: caseEvaluation ? "repo-defined" : "not-evaluated", detail: caseEvaluation ? `Pinned RAGAS ${ragas?.version} evaluated the checked-in reference output, not this live generated answer.` : "This free-form question has no checked-in trusted reference, so no correctness score is inferred.", metrics: caseEvaluation ? Object.entries(caseEvaluation.scores).map(([name, score]) => ({
-        label: name.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" "),
-        value: `${(score * 100).toFixed(2)}%`,
-      })) : undefined },
-    { label: "RAGAS release benchmark", value: ragas?.executed ? `${ragas.sampleCount ?? 0} cases · ${Object.keys(ragas.scores ?? {}).length} metrics` : "Not executed", status: ragas?.executed ? "repo-defined" : "not-executed", detail: ragas?.executed ? "Suite averages are generated in CI as release evidence and are intentionally separate from the selected question." : "No benchmark artifact was loaded." },
+    { label: "Python RAGAS release benchmark", value: "CI only", status: "repo-defined", detail: "The pinned Python RAGAS suite remains release evidence and is never substituted into this live run." },
   ] } : layer);
 }
 
@@ -566,7 +570,7 @@ function ExplainDrawer({ turn, onClose, onHandoffDecision }: { turn: ChatTurn; o
               <article><span>Orchestration</span><strong>LangGraph {turn.runtime.integrations?.langGraph.version ?? ""}</strong><small>{turn.runtime.integrations?.langGraph.executed ? "Executed for this run" : "Not executed"}</small></article>
               <article><span>Content & data</span><strong>Persora KB · Supabase vectors · citations</strong><small>{turn.runtime.citations.length ? `${turn.runtime.citations.length} sources returned` : "No sources returned"}; Neo4j not run</small></article>
               <article><span>Interaction</span><strong>AG-UI {turn.runtime.integrations?.agUi.executed ? "executed" : "not run"} · A2A {turn.runtime.integrations?.a2a.executed ? "executed" : "route-dependent"}</strong><small>Handoff state: {turn.runtime.handoff?.status ?? "not captured"}</small></article>
-              <article><span>Observability & quality</span><strong>Langfuse {turn.runtime.integrations?.langfuse.executed ? "executed" : "not run"} · RAGAS {turn.runtime.integrations?.ragas.executed ? "benchmark executed" : "not run"}</strong><small>Per-run and benchmark evidence remain explicitly separate</small></article>
+              <article><span>Observability & quality</span><strong>Langfuse {turn.runtime.integrations?.langfuse.executed ? "executed" : "not run"} · live evaluation {turn.runtime.integrations?.ragas.executed ? "executed" : "not run"}</strong><small>Exact-run metrics and the CI-only Python RAGAS benchmark remain separate</small></article>
             </div>
           </section>
         </div>
@@ -589,7 +593,6 @@ export default function App() {
 
   const ask = async (question: string, selectedCase?: DemoCase) => {
     const demoCase = selectedCase ?? routeFixtureQuestion(question);
-    const ragasCaseId = selectedCase?.id ?? matchRagasCaseId(question);
     const sequence = turns.length + 1;
     const started = performance.now();
     let answer = demoCase?.answer ?? "This evidence fixture does not have a supported route for that question yet. Try one of the five conversation starters. I will not invent an answer or a runtime trace.";
@@ -630,10 +633,9 @@ export default function App() {
       id: `turn-${sequence}`,
       question,
       answer,
-      runId: resolvedDemoCase ? `${runtime.mode === "agentic" ? "agentic" : runtime.mode === "live" ? "live" : "fx"}-${resolvedDemoCase.id}-${String(sequence).padStart(3, "0")}` : null,
+      runId: runtime.traceId,
       createdAt: new Date().toISOString(),
       demoCase: resolvedDemoCase,
-      ragasCaseId,
       runtime,
     };
     setTurns((current) => [...current, turn]);

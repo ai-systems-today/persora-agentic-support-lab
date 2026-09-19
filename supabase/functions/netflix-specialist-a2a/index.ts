@@ -1,4 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { sourceFallbackMarkdown, stabilizeGroundedMarkdown, type QualityCitation } from "../_shared/answerQuality.ts";
+import { citationEvidenceText, normalizeCitationBundle } from "../_shared/citationEvidence.ts";
 import { selectSpecialists, specialistTaskMessage, type SpecialistSelection } from "../_shared/specialistRouter.ts";
 
 const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
@@ -26,7 +28,7 @@ function applySsePayload(state: { answer: string; citations: unknown[] }, payloa
 }
 
 async function askPublishedSpecialist(specialist: SpecialistSelection, message: string, taskId: string) {
-  const qualityInstruction = "Answer with exactly 1 standalone sentence containing 1 factual support step, ending with its matching [#n] citation. Use only a fact directly stated in the returned Netflix knowledge sources. Do not include headings, introductions, transitions, uncited text, links, or follow-up questions. If the sources do not support an answer, say only: I do not have enough source evidence.";
+  const qualityInstruction = "Answer completely but concisely in Markdown for your assigned support domain. Use a short heading and bullets or numbered steps when useful. Begin directly with the cited facts or steps: do not add an uncited introduction, transition, or conclusion. Headings may be uncited, but every factual sentence or bullet must end with its matching [#n] citation. Use only facts directly stated in the returned Netflix knowledge sources. Do not add uncited factual clauses or external links. If the sources do not support an answer, say only: I do not have enough source evidence.";
   const response = await fetch(UPSTREAM, {
     method: "POST",
     headers: {
@@ -61,7 +63,58 @@ async function askPublishedSpecialist(specialist: SpecialistSelection, message: 
     throw new Error(`Published ${specialist.domain} specialist returned no sourced answer`);
   }
   if (!state.citations.length) throw new Error(`Published ${specialist.domain} specialist returned no citations`);
-  return { ...state, specialist };
+  return { ...normalizeCitationBundle(state.answer.trim(), state.citations), specialist };
+}
+
+async function qualityCitations(values: unknown[]): Promise<QualityCitation[]> {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+  const ids = values.map((value) => {
+    const citation = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+    return typeof citation.chunk_id === "string" && /^[0-9a-f-]{36}$/i.test(citation.chunk_id) ? citation.chunk_id : null;
+  }).filter((value): value is string => value !== null);
+  const content = new Map<string, string>();
+  if (serviceRoleKey && ids.length) {
+    try {
+      const response = await fetch(`https://oiotkbbwriecdvtnufee.supabase.co/rest/v1/document_chunks?id=in.(${ids.join(",")})&select=id,content`, {
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+      });
+      if (response.ok) {
+        const rows = await response.json() as Array<{ id?: unknown; content?: unknown }>;
+        for (const row of rows) if (typeof row.id === "string" && typeof row.content === "string") content.set(row.id, row.content);
+      }
+    } catch {
+      // Fall back to the returned citation evidence; unsupported content is still removed.
+    }
+  }
+  return values.map((value, index) => {
+    const citation = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+    const chunkId = typeof citation.chunk_id === "string" ? citation.chunk_id : null;
+    const label = [citation.title, citation.source, citation.filename].find((candidate) => typeof candidate === "string");
+    return {
+      label: typeof label === "string" ? label : `Source ${index + 1}`,
+      url: typeof citation.url === "string" ? citation.url : typeof citation.source_url === "string" ? citation.source_url : null,
+      snippet: chunkId && content.has(chunkId) ? content.get(chunkId)! : citationEvidenceText(value),
+    };
+  });
+}
+
+const domainTerms: Record<SpecialistSelection["domain"], RegExp> = {
+  billing: /\b(billing|payment|currency|charge|membership)\b/i,
+  household: /\b(household|home internet|main place|tv)\b/i,
+  identity: /\b(email|password|sign[ -]?in|phone|account access|reset)\b/i,
+  general: /\b(netflix|support|account)\b/i,
+};
+
+async function groundSpecialistResult(result: Awaited<ReturnType<typeof askPublishedSpecialist>>) {
+  const citations = await qualityCitations(result.citations);
+  let answer = stabilizeGroundedMarkdown(result.answer, citations);
+  if (!answer || !domainTerms[result.specialist.domain].test(answer)) {
+    answer = citations[0]
+      ? sourceFallbackMarkdown(`${result.specialist.agentName} · verified source`, citations[0], 1)
+      : "";
+  }
+  if (!answer) throw new Error(`Published ${result.specialist.domain} specialist returned no verifiable source statement`);
+  return { ...result, answer };
 }
 
 function shiftCitationReferences(answer: string, offset: number) {
@@ -71,13 +124,14 @@ function shiftCitationReferences(answer: string, offset: number) {
 async function askSpecialistTask(message: string, taskId: string) {
   const specialists = selectSpecialists(message);
   const multiDomain = specialists.length > 1;
-  const results = await Promise.all(specialists.map((specialist, index) =>
+  const rawResults = await Promise.all(specialists.map((specialist, index) =>
     askPublishedSpecialist(
       specialist,
       specialistTaskMessage(specialist, message, multiDomain),
       `${taskId}-${index + 1}`,
     )
   ));
+  const results = await Promise.all(rawResults.map(groundSpecialistResult));
   let offset = 0;
   const answers: string[] = [];
   const citations: unknown[] = [];
@@ -87,7 +141,7 @@ async function askSpecialistTask(message: string, taskId: string) {
     offset += result.citations.length;
   }
   return {
-    answer: answers.join(" "),
+    answer: answers.join("\n\n"),
     citations,
     specialists: results.map(({ specialist }) => specialist),
   };

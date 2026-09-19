@@ -1,18 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { cases, matchRagasCaseId } from "./data";
+import { cases } from "./data";
 
 describe("demo evidence", () => {
   it("provides five distinct cases", () => {
     expect(cases).toHaveLength(5);
     expect(new Set(cases.map((item) => item.answer)).size).toBe(5);
     expect(cases.map((item) => item.pattern)).toContain("group-chat");
-  });
-
-  it("maps RAGAS only to an exact supported starter or customer prompt", () => {
-    expect(matchRagasCaseId(cases[0].customer)).toBe(cases[0].id);
-    expect(matchRagasCaseId(cases[0].starter)).toBe(cases[0].id);
-    expect(matchRagasCaseId("Can Netflix help me with travel and billing today?")).toBeNull();
   });
 
   it("provides all five evidence layers for every case", () => {
@@ -120,12 +114,11 @@ describe("demo evidence", () => {
     const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
     const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
     const migration = readFileSync(new URL("../supabase/migrations/20260917080958_add_agentic_demo_approvals.sql", import.meta.url), "utf8");
-    expect(app).toContain("one A2A specialist task result");
+    expect(app).toContain("distinct A2A specialist results");
     expect(app).toContain("Approve safe continuation");
-    expect(app).toContain("caseEvaluation.scores");
-    expect(app).toContain("caseEvaluation.question");
+    expect(app).toContain("Live exact-run RAG evaluation");
     expect(app).toContain('langfuse?.readback === "failed"');
-    expect(app).toContain("This free-form question has no checked-in trusted reference");
+    expect(app).toContain("correctness was not invented");
     expect(orchestrator).toContain("session-bound-demo-decision");
     expect(orchestrator).toContain("no account was cancelled and no refund was issued");
     expect(migration).toContain("enable row level security");
@@ -154,7 +147,10 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("I couldn’t verify a sufficiently grounded answer");
     expect(app).toContain("Exact-run quality gate");
     expect(app).toContain("Citation validity");
-    expect(app).toContain("Not evaluated for this live answer");
+    expect(app).toContain("Reference-dependent correctness");
+    expect(orchestrator).toContain('addNode("exact_run_evaluation"');
+    expect(orchestrator).toContain("evaluateExactRun");
+    expect(orchestrator).not.toContain("extractGroundedClaims(first.answer");
   });
 
   it("routes agentic questions to distinct published Persora specialist widgets", () => {
