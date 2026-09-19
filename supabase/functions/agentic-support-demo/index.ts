@@ -5,7 +5,7 @@ import { citationEvidenceText, normalizeCitationBundle } from "../_shared/citati
 import { evaluateExactRun, notEvaluatedLiveRag, referenceForQuestion, type LiveRagEvaluation } from "../_shared/liveRagEvaluation.ts";
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
-import { selectPrimarySpecialist, type SpecialistSelection } from "../_shared/specialistRouter.ts";
+import { selectPrimarySpecialist, specialistRetrievalHint, type SpecialistSelection } from "../_shared/specialistRouter.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://ai-systems-today.github.io",
@@ -14,7 +14,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
 const A2A_SPECIALIST = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
-const PROMPT_VERSION = "netflix-support-demo@2026-09-19.1-live-evaluation";
+const PROMPT_VERSION = "netflix-support-demo@2026-09-19.2-retrieval-guidance";
 const LANGGRAPH_VERSION = "1.4.15";
 
 const secureEqual = (left: string, right: string) => {
@@ -194,6 +194,11 @@ async function requestPublishedAgent(state: typeof State.State, repair: boolean)
     : state.message;
   const qualityInstruction = "Answer completely but concisely in Markdown. Use a short heading and bullets or numbered steps when they improve clarity. Every bullet must be a complete, self-contained sentence that names its subject; never begin with a dangling transition or pronoun whose referent is missing. Begin directly with the cited facts or steps: do not add an uncited introduction, transition, or conclusion. Headings may be uncited, but every factual sentence or bullet must end with its matching [#n] citation. Use only facts directly stated in the returned Netflix knowledge sources. Do not add uncited factual clauses or external links. If the sources do not support an answer, say only: I do not have enough source evidence.";
   const approvedReference = referenceForQuestion(state.message);
+  const retrievalHint = specialistRetrievalHint(state.message);
+  const orchestrationInstruction = state.specialistContext.trim()
+    ? ` Follow this bounded orchestration plan: ${state.specialistContext.trim()}`
+    : "";
+  const retrievalInstruction = retrievalHint ? ` Retrieval guidance: ${retrievalHint}` : "";
   const completenessInstruction = approvedReference
     ? ` This approved benchmark requires every source-supported point in this completeness target: ${approvedReference.answer}`
     : "";
@@ -210,7 +215,7 @@ async function requestPublishedAgent(state: typeof State.State, repair: boolean)
     },
     body: JSON.stringify({
       widgetId: specialist.widgetId,
-      message: `${question}\n\n${qualityInstruction}${completenessInstruction}${repairInstruction}`,
+      message: `${question}\n\n${qualityInstruction}${completenessInstruction}${orchestrationInstruction}${retrievalInstruction}${repairInstruction}`,
       sessionToken: `${state.sessionToken}:${state.traceId}:${repair ? "retry" : "primary"}`,
       deviceId: state.deviceId,
       mode: "chat",
@@ -765,7 +770,7 @@ function prepareHumanHandoff() {
 function planRecovery(state: typeof State.State) {
   const recovery = planRecoveryEvidence(state.message);
   return {
-    specialistContext: "Recovery planner: the temporary travel-access path failed. Ask the published Netflix agent for a source-backed alternative without inventing diagnostic causes.",
+    specialistContext: "The temporary travel-access path failed. Retrieve source-backed alternatives for mobile devices, computers, and hotel or holiday-rental TVs, note country availability when the source supports it, and do not invent diagnostic causes.",
     eventTypes: recovery.revised ? ["recovery_plan_revised", "recovery_plan_finished"] : ["recovery_plan_finished"],
     orchestrationProof: {
       ...state.orchestrationProof,
