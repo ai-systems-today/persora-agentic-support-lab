@@ -7,13 +7,6 @@ export type SpecialistSelection = {
   widgetId: string;
 };
 
-const MULTI_DOMAIN_SCOPES: Record<SpecialistDomain, string> = {
-  billing: "billing, payment, billing-country, or currency",
-  household: "Netflix Household, travel, TV, device, or location verification",
-  identity: "sign-in, password, account-email, phone, or account recovery",
-  general: "general Netflix support",
-};
-
 export const NETFLIX_SPECIALISTS: Record<SpecialistDomain, SpecialistSelection> = {
   billing: {
     domain: "billing",
@@ -78,8 +71,7 @@ export function specialistTaskMessage(
   multiDomain: boolean,
 ) {
   if (!multiDomain) return originalMessage;
-  const scopedDetail = specialistEvaluationQuestion(specialist, originalMessage, multiDomain);
-  return `According to Netflix Help, answer only the ${MULTI_DOMAIN_SCOPES[specialist.domain]} part of this customer request and do not answer the other domains: ${scopedDetail}`;
+  return specialistEvaluationQuestion(specialist, originalMessage, multiDomain);
 }
 
 export function specialistRetrievalHint(message: string): string {
