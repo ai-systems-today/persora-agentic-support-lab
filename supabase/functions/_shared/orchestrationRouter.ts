@@ -26,7 +26,10 @@ const rules: RouteRule[] = [
     pattern: "handoff",
     reason: "The request asks for an account or payment mutation that requires authenticated human approval.",
     signals: [
-      { label: "account mutation", expression: /\b(cancel|close|delete|change|remove)\b/i },
+      {
+        label: "account mutation",
+        expression: /\b(?:cancel|close|delete)\s+(?:my\s+|the\s+)?(?:Netflix\s+)?(?:subscription|membership|account)\b|\b(?:subscription|membership|account)\b\s+(?:is\s+|was\s+|has\s+been\s+)?(?:cancelled|canceled|closed|deleted)\b/i,
+      },
       { label: "financial decision", expression: /\b(refund|chargeback|reverse (?:a )?charge)\b/i },
     ],
   },

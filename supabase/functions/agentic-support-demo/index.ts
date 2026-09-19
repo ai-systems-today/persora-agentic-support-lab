@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { Annotation, END, START, StateGraph } from "npm:@langchain/langgraph@1.4.15";
-import { evaluateLiveAnswer, notEvaluatedQuality, stabilizeGroundedMarkdown, type LiveQuality, type QualityCitation } from "../_shared/answerQuality.ts";
+import { evaluateLiveAnswer, notEvaluatedQuality, type LiveQuality, type QualityCitation } from "../_shared/answerQuality.ts";
 import { citationEvidenceText, normalizeCitationBundle } from "../_shared/citationEvidence.ts";
 import { evaluateExactRun, notEvaluatedLiveRag, referenceForQuestion, type LiveRagEvaluation } from "../_shared/liveRagEvaluation.ts";
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
@@ -15,7 +15,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
 const A2A_SPECIALIST = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
-const PROMPT_VERSION = "netflix-support-demo@2026-09-19.2-retrieval-guidance";
+const PROMPT_VERSION = "netflix-support-demo@2026-09-19.3-generalization";
 const LANGGRAPH_VERSION = "1.4.15";
 const NETFLIX_KB_CONVERSATION_ID = "6983a1ed-a545-4cfd-a00b-d4d785914217";
 const VERIFIED_POLICY_FILENAME = "netflix-household-travel-official-policy.md";
@@ -94,7 +94,7 @@ const State = Annotation.Root({
   allowed: Annotation<boolean>,
   guardrailReason: Annotation<string>,
   answer: Annotation<string>,
-  citations: Annotation<unknown[]>({ reducer: (left, right) => [...left, ...right], default: () => [] }),
+  citations: Annotation<unknown[]>({ reducer: (_left, right) => right, default: () => [] }),
   eventTypes: Annotation<string[]>({ reducer: (left, right) => [...left, ...right], default: () => [] }),
   nodeTrace: Annotation<TraceEntry[]>({ reducer: (left, right) => [...left, ...right], default: () => [] }),
   protocolEvents: Annotation<ProtocolEvent[]>({ reducer: (left, right) => [...left, ...right], default: () => [] }),
@@ -206,7 +206,7 @@ async function requestPublishedAgent(state: typeof State.State, repair: boolean)
     ? ` This approved benchmark requires every source-supported point in this completeness target: ${approvedReference.answer}`
     : "";
   const repairInstruction = repair
-    ? " This is the one repair attempt. Rewrite the whole answer from scratch so it directly answers every part of the question with complete standalone sentences and preserves valid Markdown structure."
+    ? " This is the one repair attempt. Rewrite the whole answer from scratch so it directly answers the user's exact question. Preserve every source-supported step needed to answer it, remove unsupported material, and end every factual sentence with the matching [#n] citation. Do not return a heading or background note without the requested steps."
     : "";
   const specialist = selectPrimarySpecialist(state.message);
   const response = await fetch(UPSTREAM, {
@@ -366,17 +366,6 @@ async function callPublishedAgent(state: typeof State.State) {
     if (firstQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, firstAnswer)) {
       return { ...first, answer: firstAnswer, quality: firstQuality, eventTypes: [...first.eventTypes, "live_quality_passed"] };
     }
-    const groundedAnswer = stabilizeGroundedMarkdown(firstAnswer, firstCitations);
-    const groundedQuality = evaluateLiveAnswer({
-      question: state.message,
-      answer: groundedAnswer,
-      citations: firstCitations,
-      retryCount: 0,
-      requiredTopics,
-    });
-    if (groundedQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, groundedAnswer)) {
-      return { ...first, answer: groundedAnswer, quality: groundedQuality, eventTypes: [...first.eventTypes, "live_quality_structure_preserved"] };
-    }
     if (state.pattern === "group-chat") {
       return {
         answer: "I couldn’t verify a source-backed answer for every part of this multi-topic request, so I’m not presenting a partial answer as complete. Please ask the billing, Household, and sign-in questions separately or use authenticated Netflix Support.",
@@ -412,18 +401,6 @@ async function callPublishedAgent(state: typeof State.State) {
   });
   if (repairedQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, repairedAnswer)) {
     return { ...repaired, answer: repairedAnswer, quality: repairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_retry_passed"] };
-  }
-
-  const groundedRepairedAnswer = stabilizeGroundedMarkdown(repairedAnswer, repairedCitations);
-  const groundedRepairedQuality = evaluateLiveAnswer({
-    question: state.message,
-    answer: groundedRepairedAnswer,
-    citations: repairedCitations,
-    retryCount: 1,
-    requiredTopics,
-  });
-  if (groundedRepairedQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, groundedRepairedAnswer)) {
-    return { ...repaired, answer: groundedRepairedAnswer, quality: groundedRepairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_structure_preserved_retry"] };
   }
 
   const verifiedFallback = await requestVerifiedKnowledgeFallback(state.message);
@@ -863,15 +840,26 @@ async function runExactEvaluation(state: typeof State.State) {
   const apiKey = Deno.env.get("AZURE_OPENAI_API_KEY")?.trim();
   const endpoint = (Deno.env.get("AZURE_OPENAI_ENDPOINT") ?? "https://ai-genaiappshub118707119222.openai.azure.com").trim();
   if (!apiKey) {
+    const rejectedAnswer = "I couldn’t verify a complete source-backed answer for this question, so I’m not presenting the generated candidate as reliable. Please try rephrasing the question.";
     return {
+      answer: rejectedAnswer,
+      citations: [],
+      quality: evaluateLiveAnswer({
+        question: state.message,
+        answer: rejectedAnswer,
+        citations: [],
+        retryCount: 1,
+        requiredTopics: requiredQualityTopics(state),
+      }),
       ragas: notEvaluatedLiveRag("Azure evaluator credentials are unavailable."),
-      eventTypes: ["live_rag_evaluation_unavailable"],
+      eventTypes: ["live_rag_evaluation_unavailable_failed_closed"],
     };
   }
-  const allContexts = (await qualityCitations(state.citations))
+  const qualityContext = await qualityCitations(state.citations);
+  const allContexts = qualityContext
     .map((citation, index) => `[#${index + 1}] ${citation.label}\n${citation.snippet ?? ""}`.trim());
   const contexts = allContexts;
-  const ragas = await evaluateExactRun({
+  let ragas = await evaluateExactRun({
     question: state.message,
     answer: state.answer,
     contexts,
@@ -880,18 +868,108 @@ async function runExactEvaluation(state: typeof State.State) {
     apiKey,
     model: "gpt-4o-mini",
   });
+  if (ragas.executed && ragas.status === "passed") {
+    return {
+      ragas,
+      eventTypes: ["live_rag_evaluation_passed"],
+      protocolEvents: [{
+        type: "CUSTOM",
+        name: "persora.evaluation.exact-run",
+        value: {
+          executed: ragas.executed,
+          status: ragas.status,
+          evaluatorVersion: ragas.evaluatorVersion,
+          referenceId: ragas.referenceId,
+          inputHashes: ragas.inputHashes,
+        },
+      }],
+    };
+  }
+
+  const alreadyRepaired = state.eventTypes.some((event) =>
+    event === "live_quality_retry_passed" ||
+    event === "live_quality_verified_kb_fallback_passed"
+  );
+  if (!alreadyRepaired && state.pattern !== "group-chat") {
+    try {
+      const repaired = await requestPublishedAgent(state, true);
+      const repairedCitations = await qualityCitations(repaired.citations);
+      const repairedAnswer = repaired.answer.trim();
+      const repairedQuality = evaluateLiveAnswer({
+        question: state.message,
+        answer: repairedAnswer,
+        citations: repairedCitations,
+        retryCount: 1,
+        requiredTopics: requiredQualityTopics(state),
+      });
+      if (repairedQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, repairedAnswer)) {
+        const repairedContexts = repairedCitations
+          .map((citation, index) => `[#${index + 1}] ${citation.label}\n${citation.snippet ?? ""}`.trim());
+        const repairedRagas = await evaluateExactRun({
+          question: state.message,
+          answer: repairedAnswer,
+          contexts: repairedContexts,
+          reference: referenceForQuestion(state.message),
+          endpoint,
+          apiKey,
+          model: "gpt-4o-mini",
+        });
+        if (repairedRagas.executed && repairedRagas.status === "passed") {
+          return {
+            answer: repairedAnswer,
+            citations: repaired.citations,
+            specialist: repaired.specialist,
+            quality: repairedQuality,
+            ragas: repairedRagas,
+            eventTypes: [...repaired.eventTypes, "live_rag_evaluation_repair_passed"],
+            protocolEvents: [{
+              type: "CUSTOM",
+              name: "persora.evaluation.exact-run",
+              value: {
+                executed: true,
+                status: "passed",
+                evaluatorVersion: repairedRagas.evaluatorVersion,
+                referenceId: repairedRagas.referenceId,
+                inputHashes: repairedRagas.inputHashes,
+              },
+            }],
+          };
+        }
+        ragas = repairedRagas;
+      }
+    } catch {
+      // The final response below fails closed when the evaluator repair cannot complete.
+    }
+  }
+
+  const rejectionReason = ragas.executed
+    ? "The generated candidate failed the live exact-run evaluator and was not shown as a verified answer."
+    : "The live exact-run evaluator was unavailable, so the generated candidate was not shown as verified.";
+  const rejectedAnswer = "I couldn’t verify a complete source-backed answer for this question, so I’m not presenting the generated candidate as reliable. Please try rephrasing the question.";
   return {
-    ragas,
-    eventTypes: [ragas.executed ? `live_rag_evaluation_${ragas.status}` : "live_rag_evaluation_unavailable"],
+    answer: rejectedAnswer,
+    citations: [],
+    quality: evaluateLiveAnswer({
+      question: state.message,
+      answer: rejectedAnswer,
+      citations: [],
+      retryCount: 1,
+      requiredTopics: requiredQualityTopics(state),
+    }),
+    ragas: ragas.executed ? ragas : notEvaluatedLiveRag(rejectionReason),
+    eventTypes: [
+      ragas.executed ? "live_rag_evaluation_candidate_rejected" : "live_rag_evaluation_unavailable_failed_closed",
+    ],
     protocolEvents: [{
       type: "CUSTOM",
       name: "persora.evaluation.exact-run",
       value: {
         executed: ragas.executed,
-        status: ragas.status,
+        status: ragas.executed ? ragas.status : "not-evaluated",
         evaluatorVersion: ragas.evaluatorVersion,
-        referenceId: ragas.referenceId,
-        inputHashes: ragas.inputHashes,
+        referenceId: ragas.executed ? ragas.referenceId : null,
+        inputHashes: ragas.executed ? ragas.inputHashes : null,
+        rejectedCandidateStatus: ragas.status,
       },
     }],
   };
@@ -1006,7 +1084,7 @@ const mergeGraphUpdate = (
 ): typeof State.State => ({
   ...state,
   ...update,
-  citations: update.citations ? [...state.citations, ...update.citations] : state.citations,
+  citations: update.citations ?? state.citations,
   eventTypes: update.eventTypes ? [...state.eventTypes, ...update.eventTypes] : state.eventTypes,
   nodeTrace: update.nodeTrace ? [...state.nodeTrace, ...update.nodeTrace] : state.nodeTrace,
   protocolEvents: update.protocolEvents ? [...state.protocolEvents, ...update.protocolEvents] : state.protocolEvents,
