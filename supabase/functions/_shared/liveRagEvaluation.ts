@@ -10,7 +10,7 @@ export type LiveRagEvaluation = {
   scope: "request" | null;
   implementation: "azure-openai-ragas-compatible-v1";
   evaluatorModel: string | null;
-  evaluatorVersion: "2026-09-19.8";
+  evaluatorVersion: "2026-09-19.9";
   status: "passed" | "failed" | "not-evaluated";
   referenceId: string | null;
   metrics: Record<LiveRagMetricName, number | null>;
@@ -94,7 +94,7 @@ export const notEvaluatedLiveRag = (reason: string): LiveRagEvaluation => ({
   scope: null,
   implementation: "azure-openai-ragas-compatible-v1",
   evaluatorModel: null,
-  evaluatorVersion: "2026-09-19.8",
+  evaluatorVersion: "2026-09-19.9",
   status: "not-evaluated",
   referenceId: null,
   metrics: emptyMetrics(),
@@ -229,10 +229,6 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
         reasons.contextPrecision = `${reasons.contextPrecision ?? "Relevant contexts were identified by the evaluator."} Contract normalization computed ${relevantContextIndices.length}/${contexts.length} relevant supplied contexts.`;
         metrics.contextPrecision = derivedContextPrecision;
       }
-      if (metrics.faithfulness < 1 && unsupportedClaims.length === 0) {
-        metrics.faithfulness = 1;
-        reasons.faithfulness = `${reasons.faithfulness ?? "No unsupported claim was identified."} Contract normalization set faithfulness to 1 because zero unsupported claims means every evaluated claim was supported.`;
-      }
       const passed = unsupportedClaims.length === 0 && metrics.faithfulness >= 0.8 && metrics.responseRelevancy >= 0.7 &&
         (metrics.factualCorrectness === null || metrics.factualCorrectness >= 0.7);
       return {
@@ -240,7 +236,7 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
         scope: "request",
         implementation: "azure-openai-ragas-compatible-v1",
         evaluatorModel: model,
-        evaluatorVersion: "2026-09-19.8",
+        evaluatorVersion: "2026-09-19.9",
         status: passed ? "passed" : "failed",
         referenceId: reference?.id ?? null,
         metrics,

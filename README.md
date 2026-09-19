@@ -91,14 +91,18 @@ Current execution truth:
 - The human-handoff route finishes with an interrupt outcome and an evidence summary; it never claims that an account mutation or refund occurred.
 - The group-chat route discovers the specialist-team Agent Card and sends an A2A 1.0 `message:send` request. The service fans the question out only to the matched Billing, Household/Travel and Identity/Access widgets, then returns their identities, answers and citations in one bounded task artifact.
 - The A2A specialist endpoint is JWT-protected and invokes the existing published Persora Netflix agent. Browser clients never receive a service-role credential.
+- Exact `NW-*` identifiers are checked against the repository's verified-code registry before retrieval. Unknown codes return a verification request with no citations; the initial registry contains only `NW-2-5` and `NW-3-16`, each linked to an official Netflix Help page.
+- The demo and A2A entry points apply a best-effort per-instance fixed-window limiter. Production deployment must retain the downstream quota and gateway protections because an in-memory Edge Function limiter is not globally distributed.
 
 ### Live evaluation and Python RAGAS benchmark
 
 `supabase/functions/_shared/liveRagEvaluation.ts` performs the live evaluation. It sends the exact question, the exact displayed answer and the full retrieved chunks referenced by that answer's `[#n]` citations to the configured Azure OpenAI evaluator. Faithfulness, response relevancy and context precision execute for every generated knowledge answer. Context recall and factual correctness execute only when that exact question has a checked-in approved reference; otherwise those two values are `null` and the UI says **Not applicable**. The result includes SHA-256 hashes of all inputs so a score can be tied to one immutable run.
 
-The evaluator validates its own JSON contract and retries once when a required metric is missing. Because “zero unsupported claims” logically means every evaluated claim was supported, a contradictory lower faithfulness value is normalized to `1.0` and that normalization is recorded in the faithfulness reason. Unsupported claims are never normalized away.
+The evaluator validates its own JSON contract and retries once when a required metric is missing. Its returned faithfulness score is preserved after range validation. `unsupportedClaims` remains separate evidence, so an empty list never silently overwrites a lower evaluator score.
 
 This is deliberately described as **RAGAS-compatible**, not as the Python Ragas package running inside Supabase. Supabase Edge Functions execute TypeScript on Deno. The actual Python Ragas `0.4.3` package remains a CI release benchmark: `scripts/evaluate_ragas.py` runs six pinned deterministic metrics over five checked-in contract samples, and GitHub Actions regenerates `src/generated/ragas-evaluation.json`. The browser never substitutes that static artifact into a live answer.
+
+`npm run load:smoke` is deliberately disabled unless `ALLOW_PAID_LOAD_TEST=yes` is supplied. It is capped at ten requests and is not run by CI, preventing accidental credit consumption.
 
 ### Enable Langfuse execution proof
 

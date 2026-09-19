@@ -46,6 +46,9 @@ jobs:
       - name: Run evidence-contract tests
         run: npm test
 
+      - name: Validate release contracts
+        run: npm run validate:release
+
       - name: Set up Deno for Edge Function validation
         uses: denoland/setup-deno@v2
         with:

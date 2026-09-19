@@ -136,7 +136,7 @@ describe("live exact-run RAG evaluation", () => {
     expect(result.status).toBe("passed");
   });
 
-  it("normalizes faithfulness when the evaluator reports zero unsupported claims", async () => {
+  it("preserves evaluator faithfulness even when unsupported claims are empty", async () => {
     const result = await evaluateExactRun({
       question: "Question",
       answer: "Supported answer [#1].",
@@ -154,9 +154,9 @@ describe("live exact-run RAG evaluation", () => {
         relevantContextIndices: [1],
       }),
     });
-    expect(result.metrics.faithfulness).toBe(1);
-    expect(result.reasons.faithfulness).toContain("Contract normalization");
-    expect(result.status).toBe("passed");
+    expect(result.metrics.faithfulness).toBe(0.5);
+    expect(result.reasons.faithfulness).not.toContain("Contract normalization");
+    expect(result.status).toBe("failed");
   });
 
   it("computes reference-dependent metrics only for an approved exact question", async () => {

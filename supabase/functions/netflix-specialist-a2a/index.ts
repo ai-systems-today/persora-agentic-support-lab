@@ -1,19 +1,32 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { normalizeCitationBundle } from "../_shared/citationEvidence.ts";
 import { selectSpecialists, specialistTaskMessage, type SpecialistSelection } from "../_shared/specialistRouter.ts";
+import { unknownNetflixErrorResponse } from "../_shared/netflixErrorCodes.ts";
+import { consumeEntryRateLimit, requestRateLimitKey } from "../_shared/entryRateLimit.ts";
 
 const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
 const AGENT_URL = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
 const A2A_VERSION = "1.0";
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       "Content-Type": "application/a2a+json",
       "A2A-Version": A2A_VERSION,
+      ...extraHeaders,
     },
   });
+}
+
+function a2aError(status: number, message: string, reason: string, details: unknown[] = [], extraHeaders: Record<string, string> = {}) {
+  return json({
+    error: {
+      code: status,
+      message,
+      details: [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason, domain: "a2a-protocol.org" }, ...details],
+    },
+  }, status, extraHeaders);
 }
 
 function applySsePayload(state: { answer: string; citations: unknown[] }, payload: string) {
@@ -90,13 +103,16 @@ async function askSpecialistTask(message: string, taskId: string) {
 Deno.serve(async (req: Request) => {
   const path = new URL(req.url).pathname;
   if (req.method === "GET" && path.endsWith("/.well-known/agent-card.json")) {
-    return json({
+    const card = {
       name: "Persora Netflix Specialist Team",
       description: "Routes billing, household/travel, and account-access questions to distinct published Persora agents.",
-      url: AGENT_URL,
+      supportedInterfaces: [{ url: AGENT_URL, protocolBinding: "HTTP+JSON", protocolVersion: A2A_VERSION }],
       version: A2A_VERSION,
-      protocolVersion: A2A_VERSION,
       capabilities: { streaming: false, pushNotifications: false },
+      securitySchemes: {
+        bearerAuth: { httpAuthSecurityScheme: { scheme: "Bearer", bearerFormat: "JWT" } },
+      },
+      securityRequirements: [{ schemes: { bearerAuth: { list: [] } } }],
       defaultInputModes: ["text/plain"],
       defaultOutputModes: ["text/plain"],
       skills: [
@@ -104,26 +120,41 @@ Deno.serve(async (req: Request) => {
         { id: "netflix-household", name: "Netflix household and travel", description: "Grounded household and travel support.", tags: ["netflix", "household", "travel", "rag"] },
         { id: "netflix-identity", name: "Netflix account access and security", description: "Grounded account-access and security support.", tags: ["netflix", "identity", "security", "rag"] },
       ],
+    };
+    return json(card, 200, {
+      "Cache-Control": "public, max-age=300",
+      "ETag": `W/\"netflix-specialist-${A2A_VERSION}\"`,
     });
   }
 
   if (req.method !== "POST" || !path.endsWith("/message:send")) {
-    return json({ error: { code: "method_not_found", message: "Use GET /.well-known/agent-card.json or POST /message:send" } }, 404);
+    return a2aError(404, "Use GET /.well-known/agent-card.json or POST /message:send", "METHOD_NOT_FOUND");
   }
   if (req.headers.get("A2A-Version") !== A2A_VERSION) {
-    return json({ error: { code: "version_not_supported", message: `A2A-Version ${A2A_VERSION} is required` } }, 400);
+    return a2aError(400, `A2A-Version ${A2A_VERSION} is required`, "VERSION_NOT_SUPPORTED");
   }
 
   try {
-    const body = await req.json() as { message?: { messageId?: unknown; parts?: Array<{ text?: unknown }> } };
+    const body = await req.json() as { message?: { role?: unknown; messageId?: unknown; parts?: Array<{ text?: unknown }> } };
+    const rateFallback = typeof body.message?.messageId === "string" ? body.message.messageId : "anonymous";
+    const rateLimit = consumeEntryRateLimit(await requestRateLimitKey(req, "netflix-specialist-a2a", rateFallback));
+    if (!rateLimit.allowed) {
+      return a2aError(429, "Too many requests", "RATE_LIMIT_EXCEEDED", [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: `${rateLimit.retryAfterSeconds}s` }], { "Retry-After": String(rateLimit.retryAfterSeconds) });
+    }
+    if (body.message?.role !== "ROLE_USER" || typeof body.message?.messageId !== "string" || !body.message.messageId.trim()) {
+      return a2aError(400, "message.role ROLE_USER and a non-empty message.messageId are required", "INVALID_MESSAGE", [{ "@type": "type.googleapis.com/google.rpc.BadRequest" }]);
+    }
     const text = body.message?.parts?.map((part) => typeof part.text === "string" ? part.text : "").filter(Boolean).join("\n").trim() ?? "";
-    if (!text || text.length > 2000) return json({ error: { code: "invalid_message", message: "A text message of 1-2000 characters is required" } }, 400);
+    if (!text || text.length > 2000) return a2aError(400, "A text message of 1-2000 characters is required", "INVALID_MESSAGE", [{ "@type": "type.googleapis.com/google.rpc.BadRequest" }]);
     const taskId = crypto.randomUUID();
-    const result = await askSpecialistTask(text, taskId);
+    const unknownCodeAnswer = unknownNetflixErrorResponse(text);
+    const result = unknownCodeAnswer
+      ? { answer: unknownCodeAnswer, citations: [], specialists: [] }
+      : await askSpecialistTask(text, taskId);
     return json({
       task: {
         id: taskId,
-        contextId: typeof body.message?.messageId === "string" ? body.message.messageId : taskId,
+        contextId: body.message.messageId,
         status: { state: "TASK_STATE_COMPLETED", timestamp: new Date().toISOString() },
         artifacts: [{
           artifactId: crypto.randomUUID(),
@@ -136,6 +167,6 @@ Deno.serve(async (req: Request) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "A2A specialist failed";
     console.error(JSON.stringify({ function: "netflix-specialist-a2a", error: message }));
-    return json({ error: { code: "internal_error", message } }, 500);
+    return a2aError(500, message, "INTERNAL_ERROR");
   }
 });
