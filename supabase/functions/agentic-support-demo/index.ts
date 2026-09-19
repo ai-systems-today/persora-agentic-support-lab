@@ -6,6 +6,8 @@ import { evaluateExactRun, notEvaluatedLiveRag, referenceForQuestion, type LiveR
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
 import { selectPrimarySpecialist, type SpecialistSelection } from "../_shared/specialistRouter.ts";
+import { unknownNetflixErrorResponse } from "../_shared/netflixErrorCodes.ts";
+import { consumeEntryRateLimit, requestRateLimitKey } from "../_shared/entryRateLimit.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://ai-systems-today.github.io",
@@ -190,6 +192,10 @@ function applySsePayload(state: { answer: string; citations: unknown[]; eventTyp
 
 async function requestPublishedAgent(state: typeof State.State) {
   const specialist = selectPrimarySpecialist(state.message);
+  const unknownCodeAnswer = unknownNetflixErrorResponse(state.message);
+  if (unknownCodeAnswer) {
+    return { answer: unknownCodeAnswer, citations: [], eventTypes: ["verified_code_not_found"], specialist };
+  }
   const response = await fetch(UPSTREAM, {
     method: "POST",
     headers: {
@@ -1004,6 +1010,13 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json();
     const sessionToken = typeof body.sessionToken === "string" ? body.sessionToken : crypto.randomUUID();
+    const rateLimit = consumeEntryRateLimit(await requestRateLimitKey(req, "agentic-support-demo", sessionToken));
+    if (!rateLimit.allowed) {
+      return new Response(JSON.stringify({ error: "Too many requests" }), {
+        status: 429,
+        headers: { ...cors(origin), "Content-Type": "application/json", "Retry-After": String(rateLimit.retryAfterSeconds) },
+      });
+    }
     const threadId = (await sha256(sessionToken)).slice(0, 32);
     if (body.action === "concurrent-check") {
       const message = typeof body.message === "string" ? body.message.trim() : "";
