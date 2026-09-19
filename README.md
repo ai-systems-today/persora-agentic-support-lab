@@ -20,7 +20,7 @@ An interview-ready, evidence-first Netflix support demonstration. The applicatio
 - An additive **Agentic run** mode backed by JWT-protected Supabase Edge Functions. It executes a real LangGraph graph, streams standards-based AG-UI events, runs a deterministic authorization guardrail before retrieval, pauses mutation requests for human approval, and calls the published Netflix agent with its returned citations.
 - Distinct sequential, concurrent privacy-check, A2A group-specialist, human-handoff, and bounded revise-or-finish recovery execution paths, each with exact-run proof.
 - Distinct published Billing, Household & Travel, and Account Access & Security Persora agents. Each has its own agent ID, prompt and widget ID while sharing the same Netflix Help knowledge corpus; every agentic run returns the exact specialist identities it executed.
-- An exact-run deterministic quality gate for published answers: citation-index validity, lexical grounding, answer relevance and multi-intent coverage. It retries single-agent answers once with stricter citation instructions and fails closed instead of displaying an unverifiable or incomplete generated answer.
+- An exact-run quality evaluation for published answers: citation-index validity, lexical grounding, answer relevance and multi-intent coverage. It evaluates the native published-agent result without rewriting the customer question, retrying with evaluator instructions, or replacing the answer.
 - A live, exact-run, RAGAS-compatible evaluator for every generated knowledge answer, plus a pinned Python RAGAS release benchmark that remains explicitly separate.
 - Progressive run status while LangGraph nodes execute, contextual follow-up questions, a selectable orchestration canvas, and a node inspector backed by that run's trace.
 - A sanitized public trace projection that exposes route reasoning, nodes, timings, protocol-event counts and citation counts without exposing the private Langfuse console or credentials.
@@ -75,7 +75,7 @@ Current execution truth:
 | LangGraph | Executed in `supabase/functions/agentic-support-demo/index.ts` |
 | Deterministic authorization guardrail | Executed before the KB/model path |
 | Prompt version | Returned by every agentic run |
-| Exact-run quality gate | Runs on each published answer in agentic mode; reports grounding, citation validity and answer relevance, retries once, and fails closed on a second failure |
+| Exact-run quality evaluation | Runs on each published answer in agentic mode and reports grounding, citation validity and answer relevance without changing or replacing the published-agent result |
 | Correctness | Evaluated only when the exact question has an approved trusted reference; new/free-form questions report it as not applicable rather than inventing a score |
 | AG-UI lifecycle, step, text, subagent and custom evidence events | Progressively streamed by every agentic run; upstream answer text arrives as one delta after the graph completes |
 | A2A | Agent Card discovery and `message:send` execute on the group-chat route through `netflix-specialist-a2a`; the task artifact identifies every published specialist widget that ran |
@@ -131,7 +131,7 @@ The concurrent route sends the privacy-policy and safe-alternative checks as two
 7. Run the failed-path case to show the planner's recorded revise-or-finish decisions and preserved context.
 8. Switch between graph, timeline and evidence flow, then close with the stack map: the contracts remain stable while adapters supply real LangGraph, retrieval, A2A/AG-UI, Langfuse and RAGAS evidence.
 
-For full run proof, use **Agentic run**, submit one grounded question, open **Explain this answer**, and show the returned citations, exact-run quality scores, node trace and measured latency. **Live agent** calls the published agent directly and therefore does not claim that the demonstration's LangGraph pattern or exact-run quality gate executed.
+For full run proof, use **Agentic run**, submit one grounded question, open **Explain this answer**, and show the returned citations, exact-run quality scores, node trace and measured latency. **Live agent** calls the published agent directly and therefore does not claim that the demonstration's LangGraph pattern or exact-run quality evaluation executed.
 
 ## Repository isolation
 
