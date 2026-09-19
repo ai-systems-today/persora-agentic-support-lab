@@ -1,5 +1,11 @@
 export type VerifiedKnowledgeTopic = "household-travel" | "travel-alternatives" | "household-gps";
 
+export function verifiedKnowledgeRequiredText(topic: VerifiedKnowledgeTopic): string {
+  if (topic === "travel-alternatives") return "hotels or holiday rentals";
+  if (topic === "household-gps") return "does not collect GPS data";
+  return "Watch Temporarily";
+}
+
 export function verifiedKnowledgeTopic(message: string): VerifiedKnowledgeTopic | null {
   if (/\bgps\b/i.test(message)) return "household-gps";
   if (/temporary.*(?:failed|fails|doesn(?:'|’)t work|didn(?:'|’)t work)|(?:failed|fails).*temporary/i.test(message)) {
