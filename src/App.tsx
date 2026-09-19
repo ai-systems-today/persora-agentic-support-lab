@@ -313,7 +313,7 @@ function ExecutionVisuals({ turn }: { turn: ChatTurn }) {
           <article><span>01</span><strong>{retrievalDisplay.value}</strong><small>{retrievalDisplay.status}</small></article><i>→</i>
           <article><span>02</span><strong>{pattern} route</strong><small>{routeEvidenceLabel}</small></article><i>→</i>
           <article><span>03</span><strong>Case response</strong><small>{responseEvidenceLabel}</small></article><i>→</i>
-          <article><span>04</span><strong>{turn.runtime.quality?.executed ? "Live quality gate" : "Quality evaluation"}</strong><small>{turn.runtime.quality ? qualityLabel : turn.runtime.mode === "fixture" ? "Fixture replay" : "Not evaluated"}</small></article>
+          <article><span>04</span><strong>Quality evaluation</strong><small>{turn.runtime.quality ? qualityLabel : turn.runtime.mode === "fixture" ? "Fixture replay" : "Not evaluated"}</small></article>
         </div>
         {turn.runtime.retrieval && <div className="retrieval-results">
           <div><span>Retrieval provider</span><strong>{turn.runtime.retrieval.provider}</strong><small>{turn.runtime.retrieval.returnedCount} ranked sources · retrieval-only latency not captured</small></div>
@@ -456,7 +456,7 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   ] } : layer);
   return next.map((layer) => layer.id === "quality" ? { ...layer, fields: [
     { label: "Answer present", value: turn.answer.trim() ? "Passed" : "Failed", status: "runtime-proven", detail: "Programmatic validation checked that the live stream produced answer text." },
-    { label: "Exact-run quality gate", value: quality?.status === "passed" ? `Passed${quality.retryCount ? " after one retry" : ""}` : quality?.status === "failed" ? `Failed closed${quality.retryCount ? " after one retry" : ""}` : "Not evaluated", status: quality?.executed ? "runtime-proven" : "not-evaluated", detail: quality?.reason ?? "This path did not generate a published knowledge answer, so grounding and relevance were not evaluated.", metrics: quality?.executed ? [
+    { label: "Exact-run quality evaluation", value: quality?.status === "passed" ? "Passed" : quality?.status === "failed" ? "Failed — answer preserved" : "Not evaluated", status: quality?.executed ? "runtime-proven" : "not-evaluated", detail: quality?.reason ?? "This path did not generate a published knowledge answer, so grounding and relevance were not evaluated.", metrics: quality?.executed ? [
       { label: "Grounding", value: `${((quality.grounding ?? 0) * 100).toFixed(1)}%` },
       { label: "Citation validity", value: `${((quality.citationValidity ?? 0) * 100).toFixed(1)}%` },
       { label: "Answer relevance", value: `${((quality.answerRelevance ?? 0) * 100).toFixed(1)}%` },
