@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { evaluateLiveAnswer } from "../supabase/functions/_shared/answerQuality";
-import { verifiedKnowledgeAnswer, verifiedKnowledgeTopic } from "../supabase/functions/_shared/verifiedKnowledgeFallback";
+import { verifiedKnowledgeAnswer, verifiedKnowledgeRequiredText, verifiedKnowledgeTopic } from "../supabase/functions/_shared/verifiedKnowledgeFallback";
 
 const chunkOne = `# Netflix Household and travel: verified support facts
 ## Temporary access while traveling
@@ -20,6 +20,7 @@ describe("verified shared-KB fallback", () => {
     ["Does Netflix use GPS to decide which devices belong to my Netflix Household?", "household-gps", chunkTwo],
   ] as const)("builds a fully cited answer for %s", (question, topic, source) => {
     expect(verifiedKnowledgeTopic(question)).toBe(topic);
+    expect(source).toContain(verifiedKnowledgeRequiredText(topic));
     const answer = verifiedKnowledgeAnswer(topic);
     const requiredTopics = topic === "household-travel"
       ? [
