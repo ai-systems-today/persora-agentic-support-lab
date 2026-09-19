@@ -5,8 +5,7 @@ import { citationEvidenceText, normalizeCitationBundle } from "../_shared/citati
 import { evaluateExactRun, notEvaluatedLiveRag, referenceForQuestion, type LiveRagEvaluation } from "../_shared/liveRagEvaluation.ts";
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
-import { selectPrimarySpecialist, specialistRetrievalHint, type SpecialistSelection } from "../_shared/specialistRouter.ts";
-import { passesQuestionSpecificAnswerContract, verifiedKnowledgeAnswer, verifiedKnowledgeRequiredText, verifiedKnowledgeTopic } from "../_shared/verifiedKnowledgeFallback.ts";
+import { selectPrimarySpecialist, type SpecialistSelection } from "../_shared/specialistRouter.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://ai-systems-today.github.io",
@@ -15,10 +14,8 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
 const A2A_SPECIALIST = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
-const PROMPT_VERSION = "netflix-support-demo@2026-09-19.3-generalization";
+const PROMPT_VERSION = "netflix-support-demo@2026-09-19.4-observational-evaluation";
 const LANGGRAPH_VERSION = "1.4.15";
-const NETFLIX_KB_CONVERSATION_ID = "6983a1ed-a545-4cfd-a00b-d4d785914217";
-const VERIFIED_POLICY_FILENAME = "netflix-household-travel-official-policy.md";
 
 const secureEqual = (left: string, right: string) => {
   if (left.length !== right.length) return false;
@@ -191,23 +188,7 @@ function applySsePayload(state: { answer: string; citations: unknown[]; eventTyp
   if (typeof first?.delta?.content === "string") state.answer += first.delta.content;
 }
 
-async function requestPublishedAgent(state: typeof State.State, repair: boolean) {
-  const question = state.pattern === "group-chat"
-    ? "Give one verified step for each of these Netflix issues: billing, Netflix Household, and account email access."
-    : state.message;
-  const qualityInstruction = "Answer completely but concisely in Markdown. Use a short heading and bullets or numbered steps when they improve clarity. Every bullet must be a complete, self-contained sentence that names its subject; never begin with a dangling transition or pronoun whose referent is missing. Begin directly with the cited facts or steps: do not add an uncited introduction, transition, or conclusion. Headings may be uncited, but every factual sentence or bullet must end with its matching [#n] citation. Use only facts directly stated in the returned Netflix knowledge sources. Do not add uncited factual clauses or external links. If the sources do not support an answer, say only: I do not have enough source evidence.";
-  const approvedReference = referenceForQuestion(state.message);
-  const retrievalHint = specialistRetrievalHint(state.message);
-  const orchestrationInstruction = state.specialistContext.trim()
-    ? ` Follow this bounded orchestration plan: ${state.specialistContext.trim()}`
-    : "";
-  const retrievalInstruction = retrievalHint ? ` Retrieval guidance: ${retrievalHint}` : "";
-  const completenessInstruction = approvedReference
-    ? ` This approved benchmark requires every source-supported point in this completeness target: ${approvedReference.answer}`
-    : "";
-  const repairInstruction = repair
-    ? " This is the one repair attempt. Rewrite the whole answer from scratch so it directly answers the user's exact question. Preserve every source-supported step needed to answer it, remove unsupported material, and end every factual sentence with the matching [#n] citation. Do not return a heading or background note without the requested steps."
-    : "";
+async function requestPublishedAgent(state: typeof State.State) {
   const specialist = selectPrimarySpecialist(state.message);
   const response = await fetch(UPSTREAM, {
     method: "POST",
@@ -218,8 +199,8 @@ async function requestPublishedAgent(state: typeof State.State, repair: boolean)
     },
     body: JSON.stringify({
       widgetId: specialist.widgetId,
-      message: `${question}\n\n${qualityInstruction}${completenessInstruction}${orchestrationInstruction}${retrievalInstruction}${repairInstruction}`,
-      sessionToken: `${state.sessionToken}:${state.traceId}:${repair ? "retry" : "primary"}`,
+      message: state.message,
+      sessionToken: `${state.sessionToken}:${state.traceId}:primary`,
       deviceId: state.deviceId,
       mode: "chat",
     }),
@@ -276,45 +257,6 @@ async function qualityCitations(values: unknown[]): Promise<QualityCitation[]> {
   });
 }
 
-async function requestVerifiedKnowledgeFallback(message: string) {
-  const topic = verifiedKnowledgeTopic(message);
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
-  if (!topic || !serviceRoleKey) return null;
-  const params = new URLSearchParams({
-    conversation_id: `eq.${NETFLIX_KB_CONVERSATION_ID}`,
-    "metadata->>filename": `eq.${VERIFIED_POLICY_FILENAME}`,
-    select: "id,chunk_index,content,metadata",
-    order: "chunk_index.asc",
-  });
-  const response = await fetch(`https://oiotkbbwriecdvtnufee.supabase.co/rest/v1/document_chunks?${params.toString()}`, {
-    headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
-  });
-  if (!response.ok) return null;
-  const rows = await response.json() as Array<{
-    id?: unknown;
-    content?: unknown;
-    metadata?: Record<string, unknown> | null;
-  }>;
-  const requiredText = verifiedKnowledgeRequiredText(topic);
-  const row = rows.find((candidate) => typeof candidate.content === "string" && candidate.content.includes(requiredText));
-  if (!row || typeof row.id !== "string" || typeof row.content !== "string") return null;
-  const metadata = row.metadata ?? {};
-  const citation = {
-    index: 1,
-    chunk_id: row.id,
-    filename: VERIFIED_POLICY_FILENAME,
-    title: typeof metadata.heading === "string" ? metadata.heading : "Netflix Household and travel: verified support facts",
-    source_url: typeof metadata.url === "string" ? metadata.url : null,
-    snippet: row.content,
-  };
-  return {
-    answer: verifiedKnowledgeAnswer(topic),
-    citations: [citation],
-    eventTypes: ["verified_shared_kb_fallback_used"],
-    specialist: selectPrimarySpecialist(message),
-  };
-}
-
 const MULTI_INTENT_QUALITY_TOPICS: Record<SpecialistSelection["domain"], { label: string; terms: string[] }> = {
   billing: { label: "billing", terms: ["billing", "payment", "currency", "charge", "invoice", "membership"] },
   household: { label: "household", terms: ["household", "TV", "home internet"] },
@@ -328,7 +270,6 @@ const requiredQualityTopics = (state: typeof State.State) => state.pattern === "
 
 async function callPublishedAgent(state: typeof State.State) {
   type PublishedResult = { answer: string; citations: unknown[]; eventTypes: string[]; specialist: SpecialistSelection | null };
-  let first: PublishedResult | null = null;
   const requiredTopics = requiredQualityTopics(state);
   if (state.pattern === "group-chat" && !state.a2a.executed) {
     const answer = "I couldn’t complete the required specialist exchange for this multi-topic request, so I’m not presenting a single-agent fallback as an orchestrated answer. Please retry or ask the billing, Household, and account-access questions separately.";
@@ -340,94 +281,27 @@ async function callPublishedAgent(state: typeof State.State) {
       eventTypes: ["a2a_required_for_group_chat", "live_quality_multi_intent_failed_closed"],
     };
   }
-  try {
-    first = state.pattern === "group-chat" && state.specialistContext.trim() && state.specialistCitations.length
-      ? {
-        answer: state.specialistContext,
-        citations: state.specialistCitations,
-        eventTypes: ["a2a_grounded_result_used"],
-        specialist: null,
-      }
-      : await requestPublishedAgent(state, false);
-  } catch {
-    first = null;
-  }
-
-  if (first) {
-    const firstCitations = await qualityCitations(first.citations);
-    const firstAnswer = first.answer.trim();
-    const firstQuality = evaluateLiveAnswer({
-      question: state.message,
-      answer: firstAnswer,
-      citations: firstCitations,
-      retryCount: 0,
-      requiredTopics,
-    });
-    if (firstQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, firstAnswer)) {
-      return { ...first, answer: firstAnswer, quality: firstQuality, eventTypes: [...first.eventTypes, "live_quality_passed"] };
+  const result: PublishedResult = state.pattern === "group-chat" && state.specialistContext.trim()
+    ? {
+      answer: state.specialistContext,
+      citations: state.specialistCitations,
+      eventTypes: ["a2a_grounded_result_used"],
+      specialist: null,
     }
-    if (state.pattern === "group-chat") {
-      return {
-        answer: "I couldn’t verify a source-backed answer for every part of this multi-topic request, so I’m not presenting a partial answer as complete. Please ask the billing, Household, and sign-in questions separately or use authenticated Netflix Support.",
-        citations: first.citations,
-        specialist: null,
-        quality: firstQuality,
-        eventTypes: [...first.eventTypes, "live_quality_multi_intent_failed_closed"],
-      };
-    }
-  }
-
-  let repaired: PublishedResult;
-  try {
-    repaired = await requestPublishedAgent(state, true);
-  } catch {
-    const fallbackCitations = first?.citations ?? [];
-    return {
-      answer: "I couldn’t verify a sufficiently grounded answer from the returned Netflix sources, so I’m not presenting the generated answer as reliable. Please rephrase the question or use authenticated Netflix Support.",
-      citations: fallbackCitations,
-      specialist: first?.specialist ?? selectPrimarySpecialist(state.message),
-      quality: evaluateLiveAnswer({ question: state.message, answer: "", citations: await qualityCitations(fallbackCitations), retryCount: 1 }),
-      eventTypes: [...(first?.eventTypes ?? []), "live_quality_retry_request_failed", "live_quality_failed_closed"],
-    };
-  }
-  const repairedCitations = await qualityCitations(repaired.citations);
-  const repairedAnswer = repaired.answer.trim();
-  const repairedQuality = evaluateLiveAnswer({
+    : await requestPublishedAgent(state);
+  const answer = result.answer.trim();
+  const quality = evaluateLiveAnswer({
     question: state.message,
-    answer: repairedAnswer,
-    citations: repairedCitations,
-    retryCount: 1,
+    answer,
+    citations: await qualityCitations(result.citations),
+    retryCount: 0,
     requiredTopics,
   });
-  if (repairedQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, repairedAnswer)) {
-    return { ...repaired, answer: repairedAnswer, quality: repairedQuality, eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_retry_passed"] };
-  }
-
-  const verifiedFallback = await requestVerifiedKnowledgeFallback(state.message);
-  if (verifiedFallback) {
-    const verifiedCitations = await qualityCitations(verifiedFallback.citations);
-    const verifiedQuality = evaluateLiveAnswer({
-      question: state.message,
-      answer: verifiedFallback.answer,
-      citations: verifiedCitations,
-      retryCount: 1,
-      requiredTopics,
-    });
-    if (verifiedQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, verifiedFallback.answer)) {
-      return {
-        ...verifiedFallback,
-        quality: verifiedQuality,
-        eventTypes: [...repaired.eventTypes, ...verifiedFallback.eventTypes, "live_quality_verified_kb_fallback_passed"],
-      };
-    }
-  }
-
   return {
-    answer: "I couldn’t verify a sufficiently grounded answer from the returned Netflix sources, so I’m not presenting the generated answer as reliable. Please rephrase the question or use authenticated Netflix Support.",
-    citations: repaired.citations,
-    specialist: repaired.specialist,
-    quality: repairedQuality,
-    eventTypes: [...repaired.eventTypes, ...(first ? [] : ["live_quality_initial_request_failed"]), "live_quality_failed_closed"],
+    ...result,
+    answer,
+    quality,
+    eventTypes: [...result.eventTypes, `live_quality_${quality.status}_observed`],
   };
 }
 
@@ -831,7 +705,7 @@ function planRecovery(state: typeof State.State) {
 }
 
 async function runExactEvaluation(state: typeof State.State) {
-  if (state.quality.status !== "passed" || !state.answer.trim() || !state.citations.length) {
+  if (!state.answer.trim()) {
     return {
       ragas: notEvaluatedLiveRag("This route did not produce a retrieved knowledge answer."),
       eventTypes: ["live_rag_evaluation_not_applicable"],
@@ -840,26 +714,16 @@ async function runExactEvaluation(state: typeof State.State) {
   const apiKey = Deno.env.get("AZURE_OPENAI_API_KEY")?.trim();
   const endpoint = (Deno.env.get("AZURE_OPENAI_ENDPOINT") ?? "https://ai-genaiappshub118707119222.openai.azure.com").trim();
   if (!apiKey) {
-    const rejectedAnswer = "I couldn’t verify a complete source-backed answer for this question, so I’m not presenting the generated candidate as reliable. Please try rephrasing the question.";
     return {
-      answer: rejectedAnswer,
-      citations: [],
-      quality: evaluateLiveAnswer({
-        question: state.message,
-        answer: rejectedAnswer,
-        citations: [],
-        retryCount: 1,
-        requiredTopics: requiredQualityTopics(state),
-      }),
       ragas: notEvaluatedLiveRag("Azure evaluator credentials are unavailable."),
-      eventTypes: ["live_rag_evaluation_unavailable_failed_closed"],
+      eventTypes: ["live_rag_evaluation_unavailable_observed"],
     };
   }
   const qualityContext = await qualityCitations(state.citations);
   const allContexts = qualityContext
     .map((citation, index) => `[#${index + 1}] ${citation.label}\n${citation.snippet ?? ""}`.trim());
   const contexts = allContexts;
-  let ragas = await evaluateExactRun({
+  const ragas = await evaluateExactRun({
     question: state.message,
     answer: state.answer,
     contexts,
@@ -868,108 +732,18 @@ async function runExactEvaluation(state: typeof State.State) {
     apiKey,
     model: "gpt-4o-mini",
   });
-  if (ragas.executed && ragas.status === "passed") {
-    return {
-      ragas,
-      eventTypes: ["live_rag_evaluation_passed"],
-      protocolEvents: [{
-        type: "CUSTOM",
-        name: "persora.evaluation.exact-run",
-        value: {
-          executed: ragas.executed,
-          status: ragas.status,
-          evaluatorVersion: ragas.evaluatorVersion,
-          referenceId: ragas.referenceId,
-          inputHashes: ragas.inputHashes,
-        },
-      }],
-    };
-  }
-
-  const alreadyRepaired = state.eventTypes.some((event) =>
-    event === "live_quality_retry_passed" ||
-    event === "live_quality_verified_kb_fallback_passed"
-  );
-  if (!alreadyRepaired && state.pattern !== "group-chat") {
-    try {
-      const repaired = await requestPublishedAgent(state, true);
-      const repairedCitations = await qualityCitations(repaired.citations);
-      const repairedAnswer = repaired.answer.trim();
-      const repairedQuality = evaluateLiveAnswer({
-        question: state.message,
-        answer: repairedAnswer,
-        citations: repairedCitations,
-        retryCount: 1,
-        requiredTopics: requiredQualityTopics(state),
-      });
-      if (repairedQuality.status === "passed" && passesQuestionSpecificAnswerContract(state.message, repairedAnswer)) {
-        const repairedContexts = repairedCitations
-          .map((citation, index) => `[#${index + 1}] ${citation.label}\n${citation.snippet ?? ""}`.trim());
-        const repairedRagas = await evaluateExactRun({
-          question: state.message,
-          answer: repairedAnswer,
-          contexts: repairedContexts,
-          reference: referenceForQuestion(state.message),
-          endpoint,
-          apiKey,
-          model: "gpt-4o-mini",
-        });
-        if (repairedRagas.executed && repairedRagas.status === "passed") {
-          return {
-            answer: repairedAnswer,
-            citations: repaired.citations,
-            specialist: repaired.specialist,
-            quality: repairedQuality,
-            ragas: repairedRagas,
-            eventTypes: [...repaired.eventTypes, "live_rag_evaluation_repair_passed"],
-            protocolEvents: [{
-              type: "CUSTOM",
-              name: "persora.evaluation.exact-run",
-              value: {
-                executed: true,
-                status: "passed",
-                evaluatorVersion: repairedRagas.evaluatorVersion,
-                referenceId: repairedRagas.referenceId,
-                inputHashes: repairedRagas.inputHashes,
-              },
-            }],
-          };
-        }
-        ragas = repairedRagas;
-      }
-    } catch {
-      // The final response below fails closed when the evaluator repair cannot complete.
-    }
-  }
-
-  const rejectionReason = ragas.executed
-    ? "The generated candidate failed the live exact-run evaluator and was not shown as a verified answer."
-    : "The live exact-run evaluator was unavailable, so the generated candidate was not shown as verified.";
-  const rejectedAnswer = "I couldn’t verify a complete source-backed answer for this question, so I’m not presenting the generated candidate as reliable. Please try rephrasing the question.";
   return {
-    answer: rejectedAnswer,
-    citations: [],
-    quality: evaluateLiveAnswer({
-      question: state.message,
-      answer: rejectedAnswer,
-      citations: [],
-      retryCount: 1,
-      requiredTopics: requiredQualityTopics(state),
-    }),
-    ragas: ragas.executed ? ragas : notEvaluatedLiveRag(rejectionReason),
-    eventTypes: [
-      ragas.executed ? "live_rag_evaluation_candidate_rejected" : "live_rag_evaluation_unavailable_failed_closed",
-    ],
+    ragas,
+    eventTypes: [`live_rag_evaluation_${ragas.status}_observed`],
     protocolEvents: [{
       type: "CUSTOM",
       name: "persora.evaluation.exact-run",
       value: {
         executed: ragas.executed,
-        status: ragas.executed ? ragas.status : "not-evaluated",
+        status: ragas.status,
         evaluatorVersion: ragas.evaluatorVersion,
         referenceId: ragas.executed ? ragas.referenceId : null,
         inputHashes: ragas.executed ? ragas.inputHashes : null,
-        rejectedCandidateStatus: ragas.status,
       },
     }],
   };
