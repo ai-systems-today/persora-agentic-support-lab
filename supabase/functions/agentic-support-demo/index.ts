@@ -6,7 +6,7 @@ import { evaluateExactRun, notEvaluatedLiveRag, referenceForQuestion, type LiveR
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
 import { selectPrimarySpecialist, specialistRetrievalHint, type SpecialistSelection } from "../_shared/specialistRouter.ts";
-import { verifiedKnowledgeAnswer, verifiedKnowledgeTopic } from "../_shared/verifiedKnowledgeFallback.ts";
+import { verifiedKnowledgeAnswer, verifiedKnowledgeRequiredText, verifiedKnowledgeTopic } from "../_shared/verifiedKnowledgeFallback.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://ai-systems-today.github.io",
@@ -295,9 +295,7 @@ async function requestVerifiedKnowledgeFallback(message: string) {
     content?: unknown;
     metadata?: Record<string, unknown> | null;
   }>;
-  const requiredText = topic === "travel-alternatives"
-    ? "hotel or holiday rentals"
-    : topic === "household-gps" ? "does not collect GPS data" : "Watch Temporarily";
+  const requiredText = verifiedKnowledgeRequiredText(topic);
   const row = rows.find((candidate) => typeof candidate.content === "string" && candidate.content.includes(requiredText));
   if (!row || typeof row.id !== "string" || typeof row.content !== "string") return null;
   const metadata = row.metadata ?? {};
