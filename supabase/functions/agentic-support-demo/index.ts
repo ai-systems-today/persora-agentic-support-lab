@@ -14,8 +14,10 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
 ]);
-const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestrate-chat";
-const A2A_SPECIALIST = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
+const PROJECT_URL = Deno.env.get("SUPABASE_URL")?.trim().replace(/\/$/, "");
+if (!PROJECT_URL) throw new Error("SUPABASE_URL is required.");
+const UPSTREAM = `${PROJECT_URL}/functions/v1/orchestrate-chat`;
+const A2A_SPECIALIST = `${PROJECT_URL}/functions/v1/netflix-specialist-a2a`;
 const PROMPT_VERSION = "netflix-support-demo@2026-09-19.4-observational-evaluation";
 const LANGGRAPH_VERSION = "1.4.15";
 const NETFLIX_CONTACT_URL = "https://help.netflix.com/en/contactus?locale=en-US";

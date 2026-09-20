@@ -148,6 +148,10 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain('name: "persora.handoff.contact-offered"');
     expect(orchestrator).toContain('name: "persora.handoff.approval-required"');
     expect(orchestrator).toContain("userContentTransmitted: false");
+    expect(orchestrator).toContain('Deno.env.get("SUPABASE_URL")');
+    expect(orchestrator).toContain('`${PROJECT_URL}/functions/v1/orchestrate-chat`');
+    expect(orchestrator).toContain('`${PROJECT_URL}/functions/v1/netflix-specialist-a2a`');
+    expect(orchestrator).not.toContain('const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co');
     expect(app).toContain("Contact Netflix Support");
     expect(sourcePolicy).toContain('CONTACT_ISSUE = "I want to contact Netflix Customer Service"');
     expect(sourceBrowser).not.toContain("state.message");
