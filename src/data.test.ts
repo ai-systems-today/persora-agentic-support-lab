@@ -161,6 +161,9 @@ describe("demo evidence", () => {
     expect(sourceBrowser).toContain("contact_controls_not_found");
     expect(sourceBrowser).toContain("payload?.result?.isError === true");
     expect(sourceBrowser).toContain("ref: issueRef");
+    expect(sourceBrowser).toContain('? { width: 390, height: 844 }');
+    expect(sourceBrowser).toContain(': { width: 1440, height: 900 }');
+    expect(sourceBrowser).toContain('"browser_resize", viewport');
     expect(sourceBrowser).not.toContain("target: \"input[name='issueDescription']\"");
   });
 
@@ -177,7 +180,9 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("failure.error?.message");
     expect(app).toContain("Exact-run quality evaluation");
     expect(app).toContain("Failed — answer preserved");
-    expect(app).toContain("Citation format issue");
+    expect(app).toContain("Answer quality issue");
+    expect(app).toContain("Quality check:");
+    expect(app).not.toContain("Citation format issue");
     expect(app).toContain("Failed · answer preserved · Runtime-proven");
     expect(app).not.toContain("Sources checked (answer withheld)");
     expect(app).not.toContain("Failed closed · Runtime-proven");
