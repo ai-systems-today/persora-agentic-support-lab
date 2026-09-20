@@ -1,6 +1,6 @@
-export const SOURCE_BROWSER_URL = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/support-source-browser";
+import { SUPABASE_PUBLISHABLE_KEY } from "./liveClient";
 
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJvaW90a2Jid3JpZWNkdnRudWZlZSIsInJlZiI6Im9pb3RrYmJ3cmllY2R2dG51ZmVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMDg3MjEsImV4cCI6MjA3MzY4NDcyMX0.dqpT-gmY4hT7zqxGAPHeJnx6xVugtiUnHXTUdtnoMDQ";
+export const SOURCE_BROWSER_URL = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/support-source-browser";
 
 export type SourceBrowserResult = {
   url: string;
