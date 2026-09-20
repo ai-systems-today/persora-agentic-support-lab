@@ -151,7 +151,9 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain('Deno.env.get("SUPABASE_URL")');
     expect(orchestrator).toContain('`${PROJECT_URL}/functions/v1/orchestrate-chat`');
     expect(orchestrator).toContain('`${PROJECT_URL}/functions/v1/netflix-specialist-a2a`');
+    expect(orchestrator).toContain('`${PROJECT_URL}/rest/v1/document_chunks');
     expect(orchestrator).not.toContain('const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co');
+    expect(orchestrator).not.toContain("oiotkbbwriecdvtnufee.supabase.co");
     expect(app).toContain("Contact Netflix Support");
     expect(sourcePolicy).toContain('CONTACT_ISSUE = "I want to contact Netflix Customer Service"');
     expect(sourceBrowser).not.toContain("state.message");

@@ -249,7 +249,7 @@ async function qualityCitations(values: unknown[]): Promise<QualityCitation[]> {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
   if (chunkIds.length && serviceRoleKey) {
     try {
-      const response = await fetch(`https://oiotkbbwriecdvtnufee.supabase.co/rest/v1/document_chunks?id=in.(${chunkIds.join(",")})&select=id,content`, {
+      const response = await fetch(`${PROJECT_URL}/rest/v1/document_chunks?id=in.(${chunkIds.join(",")})&select=id,content`, {
         headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
       });
       if (response.ok) {
