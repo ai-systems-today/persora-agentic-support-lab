@@ -17,6 +17,13 @@ describe("compact Netflix support chat", () => {
     expect(indexHtml).toContain('rel="icon" type="image/png" href="%BASE_URL%persora-heart.png"');
   });
 
+  it("links the application header to the manual and GitHub repository", () => {
+    expect(appSource).toContain('className="header-links"');
+    expect(appSource).toContain('href={`${import.meta.env.BASE_URL}docs/`}');
+    expect(appSource).toContain('href="https://github.com/ai-systems-today/persora-agentic-support-lab"');
+    expect(appSource).toContain('target="_blank" rel="noreferrer"');
+  });
+
   it("keeps every starter in a labelled examples menu and populates the selected question", () => {
     expect(appSource).toContain('className="examples-menu"');
     expect(appSource).toContain("Examples · {cases.length}");
