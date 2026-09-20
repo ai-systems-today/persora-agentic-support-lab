@@ -140,6 +140,8 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
 .citations { max-width: 100%; margin-top: 10px; border: 1px solid #233c5a; background: #0a1829; border-radius: 12px; padding: 12px 14px; overflow: hidden; }
 .citations summary em { color: #efb46b; border: 1px solid #634a2b; background: #291f13; border-radius: 99px; padding: 4px 7px; font-size: 8px; font-style: normal; letter-spacing: .04em; }
 .citations > div { display: grid; gap: 10px; margin-top: 10px; }
+.citations .quality-warning { margin: 0; padding: 9px 10px; border: 1px solid #634a2b; border-radius: 9px; background: #211b14; color: #d9b98e; font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.citations .quality-warning strong { color: #f3c684; }
 .citations a, .citations button, .citations span { max-width: 100%; width: fit-content; color: #a9cfff; text-decoration: none; border: 1px solid #2f5279; border-radius: 99px; padding: 6px 9px; font-size: 10px; background: transparent; cursor: pointer; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
 .citations a:hover, .citations button:hover { background: #132e4d; }
 .citations article { display: grid; gap: 4px; }
