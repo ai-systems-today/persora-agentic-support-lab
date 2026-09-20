@@ -4,6 +4,10 @@ export const CONTACT_ISSUE = "I want to contact Netflix Customer Service";
 export type SourcePresentation = "desktop" | "mobile";
 export type SourceInteraction = "none" | "reveal-contact-options";
 
+export function netflixIssueTextboxRef(snapshot: string): string | null {
+  return snapshot.match(/\btextbox\s+"Describe your issue"[^\n]*\[ref=([^\]\s]+)\]/i)?.[1] ?? null;
+}
+
 export function isSafeContactTarget(url: URL) {
   if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "help.netflix.com" || url.pathname !== CONTACT_PATH) return false;
   if ([...url.searchParams.keys()].some((key) => key !== "locale")) return false;

@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { CONTACT_ISSUE, sourceBrowserMode } from "../_shared/sourceBrowserPolicy.ts";
+import { CONTACT_ISSUE, netflixIssueTextboxRef, sourceBrowserMode } from "../_shared/sourceBrowserPolicy.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://ai-systems-today.github.io",
@@ -56,7 +56,7 @@ async function mcpCall(baseUrl: string, id: number, name: string, args: Record<s
   });
   if (!response.ok) throw new Error(`playwright_mcp_http_${response.status}`);
   const payload = await response.json();
-  if (payload?.error) throw new Error("playwright_mcp_tool_error");
+  if (payload?.error || payload?.result?.isError === true) throw new Error(`playwright_mcp_tool_error_${name}`);
   return payload?.result;
 }
 
@@ -109,10 +109,12 @@ Deno.serve(async (request) => {
 
     let observedChannels: Array<"call" | "chat"> = [];
     if (interaction === "reveal-contact-options") {
-      await mcpCall(baseUrl, callId++, "browser_snapshot", {});
+      const issueSnapshot = textFrom(await mcpCall(baseUrl, callId++, "browser_snapshot", {}));
+      const issueRef = netflixIssueTextboxRef(issueSnapshot);
+      if (!issueRef) return json(origin, 502, { error: "contact_issue_input_not_found" });
       await mcpCall(baseUrl, callId++, "browser_type", {
         element: "Netflix support issue description",
-        target: "input[name='issueDescription']",
+        ref: issueRef,
         text: CONTACT_ISSUE,
         submit: true,
       });

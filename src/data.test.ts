@@ -153,6 +153,9 @@ describe("demo evidence", () => {
     expect(sourceBrowser).not.toContain("state.message");
     expect(sourceBrowser).toContain('interaction === "reveal-contact-options"');
     expect(sourceBrowser).toContain("contact_controls_not_found");
+    expect(sourceBrowser).toContain("payload?.result?.isError === true");
+    expect(sourceBrowser).toContain("ref: issueRef");
+    expect(sourceBrowser).not.toContain("target: \"input[name='issueDescription']\"");
   });
 
   it("evaluates each published answer without rewriting or replacing it", () => {
