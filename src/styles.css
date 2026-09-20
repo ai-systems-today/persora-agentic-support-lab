@@ -47,11 +47,13 @@ button { color: inherit; }
 .browser-failure a { color: #245b91; font-weight: 800; }
 .chat-panel { min-width: 0; height: calc(100vh - 68px); overflow: hidden; display: flex; flex-direction: column; background: radial-gradient(circle at 18% 0%, #10213a 0, transparent 38%), #050b14; }
 .chat-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 24px 12px; scroll-behavior: smooth; }
-.assistant-intro { display: flex; align-items: center; gap: 13px; padding: 2px 0 20px; border-bottom: 1px solid #182a42; }
+.assistant-intro { position: sticky; top: -24px; z-index: 6; display: flex; align-items: center; gap: 13px; margin: -24px -24px 0; padding: 20px 24px; border-bottom: 1px solid #182a42; background: rgba(7, 17, 31, .97); backdrop-filter: blur(18px); box-shadow: 0 12px 24px #0003; }
 .assistant-intro h1 { margin: 0; color: #f4f6fa; font-size: 18px; line-height: 1.2; letter-spacing: -.02em; }
 .assistant-intro p { margin: 5px 0 0; color: #9aabc1; font-size: 12px; line-height: 1.4; }
 .assistant-intro small { display: block; margin-top: 5px; color: #70849f; font-size: 9px; }
 .assistant-intro small b { color: var(--mint); font-size: 11px; }
+.new-conversation { margin-left: auto; flex: 0 0 auto; border: 1px solid #2a4666; background: #0c1d31; color: #9cb3ce; border-radius: 9px; padding: 7px 9px; font-size: 9px; cursor: pointer; }
+.new-conversation:hover { border-color: var(--mint); color: white; }
 .chat-shell { width: min(920px, calc(100% - 40px)); margin: 0 auto; padding: 74px 0 42px; }
 .intro { max-width: 760px; }
 .assistant-avatar { width: 45px; height: 45px; flex: 0 0 45px; border: 1px solid #e50914; background: linear-gradient(145deg, #241014, #090a0d); border-radius: 13px; display: grid; place-items: center; color: #e50914; font-size: 22px; font-weight: 950; text-shadow: 2px 0 #820009; box-shadow: 0 10px 28px #e5091426; }
@@ -110,26 +112,42 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
 .answer-footer div { color: #7388a5; font-size: 11px; display: flex; gap: 8px; align-items: center; }
 .answer-footer button { border: 1px solid #345980; background: #102944; color: #b7d6ff; border-radius: 10px; padding: 9px 12px; cursor: pointer; font-weight: 750; font-size: 12px; }
 .answer-footer button:hover { background: #173858; }
-.follow-ups { border-top: 1px solid var(--line); margin-top: 15px; padding-top: 13px; }
-.follow-ups > strong { color: #8fa6c2; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.follow-ups { border-top: 1px solid var(--line); margin-top: 15px; padding-top: 9px; }
+.follow-ups summary, .citations summary { display: flex; align-items: center; gap: 8px; color: #9cb3ce; cursor: pointer; list-style: none; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.follow-ups summary::-webkit-details-marker, .citations summary::-webkit-details-marker { display: none; }
+.follow-ups summary b, .citations summary b { margin-left: auto; transition: transform .2s; }
+.follow-ups[open] summary b, .citations[open] summary b { transform: rotate(180deg); }
 .follow-ups > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
 .follow-ups button { border: 1px solid #2b557c; background: #0c2138; color: #cae1fa; border-radius: 999px; padding: 8px 11px; font-size: 11px; text-align: left; cursor: pointer; }
 .follow-ups button:hover { border-color: var(--mint); color: white; }
 .follow-ups button span { color: var(--mint); margin-left: 6px; }
-.citations { margin-top: 10px; border: 1px solid #233c5a; background: #0a1829; border-radius: 12px; padding: 12px 14px; }
-.citations > strong { display: block; color: #7890ad; text-transform: uppercase; letter-spacing: .1em; font-size: 9px; margin-bottom: 8px; }
-.citations > div { display: grid; gap: 8px; }
-.citations a, .citations button, .citations span { width: fit-content; color: #a9cfff; text-decoration: none; border: 1px solid #2f5279; border-radius: 99px; padding: 6px 9px; font-size: 10px; background: transparent; cursor: pointer; text-align: left; }
+.citations { max-width: 100%; margin-top: 10px; border: 1px solid #233c5a; background: #0a1829; border-radius: 12px; padding: 12px 14px; overflow: hidden; }
+.citations summary em { color: #efb46b; border: 1px solid #634a2b; background: #291f13; border-radius: 99px; padding: 4px 7px; font-size: 8px; font-style: normal; letter-spacing: .04em; }
+.citations > div { display: grid; gap: 10px; margin-top: 10px; }
+.citations a, .citations button, .citations span { max-width: 100%; width: fit-content; color: #a9cfff; text-decoration: none; border: 1px solid #2f5279; border-radius: 99px; padding: 6px 9px; font-size: 10px; background: transparent; cursor: pointer; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
 .citations a:hover, .citations button:hover { background: #132e4d; }
 .citations article { display: grid; gap: 4px; }
-.citations article small { color: #8fa6c1; line-height: 1.45; }
+.citations article { min-width: 0; max-width: 100%; }
+.citations article small { min-width: 0; max-width: 100%; color: #8fa6c1; line-height: 1.45; overflow-wrap: anywhere; word-break: break-word; }
 .composer-dock { position: relative; flex: 0 0 auto; z-index: 8; margin: 0; border-top: 1px solid #2a4262; background: rgba(8, 18, 31, .98); backdrop-filter: blur(18px); box-shadow: 0 -18px 48px #0007; overflow: hidden; }
 .composer-tools { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid #203753; }
-.starter-strip { min-width: 0; flex: 1; display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; }
-.starter-strip::-webkit-scrollbar { display: none; }
-.starter-strip button { flex: 0 0 auto; max-width: 165px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid #2b4a6b; background: #0b2036; color: #bdd3ed; border-radius: 999px; padding: 7px 10px; font-size: 10px; cursor: pointer; }
-.starter-strip button:hover { border-color: #e50914; color: white; }
-.starter-strip button:disabled { opacity: .45; cursor: wait; }
+.examples-menu, .mode-menu { position: relative; }
+.examples-menu { flex: 1; }
+.examples-menu summary, .mode-menu summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; list-style: none; border: 1px solid #2b4a6b; background: #0b2036; color: #c8dbef; border-radius: 10px; padding: 8px 10px; font-size: 10px; font-weight: 800; cursor: pointer; }
+.examples-menu summary::-webkit-details-marker, .mode-menu summary::-webkit-details-marker { display: none; }
+.examples-menu > div, .mode-menu > div { position: absolute; z-index: 20; bottom: calc(100% + 8px); border: 1px solid #2b4667; background: #071321; border-radius: 12px; box-shadow: 0 18px 55px #000c; overflow: hidden; }
+.examples-menu > div { left: 0; right: 0; display: grid; padding: 6px; }
+.examples-menu button { display: grid; grid-template-columns: 28px 1fr; gap: 7px; align-items: center; border: 0; border-radius: 8px; background: transparent; padding: 9px; text-align: left; cursor: pointer; }
+.examples-menu button:hover { background: #102943; }
+.examples-menu button span { color: #69809e; font-size: 9px; }
+.examples-menu button strong { color: #d8e7f8; font-size: 10px; }
+.mode-menu { flex: 0 0 142px; }
+.mode-menu > div { right: 0; width: 270px; padding: 6px; }
+.mode-menu button { width: 100%; display: block; border: 0; border-radius: 8px; background: transparent; padding: 9px 10px; text-align: left; cursor: pointer; }
+.mode-menu button:hover, .mode-menu button.active { background: #10312c; }
+.mode-menu button strong, .mode-menu button small { display: block; }
+.mode-menu button strong { color: #e4effd; font-size: 10px; }
+.mode-menu button small { color: #7790ad; margin-top: 3px; font-size: 9px; line-height: 1.35; }
 .answer-source-bar { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 12px 14px; border-bottom: 1px solid #203753; background: #0a192b; }
 .composer-dock.live .answer-source-bar { background: linear-gradient(90deg, #0a1f26, #0a192b 58%); box-shadow: inset 3px 0 var(--mint); }
 .answer-source-copy { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 9px; }
@@ -327,9 +345,11 @@ h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.
   .browser-status { display: none; }
   .chat-panel { height: 72vh; max-height: none; padding: 0; }
   .chat-scroll { padding: 18px 12px 10px; }
+  .assistant-intro { top: -18px; margin: -18px -12px 0; padding: 15px 12px; }
   .composer-tools { align-items: stretch; flex-direction: column; }
-  .answer-source-switch { width: 100%; }
-  .starter-strip button { max-width: 145px; }
+  .mode-menu { width: 100%; flex-basis: auto; }
+  .mode-menu > div { left: 0; right: 0; width: auto; }
+  .new-conversation { padding: 6px 7px; }
   .chat-shell { width: min(100% - 24px, 920px); padding-top: 42px; }
   .starter-grid { grid-template-columns: 1fr; }
   .message, .message.assistant { max-width: 96%; }

@@ -135,7 +135,7 @@ describe("demo evidence", () => {
     expect(app).toContain("LIVE ORCHESTRATION");
     expect(app).toContain("Selected execution node");
     expect(app).toContain("retrieval-only latency not captured");
-    expect(app).toContain("Continue this conversation");
+    expect(app).toContain("Continue conversation · {turn.runtime.followUps.length}");
   });
 
   it("evaluates each published answer without rewriting or replacing it", () => {
@@ -151,7 +151,7 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("failure.error?.message");
     expect(app).toContain("Exact-run quality evaluation");
     expect(app).toContain("Failed — answer preserved");
-    expect(app).toContain("Sources used (format check failed)");
+    expect(app).toContain("Citation format issue");
     expect(app).toContain("Failed · answer preserved · Runtime-proven");
     expect(app).not.toContain("Sources checked (answer withheld)");
     expect(app).not.toContain("Failed closed · Runtime-proven");
