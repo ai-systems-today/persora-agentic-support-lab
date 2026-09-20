@@ -49,6 +49,8 @@ The server selects Billing, Household & Travel, Account Access & Security, or th
 
 The published Persora agent retrieves from the current knowledge path and returns its answer with citations. The agentic layer preserves this result rather than silently replacing it with a different answer.
 
+The same published-agent turn may return contextual follow-up questions derived from the current user question and displayed answer. The gateway forwards those questions unchanged. It does not replace missing or invalid output with configured starters.
+
 ## Stage 6: deterministic quality checks
 
 The server checks claim support, citation indices, relevance and required-intent coverage. Unsupported factual lines can be removed from the displayed grounded result.
@@ -65,6 +67,8 @@ The server records node timings and exports private telemetry when configured. T
 
 AG-UI events stream progress and evidence to the browser. The user sees the answer first and may open **Explain this answer** to inspect the route, sources, measurements and missing evidence.
 
+When valid published-agent follow-ups were returned, **Continue conversation** appears below that answer. Selecting a question places it in the composer for review; it does not submit automatically.
+
 ## Failure behavior
 
-Failures remain visible. Live mode does not silently turn into a fixture. Missing trace read-back becomes `pending` or `unavailable`; missing evaluation becomes `Not evaluated`.
+Failures remain visible. Live mode does not silently turn into a fixture. Missing trace read-back becomes `pending` or `unavailable`; missing evaluation becomes `Not evaluated`. Follow-up generation, parsing or request failure produces no suggestions, so unrelated generic prompts are never presented as agent-generated continuation.
