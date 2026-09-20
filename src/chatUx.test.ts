@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 const appSource = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+const indexHtml = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 describe("compact Netflix support chat", () => {
   it("uses the supplied Persora and Netflix brand assets", () => {
@@ -10,6 +11,10 @@ describe("compact Netflix support chat", () => {
     expect(appSource).toContain("netflix-support-logo.png");
     expect(appSource).not.toContain('aria-label="Persora">♥');
     expect(appSource).not.toContain('className="assistant-avatar">N');
+  });
+
+  it("uses the supplied Persora heart as the browser tab icon", () => {
+    expect(indexHtml).toContain('rel="icon" type="image/png" href="%BASE_URL%persora-heart.png"');
   });
 
   it("keeps every starter in a labelled examples menu and populates the selected question", () => {
