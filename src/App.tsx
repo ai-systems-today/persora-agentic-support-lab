@@ -124,6 +124,11 @@ function Conversation({ turns, onAsk, onExplain, onReset, source, onSourceChange
     await submitQuestion(item.customer, item);
   };
 
+  const selectFollowUp = (question: string) => {
+    setDraft(question);
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
   return (
     <main className="workspace-shell">
       <section className="source-browser" aria-label="Live citation browser">
@@ -185,7 +190,7 @@ function Conversation({ turns, onAsk, onExplain, onReset, source, onSourceChange
                 </div>
                 {turn.runtime.followUps && turn.runtime.followUps.length > 0 && <details className="follow-ups">
                   <summary><span>Continue conversation · {turn.runtime.followUps.length}</span><b>⌄</b></summary>
-                  <div>{turn.runtime.followUps.map((question) => <button key={question} disabled={submitting} onClick={() => void submitQuestion(question)}>{question}<span>↗</span></button>)}</div>
+                  <div>{turn.runtime.followUps.map((question) => <button key={question} disabled={submitting} onClick={() => selectFollowUp(question)}>{question}<span>↗</span></button>)}</div>
                 </details>}
               </div>
             </div>
