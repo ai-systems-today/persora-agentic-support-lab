@@ -23,6 +23,8 @@ This repository demonstrates that approach through a support scenario:
 - private Langfuse telemetry with a sanitized public projection;
 - an **Explain this answer** workspace that distinguishes runtime proof from repository definitions and fixtures;
 - a Playwright MCP source viewer that opens original help pages instead of copying them into the application.
+- an orchestration-aware support handoff that distinguishes protected account-action approval from an ordinary request to contact a person;
+- a fail-closed Netflix Contact Us preview that uses a fixed synthetic issue, never the customer conversation, and labels the current evidence as mobile-width rather than claiming unverified device emulation.
 
 The implementation is a standalone evidence lab for the reliability principles used by Persora agents. It does not claim to contain every private component of `agent.persora.ai`.
 
@@ -102,6 +104,7 @@ Every push to `main` validates the application and Edge Functions, builds the Vi
 | A2A | Executes Agent Card discovery and `message:send` on the specialist route |
 | Langfuse | Server-side export and sanitized read-back are implemented |
 | Playwright MCP | Implemented by the source-browser Edge Function; execution is runtime-dependent |
+| Human contact request | Uses the handoff pattern in `contact-requested` mode; offers official sources without creating a mutation approval |
 | Supabase/Postgres vector retrieval | Reused through the current Persora knowledge path |
 | Pinecone / Milvus | Candidate adapters; not executed here |
 | Neo4j / Apache AGE | Candidate graph options; not executed here |

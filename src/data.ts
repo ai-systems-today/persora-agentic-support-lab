@@ -136,6 +136,27 @@ export const cases: DemoCase[] = [
     }),
   },
   {
+    id: "contact-support",
+    starter: "Can I speak to a person?",
+    customer: "I want to speak to a person at Netflix support.",
+    answer: "You can contact Netflix Customer Service through the official Contact Us page or use the Call and Chat options in the Netflix mobile app. This demonstration does not connect you or share this conversation.",
+    summary: "An explicit request for a person routes to official contact channels without creating a mutation approval.",
+    pattern: "handoff",
+    graph: [
+      { id: "intake", label: "Intake", role: "Detect human-support request", state: "complete" },
+      { id: "policy", label: "Policy", role: "Separate contact from mutation approval", state: "complete" },
+      { id: "handoff", label: "Human handoff", role: "Offer official contact channels", state: "active" },
+      { id: "source", label: "Official source", role: "Open verified Netflix page", state: "waiting" },
+    ],
+    layers: layers({
+      pattern: "handoff",
+      path: "Intake → Policy → Contact handoff → Official source",
+      source: "Official Netflix Contact Us and mobile-app instructions",
+      handoff: "Contact offered; no approval record",
+      validation: "No conversation content transmitted",
+    }),
+  },
+  {
     id: "group-chat",
     starter: "I have billing, household and email-access problems.",
     customer: "My account is billed in another country, household verification fails, and I cannot access my original email. What should I do?",

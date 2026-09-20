@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { CONTACT_ISSUE, netflixIssueTextboxRef, sourceBrowserMode } from "../_shared/sourceBrowserPolicy.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://ai-systems-today.github.io",
@@ -55,7 +56,7 @@ async function mcpCall(baseUrl: string, id: number, name: string, args: Record<s
   });
   if (!response.ok) throw new Error(`playwright_mcp_http_${response.status}`);
   const payload = await response.json();
-  if (payload?.error) throw new Error("playwright_mcp_tool_error");
+  if (payload?.error || payload?.result?.isError === true) throw new Error(`playwright_mcp_tool_error_${name}`);
   return payload?.result;
 }
 
@@ -71,6 +72,15 @@ function screenshotFrom(result: unknown): { data: string; mimeType: "image/jpeg"
   return null;
 }
 
+function textFrom(result: unknown): string {
+  const blocks = (result as { content?: unknown[] } | null)?.content;
+  if (!Array.isArray(blocks)) return "";
+  return blocks.flatMap((block) => {
+    const item = block as { type?: string; text?: string };
+    return item.type === "text" && typeof item.text === "string" ? [item.text] : [];
+  }).join("\n");
+}
+
 Deno.serve(async (request) => {
   const origin = request.headers.get("Origin");
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origin) });
@@ -80,16 +90,42 @@ Deno.serve(async (request) => {
   const rateKey = `${request.headers.get("x-forwarded-for") ?? "unknown"}:${origin}`;
   if (!acceptRequest(rateKey)) return json(origin, 429, { error: "rate_limit_exceeded" });
 
-  const body = await request.json().catch(() => null) as { url?: unknown } | null;
+  const body = await request.json().catch(() => null) as { url?: unknown; presentation?: unknown; interaction?: unknown } | null;
   const target = safeUrl(body?.url);
   if (!target) return json(origin, 400, { error: "only_https_help_netflix_com_is_allowed" });
+  const mode = sourceBrowserMode(body ?? {}, target);
+  if (mode.error) return json(origin, 400, { error: mode.error });
+  const { presentation, interaction } = mode;
 
   const baseUrl = Deno.env.get("PLAYWRIGHT_MCP_URL")?.trim();
   if (!baseUrl) return json(origin, 503, { error: "playwright_mcp_not_configured" });
 
   try {
-    await mcpCall(baseUrl, 1, "browser_navigate", { url: target.toString() });
-    const screenshotResult = await mcpCall(baseUrl, 2, "browser_take_screenshot", { type: "jpeg", quality: 72, fullPage: false });
+    let callId = 1;
+    if (presentation === "mobile") {
+      await mcpCall(baseUrl, callId++, "browser_resize", { width: 390, height: 844 });
+    }
+    await mcpCall(baseUrl, callId++, "browser_navigate", { url: target.toString() });
+
+    let observedChannels: Array<"call" | "chat"> = [];
+    if (interaction === "reveal-contact-options") {
+      const issueSnapshot = textFrom(await mcpCall(baseUrl, callId++, "browser_snapshot", {}));
+      const issueRef = netflixIssueTextboxRef(issueSnapshot);
+      if (!issueRef) return json(origin, 502, { error: "contact_issue_input_not_found" });
+      await mcpCall(baseUrl, callId++, "browser_type", {
+        element: "Netflix support issue description",
+        ref: issueRef,
+        text: CONTACT_ISSUE,
+        submit: true,
+      });
+      await mcpCall(baseUrl, callId++, "browser_wait_for", { time: 1 });
+      const contactSnapshot = textFrom(await mcpCall(baseUrl, callId++, "browser_snapshot", {}));
+      if (/\bCall(?: Us)?\b/i.test(contactSnapshot)) observedChannels.push("call");
+      if (/\bChat(?: with Us)?\b/i.test(contactSnapshot)) observedChannels.push("chat");
+      if (!observedChannels.length) return json(origin, 502, { error: "contact_controls_not_found" });
+    }
+
+    const screenshotResult = await mcpCall(baseUrl, callId, "browser_take_screenshot", { type: "jpeg", quality: 72, fullPage: false });
     const screenshot = screenshotFrom(screenshotResult);
     if (!screenshot) return json(origin, 502, { error: "playwright_screenshot_missing" });
     return json(origin, 200, {
@@ -99,6 +135,11 @@ Deno.serve(async (request) => {
       title: null,
       screenshot: screenshot.data,
       mimeType: screenshot.mimeType,
+      presentation: presentation === "mobile" ? "mobile-width" : "desktop",
+      deviceProfile: null,
+      observedChannels,
+      capturedAt: new Date().toISOString(),
+      userContentTransmitted: false,
     });
   } catch (error) {
     const reason = error instanceof Error ? error.message : "playwright_source_browser_failed";

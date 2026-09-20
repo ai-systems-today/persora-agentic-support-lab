@@ -137,14 +137,17 @@ function Conversation({ turns, onAsk, onExplain, onReset, source, onSourceChange
     <main className="workspace-shell">
       <section className="source-browser" aria-label="Live citation browser">
         <div className="browser-toolbar">
-          <span className="browser-status"><i /> {browser?.executed ? "Playwright-MCP live source" : "Source browser"}</span>
+          <span className="browser-status"><i /> {browser?.executed ? browser.presentation === "mobile-width" ? "Playwright-MCP live mobile-width source" : "Playwright-MCP live source" : "Source browser"}</span>
           <div className="browser-address">{browserUrl ?? "Select a returned citation to open its original webpage"}</div>
           {browserUrl && <a href={browserUrl} target="_blank" rel="noreferrer" title="Open the original page in a new tab">↗</a>}
         </div>
         <div className="browser-stage">
           {browserState === "loading" && <div className="browser-empty"><div className="progress-pulse"><i /></div><strong>Playwright is opening the original source…</strong></div>}
           {browserState === "error" && <div className="browser-empty browser-failure"><strong>Live browser unavailable</strong><p>{browserError}</p>{browserUrl && <a href={browserUrl} target="_blank" rel="noreferrer">Open original source directly ↗</a>}</div>}
-          {browserState !== "loading" && browser && <img src={`data:${browser.mimeType};base64,${browser.screenshot}`} alt={`Live Playwright view of ${browser.url}`} />}
+          {browserState !== "loading" && browser && <>
+            <img src={`data:${browser.mimeType};base64,${browser.screenshot}`} alt={`Live Playwright view of ${browser.url}`} />
+            <div className="browser-proof"><strong>{browser.observedChannels.length ? `Observed: ${browser.observedChannels.join(" · ")}` : "Original source opened"}</strong><span>{browser.deviceProfile ?? browser.presentation} · {new Date(browser.capturedAt).toLocaleTimeString()} · no conversation content shared</span></div>
+          </>}
           {browserState === "idle" && !browser && <div className="browser-empty"><div className="empty-orbit"><span /></div><strong>Original source workspace</strong><p>Ask a question, then choose a citation. The server-side Playwright browser will navigate to the real Netflix Help page.</p></div>}
         </div>
       </section>
@@ -179,6 +182,13 @@ function Conversation({ turns, onAsk, onExplain, onReset, source, onSourceChange
                     {normalizeAssistantMarkdown(turn.answer)}
                   </ReactMarkdown>
                 </div>
+                {turn.runtime.handoff?.mode === "contact-requested" && turn.runtime.handoff.contact && <section className="contact-card">
+                  <div><span>Human support requested</span><strong>Contact Netflix Support</strong><small>No connection was initiated and this conversation was not shared.</small></div>
+                  <div className="contact-actions">
+                    <button type="button" onClick={() => void openCitation(turn.runtime.handoff!.contact!.officialUrl)}>View live mobile source</button>
+                    <a href={turn.runtime.handoff.contact.instructionsUrl} target="_blank" rel="noreferrer">Call or chat instructions ↗</a>
+                  </div>
+                </section>}
                 {turn.runtime.citations.length > 0 && <details className="citations">
                   <summary><span>Sources · {turn.runtime.citations.length}</span>{turn.runtime.quality?.status === "failed" && <em>Citation format issue</em>}<b>⌄</b></summary>
                   <div>{turn.runtime.citations.map((citation, index) => <article key={`${citation.url ?? citation.label}-${index}`}>
@@ -470,9 +480,9 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   } else if (agentic && (turn.runtime.pattern ?? item.pattern) === "handoff") {
     patternProof = {
       label: "Pattern execution proof",
-      value: handoff?.required ? "Human interrupt emitted" : "Handoff not proved",
-      status: handoff?.required ? "runtime-proven" : "not-captured",
-      detail: handoff?.required ? "The run paused with a persisted, session-bound approval record before any account action." : "No human-approval interrupt was returned.",
+      value: handoff?.mode === "contact-requested" && handoff.status === "contact-offered" ? "Official contact route offered" : handoff?.required ? "Human interrupt emitted" : "Handoff not proved",
+      status: handoff?.mode === "contact-requested" && handoff.status === "contact-offered" || handoff?.required ? "runtime-proven" : "not-captured",
+      detail: handoff?.mode === "contact-requested" && handoff.status === "contact-offered" ? "The server detected an explicit request for a person and returned official contact sources without creating an approval or claiming a connection." : handoff?.required ? "The run paused with a persisted, session-bound approval record before any account action." : "No handoff evidence was returned.",
     };
   } else if (agentic) {
     patternProof = {
@@ -644,8 +654,10 @@ function ExplainDrawer({ turn, onClose, onHandoffDecision }: { turn: ChatTurn; o
 }
 
 function routeFixtureQuestion(question: string): DemoCase | null {
-  const selected = selectOrchestrationPattern(question).pattern;
+  const decision = selectOrchestrationPattern(question);
+  const selected = decision.pattern;
   if (selected === "sequential" && !/\b(travel|travelling|household|stream|watch|tv)\b/i.test(question)) return null;
+  if (decision.handoffMode === "contact-requested") return cases.find((item) => item.id === "contact-support") ?? null;
   return cases.find((item) => item.pattern === selected) ?? null;
 }
 
@@ -698,7 +710,11 @@ export default function App() {
     }
     setProgress(null);
 
-    const resolvedDemoCase = demoCase ?? (runtime.mode === "agentic" ? cases.find((item) => item.pattern === runtime.pattern) ?? cases[0] : null);
+    const resolvedDemoCase = demoCase ?? (runtime.mode === "agentic"
+      ? runtime.handoff?.mode === "contact-requested"
+        ? cases.find((item) => item.id === "contact-support") ?? cases[0]
+        : cases.find((item) => item.pattern === runtime.pattern) ?? cases[0]
+      : null);
     const turn: ChatTurn = {
       id: `turn-${sequence}`,
       question,
