@@ -7,6 +7,7 @@ An interview-ready, evidence-first Netflix support demonstration. The applicatio
 - A working support chatbot with five conversational starters and multi-turn history.
 - Case-specific answers for grounding, access control, approval/handoff, group chat and recovery.
 - An additive **Explain this answer** drawer.
+- A split source workspace: citation controls ask a server-side Playwright MCP browser to open the original Netflix Help URL and return a current viewport image. The original URL remains available as a direct new-tab fallback; no source page is copied into this repository.
 - A separate fixture run for every supported answer.
 - Topology-specific orchestration graphs for sequential, concurrent, group-chat, handoff and Magentic/planner patterns.
 - Graph, timeline and evidence-flow visualisations plus five architecture layers:
@@ -40,6 +41,8 @@ No provider registration or API key is required for fixture mode.
 Live mode calls the already-published Persora widget endpoint using its public widget identifier. No Azure OpenAI or Supabase service-role secret is placed in the browser. The deployment origin must be allowed by the published widget; if it is not, the UI shows the failure and does not silently substitute a fixture answer.
 
 Agentic mode calls `agentic-support-demo`, which requires the project’s browser-safe publishable/anon JWT and independently enforces the GitHub Pages/localhost origin allow-list. The function is isolated from LibreChat and from the existing Persora orchestration functions.
+
+The source workspace calls `support-source-browser` with the same browser-safe JWT. That Edge Function accepts only `https://help.netflix.com` targets, applies an origin allow-list and best-effort rate limit, and calls the existing video-studio Playwright MCP service through the server-only `PLAYWRIGHT_MCP_URL`. Deploy the function in the Supabase project and configure that secret before enabling the live source view. The browser never receives the MCP URL.
 
 The Vite base path is configured for this repository's GitHub Pages URL.
 
@@ -78,6 +81,7 @@ Current execution truth:
 | Exact-run quality evaluation | Runs on each published answer in agentic mode and reports grounding, citation validity and answer relevance without changing or replacing the published-agent result |
 | Correctness | Evaluated only when the exact question has an approved trusted reference; new/free-form questions report it as not applicable rather than inventing a score |
 | AG-UI lifecycle, step, text, subagent and custom evidence events | Progressively streamed by every agentic run; upstream answer text arrives as one delta after the graph completes |
+| Playwright source workspace | Repo-defined in `support-source-browser`; runtime execution requires the function deployment and server-only `PLAYWRIGHT_MCP_URL` configuration |
 | A2A | Agent Card discovery and `message:send` execute on the group-chat route through `netflix-specialist-a2a`; the task artifact identifies every published specialist widget that ran |
 | Langfuse | OTLP root span and child observations implemented; the server reads the current trace back and returns an allow-listed observation projection without private URLs, content or identifiers |
 | Live RAG evaluation | Azure OpenAI evaluates the exact question, displayed answer and exact returned citation snippets on every generated knowledge-answer route; the response records evaluator model/version, input hashes, reasons and unsupported claims |
