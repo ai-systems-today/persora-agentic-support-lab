@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cases } from "./data";
@@ -36,10 +36,10 @@ function normalizeAssistantMarkdown(answer: string) {
 function Header({ source, onSourceChange }: { source: AnswerSource; onSourceChange: (value: AnswerSource) => void }) {
   return (
     <header className="app-header">
-      <div className="brand-mark">P</div>
+      <div className="brand-mark" aria-label="Persora">♥</div>
       <div className="brand-copy">
         <strong>Persora</strong>
-        <span>Netflix Support · Agentic Evidence Lab</span>
+        <span>Agentic Evidence Lab</span>
       </div>
       <div className="mode-switch" role="group" aria-label="Answer source">
         <button className={source === "fixture" ? "active" : ""} onClick={() => onSourceChange("fixture")}>Fixture</button>
@@ -65,6 +65,22 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
   const [browserUrl, setBrowserUrl] = useState<string | null>(null);
   const [browserState, setBrowserState] = useState<"idle" | "loading" | "error">("idle");
   const [browserError, setBrowserError] = useState<string | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [starterAnimating, setStarterAnimating] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const conversationEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    conversationEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [turns.length, submitting, progress?.label]);
+
+  useEffect(() => {
+    if (!submitting) return;
+    const startedAt = performance.now();
+    setElapsedMs(0);
+    const timer = window.setInterval(() => setElapsedMs(performance.now() - startedAt), 100);
+    return () => window.clearInterval(timer);
+  }, [submitting]);
 
   const openCitation = async (url: string) => {
     setBrowserUrl(url);
@@ -79,19 +95,29 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
     }
   };
 
-  const submit = async () => {
-    const question = draft.trim();
+  const submitQuestion = async (question: string, selectedCase?: DemoCase) => {
     if (!question) return;
     setSubmitting(true);
-    await onAsk(question);
-    setSubmitting(false);
-    setDraft("");
+    try {
+      await onAsk(question, selectedCase);
+      setDraft("");
+    } finally {
+      setSubmitting(false);
+      window.requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  };
+
+  const submit = async () => {
+    await submitQuestion(draft.trim());
   };
 
   const askStarter = async (item: DemoCase) => {
-    setSubmitting(true);
-    await onAsk(item.customer, item);
-    setSubmitting(false);
+    setDraft(item.customer);
+    setStarterAnimating(true);
+    inputRef.current?.focus();
+    await new Promise((resolve) => window.setTimeout(resolve, 420));
+    setStarterAnimating(false);
+    await submitQuestion(item.customer, item);
   };
 
   return (
@@ -111,39 +137,24 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
       </section>
 
       <section className="chat-panel">
-      <section className="intro">
+      <div className="chat-scroll">
+      <section className="assistant-intro">
         <div className="assistant-avatar">N</div>
-        <p className="eyebrow">Netflix support demonstration</p>
-        <h1>Ask naturally. Inspect exactly what happened.</h1>
-        <p className="lede">Five cases demonstrate grounding, access control, approval, recovery and specialist group chat. Every answer has its own inspectable run and distinguishes fixture evidence from integrations that did not run.</p>
-      </section>
-
-      <section className="starters" aria-label="Conversation starters">
-        <div className="section-label">Conversation starters</div>
-        <div className="starter-grid">
-          {cases.map((item, index) => (
-            <button className="starter" key={item.id} disabled={submitting} onClick={() => void askStarter(item)}>
-              <span>0{index + 1}</span>
-              <strong>{item.starter}</strong>
-              <small>{item.pattern}</small>
-            </button>
-          ))}
-        </div>
+        <div><h1>Netflix Support</h1><p>Hi, I’m the Netflix Support Assistant. How can I help?</p><small>Powered by Persora <b>♥</b></small></div>
       </section>
 
       <section className="conversation" aria-live="polite">
         {turns.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-orbit"><span /></div>
-            <strong>Select a starter or type a supported Netflix question.</strong>
-            <p>{source === "agentic" ? "Questions run through the evidence-producing LangGraph path and published Netflix agent." : source === "live" ? "Questions are sent directly to the published Netflix Support agent." : "Questions use the local, deterministic evidence fixture."}</p>
+            <strong>Ask naturally.</strong>
+            <p>Choose an example below or type your own Netflix support question.</p>
           </div>
         ) : (
           turns.map((turn) => (
             <div className="turn" key={turn.id}>
               <div className="message customer"><span>You</span><p>{turn.question}</p></div>
               <div className="message assistant">
-                <span>Persora</span>
+                <span>Netflix Support</span>
                 <div className="answer-body">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
@@ -164,12 +175,12 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
                   </article>)}</div>
                 </div>}
                 <div className="answer-footer">
-                  <div><i /> {turn.runId ?? "No run"} · {turn.runtime.mode} · {turn.runtime.totalMs} ms</div>
+                  <div><i /> Answered in {(turn.runtime.totalMs / 1000).toFixed(1)}s</div>
                   {turn.demoCase && <button onClick={() => onExplain(turn)}>Explain this answer <b>↗</b></button>}
                 </div>
                 {turn.runtime.followUps && turn.runtime.followUps.length > 0 && <div className="follow-ups">
                   <strong>Continue this conversation</strong>
-                  <div>{turn.runtime.followUps.map((question) => <button key={question} disabled={submitting} onClick={() => void onAsk(question)}>{question}<span>↗</span></button>)}</div>
+                  <div>{turn.runtime.followUps.map((question) => <button key={question} disabled={submitting} onClick={() => void submitQuestion(question)}>{question}<span>↗</span></button>)}</div>
                 </div>}
               </div>
             </div>
@@ -179,14 +190,14 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
           <div className="progress-pulse"><i /></div>
           <div><span>LIVE ORCHESTRATION</span><strong>{progress.label}</strong><small>{progress.events.length} protocol events received · trace {progress.traceId.slice(0, 8)}</small></div>
         </div>}
+        <div ref={conversationEndRef} />
       </section>
+      </div>
 
       <div className={`composer-dock ${source !== "fixture" ? "live" : "fixture"}`}>
-        <div className="answer-source-bar">
-          <div className="answer-source-copy">
-            <span>Answer source</span>
-            <strong>{source === "agentic" ? "Agentic evidence run" : source === "live" ? "Live Netflix KB" : "Demo fixture"}</strong>
-            <small>{source === "agentic" ? "LangGraph trace · deterministic guardrail · real KB answer and citations" : source === "live" ? "Published Persora agent · streamed response · returned citations" : "Local deterministic replay · no network request"}</small>
+        <div className="composer-tools">
+          <div className="starter-strip" aria-label="Conversation starters">
+            {cases.map((item) => <button type="button" key={item.id} disabled={submitting} onClick={() => void askStarter(item)}>{item.starter}</button>)}
           </div>
           <div className="answer-source-switch" role="group" aria-label="Choose answer source">
             <button type="button" aria-pressed={source === "fixture"} className={source === "fixture" ? "active" : ""} onClick={() => onSourceChange("fixture")}>Fixture</button>
@@ -194,9 +205,10 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
             <button type="button" aria-pressed={source === "agentic"} className={source === "agentic" ? "active" : ""} onClick={() => onSourceChange("agentic")}>Agentic run</button>
           </div>
         </div>
-        <form className="composer" onSubmit={(event) => { event.preventDefault(); submit(); }}>
-          <input aria-label="Message" disabled={submitting} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={submitting ? "Running the selected answer path…" : "Ask a Netflix support question…"} />
-          <button aria-label="Send" disabled={submitting} title="Send question">{submitting ? "…" : "↑"}</button>
+        <form className={`composer ${starterAnimating ? "starter-loading" : ""}`} onSubmit={(event) => { event.preventDefault(); submit(); }}>
+          <input ref={inputRef} aria-label="Message" disabled={submitting} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={submitting ? "Netflix Support is working…" : "Ask Netflix Support…"} />
+          {submitting && <output className="elapsed" aria-live="off">{(elapsedMs / 1000).toFixed(1)}s</output>}
+          <button aria-label="Send" disabled={submitting} title="Send question">{submitting ? <span className="typing-dots"><i /><i /><i /></span> : "↑"}</button>
         </form>
       </div>
       </section>
