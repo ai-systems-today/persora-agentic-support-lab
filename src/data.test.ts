@@ -139,6 +139,15 @@ describe("demo evidence", () => {
     expect(app).toContain("Continue conversation · {turn.runtime.followUps.length}");
   });
 
+  it("forwards only follow-up questions returned by the published agent", () => {
+    const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    expect(orchestrator).toContain('type === "follow_ups" && Array.isArray(event.data)');
+    expect(orchestrator).toContain("followUps: stream.followUps");
+    expect(orchestrator).toContain('if (followUps.length) emit({ type: "CUSTOM", name: "persora.followups"');
+    expect(orchestrator).not.toContain("buildFollowUps");
+    expect(orchestrator).not.toContain("What did the A2A specialist contribute to this answer?");
+  });
+
   it("separates protected approvals from ordinary contact requests", () => {
     const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
     const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
