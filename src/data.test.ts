@@ -189,7 +189,7 @@ describe("demo evidence", () => {
     expect(orchestrator).toContain("failure.error?.message");
     expect(app).toContain("Exact-run quality evaluation");
     expect(app).toContain("Failed — answer preserved");
-    expect(app).toContain("Answer quality issue");
+    expect(app).toContain("Unsupported claims detected");
     expect(app).toContain("Quality check:");
     expect(app).not.toContain("Citation format issue");
     expect(app).toContain("Failed · answer preserved · Runtime-proven");
