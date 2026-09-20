@@ -102,9 +102,10 @@ Deno.serve(async (request) => {
 
   try {
     let callId = 1;
-    if (presentation === "mobile") {
-      await mcpCall(baseUrl, callId++, "browser_resize", { width: 390, height: 844 });
-    }
+    const viewport = presentation === "mobile"
+      ? { width: 390, height: 844 }
+      : { width: 1440, height: 900 };
+    await mcpCall(baseUrl, callId++, "browser_resize", viewport);
     await mcpCall(baseUrl, callId++, "browser_navigate", { url: target.toString() });
 
     let observedChannels: Array<"call" | "chat"> = [];
