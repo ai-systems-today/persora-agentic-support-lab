@@ -78,4 +78,12 @@ describe("compact Netflix support chat", () => {
     expect(appSource).toContain("setTurns([])");
     expect(appSource).toContain(">New conversation</button>");
   });
+
+  it("shows a bounded contact card for explicit human-support handoffs", () => {
+    expect(appSource).toContain('handoff?.mode === "contact-requested"');
+    expect(appSource).toContain('className="contact-card"');
+    expect(appSource).toContain("View live mobile source");
+    expect(appSource).toContain("Call or chat instructions ↗");
+    expect(appSource).toContain("no conversation content shared");
+  });
 });

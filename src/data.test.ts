@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 import { cases } from "./data";
 
 describe("demo evidence", () => {
-  it("provides five distinct cases", () => {
-    expect(cases).toHaveLength(5);
-    expect(new Set(cases.map((item) => item.answer)).size).toBe(5);
+  it("provides six distinct cases across the five orchestration patterns", () => {
+    expect(cases).toHaveLength(6);
+    expect(new Set(cases.map((item) => item.answer)).size).toBe(6);
+    expect(cases.some((item) => item.id === "contact-support" && item.pattern === "handoff")).toBe(true);
     expect(cases.map((item) => item.pattern)).toContain("group-chat");
   });
 
@@ -136,6 +137,22 @@ describe("demo evidence", () => {
     expect(app).toContain("Selected execution node");
     expect(app).toContain("retrieval-only latency not captured");
     expect(app).toContain("Continue conversation · {turn.runtime.followUps.length}");
+  });
+
+  it("separates protected approvals from ordinary contact requests", () => {
+    const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+    const orchestrator = readFileSync(new URL("../supabase/functions/agentic-support-demo/index.ts", import.meta.url), "utf8");
+    const sourceBrowser = readFileSync(new URL("../supabase/functions/support-source-browser/index.ts", import.meta.url), "utf8");
+    const sourcePolicy = readFileSync(new URL("../supabase/functions/_shared/sourceBrowserPolicy.ts", import.meta.url), "utf8");
+    expect(orchestrator).toContain('handoffMode === "contact-requested"');
+    expect(orchestrator).toContain('name: "persora.handoff.contact-offered"');
+    expect(orchestrator).toContain('name: "persora.handoff.approval-required"');
+    expect(orchestrator).toContain("userContentTransmitted: false");
+    expect(app).toContain("Contact Netflix Support");
+    expect(sourcePolicy).toContain('CONTACT_ISSUE = "I want to contact Netflix Customer Service"');
+    expect(sourceBrowser).not.toContain("state.message");
+    expect(sourceBrowser).toContain('interaction === "reveal-contact-options"');
+    expect(sourceBrowser).toContain("contact_controls_not_found");
   });
 
   it("evaluates each published answer without rewriting or replacing it", () => {

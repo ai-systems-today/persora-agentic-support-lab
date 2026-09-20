@@ -7,6 +7,7 @@ export type EvidenceStatus =
   | "not-evaluated";
 
 export type Pattern = "sequential" | "concurrent" | "group-chat" | "handoff" | "magentic";
+export type HandoffMode = "approval-required" | "contact-requested";
 
 export type EvidenceField = {
   label: string;
@@ -73,6 +74,7 @@ export type RuntimeEvidence = {
     reason: string;
     signals: string[];
     confidence: number;
+    handoffMode: HandoffMode | null;
   };
   promptVersion?: string;
   guardrail?: { decision: "allow" | "block"; reason: string };
@@ -138,12 +140,18 @@ export type RuntimeEvidence = {
     }>;
   };
   handoff?: {
+    mode: HandoffMode | null;
     required: boolean;
-    status: "not-required" | "awaiting-human" | "approved" | "rejected";
+    status: "not-required" | "awaiting-human" | "approved" | "rejected" | "contact-offered";
     summary: string | null;
     approvalId?: string | null;
     decidedAt?: string | null;
     decisionMessage?: string | null;
+    contact?: {
+      officialUrl: string;
+      instructionsUrl: string;
+      liveAvailability: "not-checked" | "available" | "partial" | "unavailable";
+    } | null;
   };
   integrations?: {
     langGraph: { executed: boolean; version: string };

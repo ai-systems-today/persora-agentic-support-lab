@@ -4,7 +4,7 @@ import { evaluateLiveAnswer, notEvaluatedQuality, type LiveQuality, type Quality
 import { citationEvidenceText, normalizeCitationBundle } from "../_shared/citationEvidence.ts";
 import { evaluateExactRun, notEvaluatedLiveRag, referenceForQuestion, type LiveRagEvaluation } from "../_shared/liveRagEvaluation.ts";
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
-import { selectOrchestrationPattern, type Pattern } from "../_shared/orchestrationRouter.ts";
+import { selectOrchestrationPattern, type HandoffMode, type Pattern } from "../_shared/orchestrationRouter.ts";
 import { selectPrimarySpecialist, type SpecialistSelection } from "../_shared/specialistRouter.ts";
 import { unknownNetflixErrorResponse } from "../_shared/netflixErrorCodes.ts";
 import { consumeEntryRateLimit, requestRateLimitKey } from "../_shared/entryRateLimit.ts";
@@ -18,6 +18,8 @@ const UPSTREAM = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/orchestr
 const A2A_SPECIALIST = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/netflix-specialist-a2a";
 const PROMPT_VERSION = "netflix-support-demo@2026-09-19.4-observational-evaluation";
 const LANGGRAPH_VERSION = "1.4.15";
+const NETFLIX_CONTACT_URL = "https://help.netflix.com/en/contactus?locale=en-US";
+const NETFLIX_CONTACT_INSTRUCTIONS_URL = "https://help.netflix.com/en/node/33335";
 
 const secureEqual = (left: string, right: string) => {
   if (left.length !== right.length) return false;
@@ -90,6 +92,7 @@ const State = Annotation.Root({
   routeReason: Annotation<string>,
   routeSignals: Annotation<string[]>({ reducer: (_left, right) => right, default: () => [] }),
   routeConfidence: Annotation<number>,
+  handoffMode: Annotation<HandoffMode>,
   allowed: Annotation<boolean>,
   guardrailReason: Annotation<string>,
   answer: Annotation<string>,
@@ -108,7 +111,7 @@ const State = Annotation.Root({
   orchestrationProof: Annotation<OrchestrationProof>,
 });
 
-const buildFollowUps = (pattern: Pattern, citations: unknown[]): string[] => {
+const buildFollowUps = (pattern: Pattern, citations: unknown[], handoffMode: HandoffMode = null): string[] => {
   const cited = citations.length > 0;
   const questions: Record<Pattern, string[]> = {
     sequential: [
@@ -126,11 +129,17 @@ const buildFollowUps = (pattern: Pattern, citations: unknown[]): string[] => {
       "What did the A2A specialist contribute to this answer?",
       cited ? "Which sources support the recommended recovery sequence?" : "When is a human specialist required?",
     ],
-    handoff: [
-      "What exactly requires human approval?",
-      "What information is included in the handoff summary?",
-      "What happens if the approval is rejected?",
-    ],
+    handoff: handoffMode === "contact-requested"
+      ? [
+        "How do I call Netflix from the mobile app?",
+        "How do I start a Netflix support chat?",
+        "What information should I prepare before contacting support?",
+      ]
+      : [
+        "What exactly requires human approval?",
+        "What information is included in the handoff summary?",
+        "What happens if the approval is rejected?",
+      ],
     magentic: [
       "Which recovery step should I try next?",
       "What details should I include when escalating to support?",
@@ -675,13 +684,43 @@ async function runConcurrentPrivacyChecks(state: typeof State.State) {
   };
 }
 
-function prepareHumanHandoff() {
+function prepareHumanHandoff(state: typeof State.State) {
+  if (state.handoffMode === "contact-requested") {
+    return {
+      answer: "You can contact Netflix Customer Service by phone or chat. Use the official Contact Us page to see the channels currently available for your location, or follow Netflix’s mobile-app instructions. I have not connected you to Netflix or shared this conversation with them. [#1] [#2]",
+      citations: [
+        {
+          title: "Netflix Contact Us · Live mobile view",
+          url: NETFLIX_CONTACT_URL,
+          snippet: "Official Netflix Contact Us page. Open the citation to check the contact controls currently shown in the live mobile-width source view.",
+        },
+        {
+          title: "How to call or chat from the Netflix app",
+          url: NETFLIX_CONTACT_INSTRUCTIONS_URL,
+          snippet: "Netflix’s official instructions for contacting Customer Service by Call or Chat from its mobile app.",
+        },
+      ],
+      handoffRequired: false,
+      handoffSummary: "Official Netflix customer-service channels were offered. No connection was initiated and no conversation content was shared.",
+      eventTypes: ["handoff_contact_offered"],
+      protocolEvents: [{
+        type: "CUSTOM",
+        name: "persora.handoff.contact-offered",
+        value: { mode: "contact-requested", userContentTransmitted: false },
+      }],
+    };
+  }
   const summary = "Authenticated support must confirm the account owner, cancellation scope and refund eligibility before any account mutation.";
   return {
     answer: "I can explain the cancellation steps, but I won’t claim the account was changed or a refund was issued. I prepared a bounded handoff summary for an authenticated support agent; the workflow is paused until a human authorizes any account or payment action.",
     handoffRequired: true,
-    handoffSummary: summary,
-    eventTypes: ["handoff_requested", "human_approval_required"],
+      handoffSummary: summary,
+      eventTypes: ["handoff_requested", "human_approval_required"],
+      protocolEvents: [{
+        type: "CUSTOM",
+        name: "persora.handoff.approval-required",
+        value: { mode: "approval-required" },
+      }],
   };
 }
 
@@ -763,6 +802,7 @@ const graph = new StateGraph(State)
       routeReason: route.reason,
       routeSignals: route.signals,
       routeConfidence: route.confidence,
+      handoffMode: route.handoffMode,
       eventTypes: ["orchestration_route_selected"],
       protocolEvents: [{
         type: "CUSTOM",
@@ -909,7 +949,7 @@ function streamAgenticRun(input: typeof State.State, origin: string, started: nu
             totalMs,
           })
           : suppressedLangfuseEvidence();
-        const followUps = buildFollowUps(result.pattern, result.citations);
+        const followUps = buildFollowUps(result.pattern, result.citations, result.handoffMode);
         const evidence = {
           traceId: input.traceId,
           totalMs,
@@ -920,17 +960,24 @@ function streamAgenticRun(input: typeof State.State, origin: string, started: nu
             reason: result.routeReason,
             signals: result.routeSignals,
             confidence: result.routeConfidence,
+            handoffMode: result.handoffMode,
           },
           specialist: result.specialist,
           promptVersion: PROMPT_VERSION,
           guardrail: { decision: result.allowed ? "allow" : "block", reason: result.guardrailReason },
           handoff: {
+            mode: result.handoffMode,
             required: result.handoffRequired,
-            status: result.handoffRequired ? "awaiting-human" : "not-required",
+            status: result.handoffRequired ? "awaiting-human" : result.handoffMode === "contact-requested" ? "contact-offered" : "not-required",
             summary: result.handoffSummary || null,
             approvalId: approval?.id ?? null,
             decidedAt: null,
             decisionMessage: null,
+            contact: result.handoffMode === "contact-requested" ? {
+              officialUrl: NETFLIX_CONTACT_URL,
+              instructionsUrl: NETFLIX_CONTACT_INSTRUCTIONS_URL,
+              liveAvailability: "not-checked",
+            } : null,
           },
           nodeTrace: result.nodeTrace,
           protocolEvents: result.protocolEvents,
@@ -1077,7 +1124,7 @@ Deno.serve(async (req: Request) => {
         specialist: null,
         promptVersion: PROMPT_VERSION,
         guardrail: { decision: "allow", reason: "session-bound-demo-decision" },
-        handoff: { required: true, status: record.status, summary: record.summary, approvalId: record.id, decidedAt: record.decided_at, decisionMessage: record.decision_message },
+        handoff: { mode: "approval-required", required: true, status: record.status, summary: record.summary, approvalId: record.id, decidedAt: record.decided_at, decisionMessage: record.decision_message, contact: null },
         nodeTrace,
         protocolEvents: graphEvents,
         quality: notEvaluatedQuality("A persisted human decision is not a generated knowledge answer."),
@@ -1107,6 +1154,7 @@ Deno.serve(async (req: Request) => {
       routeReason: "not-evaluated",
       routeSignals: [],
       routeConfidence: 0,
+      handoffMode: null,
       allowed: true,
       guardrailReason: "not-evaluated",
       specialistContext: "",
@@ -1155,23 +1203,30 @@ Deno.serve(async (req: Request) => {
         reason: result.routeReason,
         signals: result.routeSignals,
         confidence: result.routeConfidence,
+        handoffMode: result.handoffMode,
       },
       specialist: result.specialist,
       promptVersion: PROMPT_VERSION,
       guardrail: { decision: result.allowed ? "allow" : "block", reason: result.guardrailReason },
       handoff: {
+        mode: result.handoffMode,
         required: result.handoffRequired,
-        status: result.handoffRequired ? "awaiting-human" : "not-required",
+        status: result.handoffRequired ? "awaiting-human" : result.handoffMode === "contact-requested" ? "contact-offered" : "not-required",
         summary: result.handoffSummary || null,
         approvalId: approval?.id ?? null,
         decidedAt: null,
         decisionMessage: null,
+        contact: result.handoffMode === "contact-requested" ? {
+          officialUrl: NETFLIX_CONTACT_URL,
+          instructionsUrl: NETFLIX_CONTACT_INSTRUCTIONS_URL,
+          liveAvailability: "not-checked",
+        } : null,
       },
       nodeTrace: result.nodeTrace,
       protocolEvents: result.protocolEvents,
       quality: result.quality,
       orchestrationProof: result.orchestrationProof,
-      followUps: buildFollowUps(result.pattern, result.citations),
+      followUps: buildFollowUps(result.pattern, result.citations, result.handoffMode),
       retrieval: retrievalEvidence(result.citations),
       publicTrace: {
         schemaVersion: "1.0",

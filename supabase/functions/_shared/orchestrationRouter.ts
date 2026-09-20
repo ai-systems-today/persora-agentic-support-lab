@@ -1,15 +1,18 @@
 export type Pattern = "sequential" | "concurrent" | "group-chat" | "handoff" | "magentic";
+export type HandoffMode = "approval-required" | "contact-requested" | null;
 
 export type RoutingDecision = {
   pattern: Pattern;
   reason: string;
   signals: string[];
   confidence: number;
+  handoffMode: HandoffMode;
 };
 
 type RouteRule = {
   pattern: Pattern;
   reason: string;
+  handoffMode: HandoffMode;
   signals: Array<{ label: string; expression: RegExp }>;
 };
 
@@ -17,6 +20,7 @@ const rules: RouteRule[] = [
   {
     pattern: "concurrent",
     reason: "The request involves sensitive cross-account data, so independent privacy and safe-alternative checks run together.",
+    handoffMode: null,
     signals: [
       { label: "cross-account request", expression: /\b(another|other|someone else(?:'s)?) account\b/i },
       { label: "sensitive billing data", expression: /\b(reveal|show|display|access)\b.{0,32}\b(card|invoice|payment|billing)\b/i },
@@ -25,6 +29,7 @@ const rules: RouteRule[] = [
   {
     pattern: "handoff",
     reason: "The request asks for an account or payment mutation that requires authenticated human approval.",
+    handoffMode: "approval-required",
     signals: [
       {
         label: "account mutation",
@@ -34,8 +39,20 @@ const rules: RouteRule[] = [
     ],
   },
   {
+    pattern: "handoff",
+    reason: "The user explicitly asked to contact a person, so the workflow offers official human-support channels without claiming a connection was established.",
+    handoffMode: "contact-requested",
+    signals: [
+      {
+        label: "human support requested",
+        expression: /\b(?:speak|talk|connect|transfer|chat)\s+(?:me\s+)?(?:to|with)\s+(?:a\s+|an\s+)?(?:real\s+)?(?:person|human|support agent|customer service|representative)\b|\b(?:call|phone|telephone|chat with|contact)\s+(?:Netflix\s+)?(?:support|customer service|an agent)\b|\b(?:human|live|support)\s+agent\b/i,
+      },
+    ],
+  },
+  {
     pattern: "magentic",
     reason: "The user reports a failed or repeated recovery attempt, so a planner selects bounded next steps.",
+    handoffMode: null,
     signals: [
       { label: "failed attempt", expression: /\b(failed|doesn(?:'|’)t work|didn(?:'|’)t work|still cannot|still can(?:'|’)t)\b/i },
       { label: "repeated attempt", expression: /\b(tried|again|temporary code|keeps? (?:failing|looping))\b/i },
@@ -60,6 +77,7 @@ export function selectOrchestrationPattern(message: string): RoutingDecision {
         reason: rule.reason,
         signals: matched,
         confidence: Math.min(0.98, 0.82 + (matched.length - 1) * 0.08),
+        handoffMode: rule.handoffMode,
       };
     }
   }
@@ -71,6 +89,7 @@ export function selectOrchestrationPattern(message: string): RoutingDecision {
       reason: "The question spans multiple support domains, so the matching A2A specialist results are gathered and transparently aggregated.",
       signals: domains,
       confidence: Math.min(0.96, 0.8 + domains.length * 0.05),
+      handoffMode: null,
     };
   }
 
@@ -79,5 +98,6 @@ export function selectOrchestrationPattern(message: string): RoutingDecision {
     reason: "The request is a single grounded support question with no mutation, privacy, recovery, or multi-domain signal.",
     signals: domains.length ? domains : ["single support intent"],
     confidence: 0.72,
+    handoffMode: null,
   };
 }
