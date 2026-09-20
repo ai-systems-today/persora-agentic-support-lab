@@ -41,7 +41,7 @@ function normalizeAssistantMarkdown(answer: string) {
 function Header() {
   return (
     <header className="app-header">
-      <div className="brand-mark" aria-label="Persora">♥</div>
+      <div className="brand-mark" aria-label="Persora"><img src={`${import.meta.env.BASE_URL}persora-heart.png`} alt="" /></div>
       <div className="brand-copy">
         <strong>Persora</strong>
         <span>Agentic Evidence Lab</span>
@@ -148,8 +148,8 @@ function Conversation({ turns, onAsk, onExplain, onReset, source, onSourceChange
       <section className="chat-panel">
       <div className="chat-scroll">
       <section className="assistant-intro">
-        <div className="assistant-avatar">N</div>
-        <div><h1>Netflix Support</h1><p>Hi, I’m the Netflix Support Assistant. How can I help?</p><small>Powered by Persora <b>♥</b></small></div>
+        <div className="assistant-avatar" aria-label="Netflix"><img src={`${import.meta.env.BASE_URL}netflix-support-logo.png`} alt="" /></div>
+        <div><h1>Netflix Support</h1><p>Hi, I’m the Netflix Support Assistant. How can I help?</p><small>Powered by Persora <img src={`${import.meta.env.BASE_URL}persora-heart.png`} alt="" /></small></div>
         {turns.length > 0 && <button className="new-conversation" type="button" onClick={onReset}>New conversation</button>}
       </section>
 
