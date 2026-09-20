@@ -190,7 +190,7 @@ function Conversation({ turns, onAsk, onExplain, onReset, source, onSourceChange
                   </div>
                 </section>}
                 {turn.runtime.citations.length > 0 && <details className="citations">
-                  <summary><span>Sources · {turn.runtime.citations.length}</span>{turn.runtime.quality?.status === "failed" && <em>Answer quality issue</em>}<b>⌄</b></summary>
+                  <summary><span>Sources · {turn.runtime.citations.length}</span>{turn.runtime.quality?.status === "failed" && <em>Unsupported claims detected</em>}<b>⌄</b></summary>
                   <div>
                     {turn.runtime.quality?.status === "failed" && <p className="quality-warning"><strong>Quality check:</strong> {turn.runtime.quality.reason}</p>}
                     {turn.runtime.citations.map((citation, index) => <article key={`${citation.url ?? citation.label}-${index}`}>

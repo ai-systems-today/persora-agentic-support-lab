@@ -45,6 +45,7 @@ nav:
   - Decisions and operations:
       - Technology decisions: TECHNOLOGY_DECISIONS.md
       - Operations and validation: OPERATIONS.md
+      - Interview demonstration: INTERVIEW_DEMO.md
       - Implementation reference: IMPLEMENTATION_REFERENCE.md
 
 markdown_extensions:
