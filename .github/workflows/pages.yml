@@ -37,8 +37,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pinned RAGAS evaluator
-        run: pip install --requirement requirements-eval.txt
+      - name: Install pinned Python tooling
+        run: pip install --requirement requirements-eval.txt --requirement requirements-docs.txt
 
       - name: Run deterministic RAGAS benchmark
         run: python scripts/evaluate_ragas.py
@@ -59,6 +59,9 @@ jobs:
 
       - name: Build production application
         run: npm run build
+
+      - name: Build enterprise manual
+        run: mkdocs build --strict --site-dir dist/docs
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

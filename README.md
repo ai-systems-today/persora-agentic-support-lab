@@ -1,181 +1,114 @@
 # Persora Agentic Support Lab
 
-An interview-ready, evidence-first Netflix support demonstration. The application is intentionally separate from LibreChat and does not import or modify that repository.
+Persora's public reference implementation for reducing unsupported AI answers, measuring agent quality and making agentic execution inspectable for enterprise teams.
 
-[![Validate and deploy demo](https://github.com/ai-systems-today/persora-agentic-support-lab/actions/workflows/pages.yml/badge.svg)](https://github.com/ai-systems-today/persora-agentic-support-lab/actions/workflows/pages.yml)
+[![Validate and deploy](https://github.com/ai-systems-today/persora-agentic-support-lab/actions/workflows/pages.yml/badge.svg)](https://github.com/ai-systems-today/persora-agentic-support-lab/actions/workflows/pages.yml)
 
-**[Live demo](https://ai-systems-today.github.io/persora-agentic-support-lab/)** · **[GitHub repository](https://github.com/ai-systems-today/persora-agentic-support-lab)** · **[Documentation](docs/README.md)** · **[How Explain works](docs/EXPLAIN.md)**
+**[Open the proof application](https://ai-systems-today.github.io/persora-agentic-support-lab/)** · **[Read the enterprise manual](https://ai-systems-today.github.io/persora-agentic-support-lab/docs/)** · **[Browse the source](https://github.com/ai-systems-today/persora-agentic-support-lab)**
 
-> This is an independent technical demonstration. It is not affiliated with, endorsed by, or operated by Netflix. Netflix names and marks belong to their respective owner.
+> This is an independent technical demonstration built by Persora. It is not affiliated with, endorsed by or operated by Netflix. Netflix names and marks belong to their respective owner.
+
+## What this repository proves
+
+Enterprise AI needs more than a fluent answer. It needs evidence showing what ran, which sources supported the answer, which controls were applied and which measurements belong to that exact request.
+
+This repository demonstrates that approach through a support scenario:
+
+- grounded answers with exact-run citations;
+- deterministic authorization checks before retrieval;
+- policy-based orchestration across sequential, concurrent, specialist, handoff and bounded-recovery paths;
+- AG-UI streaming and an A2A specialist exchange;
+- human approval for account or payment mutations;
+- deterministic grounding checks and live RAGAS-compatible evaluation;
+- private Langfuse telemetry with a sanitized public projection;
+- an **Explain this answer** workspace that distinguishes runtime proof from repository definitions and fixtures;
+- a Playwright MCP source viewer that opens original help pages instead of copying them into the application.
+
+The implementation is a standalone evidence lab for the reliability principles used by Persora agents. It does not claim to contain every private component of `agent.persora.ai`.
+
+## Evidence before claims
+
+Every capability is classified using one of six labels:
+
+| Label | Meaning |
+|---|---|
+| Runtime-proven | The selected run returned or measured the evidence |
+| Repo-defined | The implementation exists, but this run does not prove execution |
+| Fixture replay | Deterministic demonstration data, not a live execution claim |
+| Not captured | The run returned no usable proof |
+| Not executed | The selected path did not run the capability |
+| Not evaluated | No valid evaluation result exists |
+
+Pinecone, Milvus, Neo4j and other candidate adapters are documented as decision options. They are not presented as executed unless a run captures their query and returned records.
+
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+    U[Customer] --> UI[Persora support UI]
+    UI --> G[Agentic gateway]
+    G --> R[Policy router]
+    R --> A[Persora agents]
+    A --> K[Knowledge and citations]
+    G --> Q[Quality evaluation]
+    G --> O[Private observability]
+    G --> UI
+```
+
+The browser receives answers, citations and an allow-listed evidence projection. Service credentials, raw private traces and evaluation credentials remain server-side.
 
 ## Start here
 
-| Goal | Link |
+| Goal | Resource |
 |---|---|
-| Try the public demonstration | [Open the live demo](https://ai-systems-today.github.io/persora-agentic-support-lab/) |
-| Understand the system | [Architecture](docs/ARCHITECTURE.md) |
-| Understand **Explain this answer** | [Explain documentation](docs/EXPLAIN.md) |
-| Review public-safety boundaries | [Public safety](docs/PUBLIC_SAFETY.md) |
-| Report a vulnerability | [Security policy](SECURITY.md) |
-| Contribute safely | [Contributing guide](CONTRIBUTING.md) |
-
-## What the demo shows
-
-- A working support chatbot with five conversational starters and multi-turn history.
-- Case-specific answers for grounding, access control, approval/handoff, group chat and recovery.
-- An additive **Explain this answer** drawer.
-- A split source workspace: citation controls ask a server-side Playwright MCP browser to open the original Netflix Help URL and return a current viewport image. The original URL remains available as a direct new-tab fallback; no source page is copied into this repository.
-- A separate fixture run for every supported answer.
-- Topology-specific orchestration graphs for sequential, concurrent, group-chat, handoff and Magentic/planner patterns.
-- Graph, timeline and evidence-flow visualisations plus five architecture layers:
-  1. Orchestration
-  2. Content & data
-  3. Interaction
-  4. Observability
-  5. Quality
-- Explicit evidence labels: Runtime-proven, Repo-defined, Fixture replay, Not captured, Not executed and Not evaluated.
-- An opt-in **Live agent** mode that streams the published Netflix Support Assistant response and renders the citations returned by that exact run.
-- An additive **Agentic run** mode backed by JWT-protected Supabase Edge Functions. It executes a real LangGraph graph, streams standards-based AG-UI events, runs a deterministic authorization guardrail before retrieval, pauses mutation requests for human approval, and calls the published Netflix agent with its returned citations.
-- Distinct sequential, concurrent privacy-check, A2A group-specialist, human-handoff, and bounded revise-or-finish recovery execution paths, each with exact-run proof.
-- Distinct published Billing, Household & Travel, and Account Access & Security Persora agents. Each has its own agent ID, prompt and widget ID while sharing the same Netflix Help knowledge corpus; every agentic run returns the exact specialist identities it executed.
-- An exact-run quality evaluation for published answers: citation-index validity, lexical grounding, answer relevance and multi-intent coverage. It evaluates the native published-agent result without rewriting the customer question, retrying with evaluator instructions, or replacing the answer.
-- A live, exact-run, RAGAS-compatible evaluator for every generated knowledge answer, plus a pinned Python RAGAS release benchmark that remains explicitly separate.
-- Progressive run status while LangGraph nodes execute, contextual follow-up questions, a selectable orchestration canvas, and a node inspector backed by that run's trace.
-- A sanitized public trace projection that exposes route reasoning, nodes, timings, protocol-event counts and citation counts without exposing the private Langfuse console or credentials.
-- Ranked retrieval evidence derived from the exact citations returned by the existing Persora KB path; no second vector database is implied.
-
-The labels are the central design rule: an optional technology is never presented as live merely because the UI has a field for it.
-
-## How Explain works
-
-**Explain this answer** opens a run-specific evidence drawer. It does not reveal hidden model reasoning or claim that every displayed technology executed. It presents:
-
-- the run identifier and evidence-status counts;
-- execution graph, ordered timeline and evidence lineage;
-- orchestration, content/data, interaction, observability and quality layers;
-- exact-run citations, trace projection, evaluation results and handoff state when returned;
-- explicit `Not captured`, `Not executed` or `Not evaluated` labels when proof is absent.
-
-Fixture runs show fixture evidence. Full agentic runs use the returned trace and integration evidence. A direct free-form **Live answer** has no Explain button unless it is tied to a supported demonstration case. See [How Explain works](docs/EXPLAIN.md) for the complete contract.
+| Understand the purpose | [Manual introduction](https://ai-systems-today.github.io/persora-agentic-support-lab/docs/) |
+| Learn the terminology | [Glossary](https://ai-systems-today.github.io/persora-agentic-support-lab/docs/GLOSSARY/) |
+| Follow one request end to end | [Agent lifecycle](https://ai-systems-today.github.io/persora-agentic-support-lab/docs/LIFECYCLE/) |
+| Understand hallucination controls | [Grounding and RAG](https://ai-systems-today.github.io/persora-agentic-support-lab/docs/GROUNDING/) |
+| Understand the measurements | [Quality and evaluation](https://ai-systems-today.github.io/persora-agentic-support-lab/docs/QUALITY/) |
+| Compare storage and graph options | [Technology decisions](https://ai-systems-today.github.io/persora-agentic-support-lab/docs/TECHNOLOGY_DECISIONS/) |
 
 ## Run locally
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-No provider registration or API key is required for fixture mode.
+Fixture mode requires no provider account or private credential. Live and agentic modes call published server endpoints and preserve visible failures instead of silently substituting fixtures.
 
-Live mode calls the already-published Persora widget endpoint using its public widget identifier. No Azure OpenAI or Supabase service-role secret is placed in the browser. The deployment origin must be allowed by the published widget; if it is not, the UI shows the failure and does not silently substitute a fixture answer.
-
-Agentic mode calls `agentic-support-demo`, which requires the project’s browser-safe publishable/anon JWT and independently enforces the GitHub Pages/localhost origin allow-list. The function is isolated from LibreChat and from the existing Persora orchestration functions.
-
-The source workspace calls `support-source-browser` with the same browser-safe JWT. That Edge Function accepts only `https://help.netflix.com` targets, applies an origin allow-list and best-effort rate limit, and calls the existing video-studio Playwright MCP service through the server-only `PLAYWRIGHT_MCP_URL`. Deploy the function in the Supabase project and configure that secret before enabling the live source view. The browser never receives the MCP URL.
-
-The Vite base path is configured for this repository's GitHub Pages URL.
-
-## Validate
+## Build and validate
 
 ```bash
 npm test
+npm run validate:release
 npm run build
+python -m pip install --requirement requirements-docs.txt
+mkdocs build --strict --site-dir dist/docs
 ```
 
-Every push to `main` runs the evidence-contract tests, builds the production application and deploys the resulting `dist` directory through `.github/workflows/pages.yml`.
+Every push to `main` validates the application and Edge Functions, builds the Vite application, builds the manual into `dist/docs`, and publishes one GitHub Pages artifact.
 
-## Credentials and real integrations
+## Current execution truth
 
-Copy `.env.example` to `.env` only when adding a server-side adapter. Never place secrets in a `VITE_*` variable: Vite exposes those values to the browser bundle. The checked-in project contains variable names only, not credential values.
-
-Potential adapters are deliberately provider-neutral:
-
-| Layer | Target technology | Proof required before the UI may claim it ran |
-|---|---|---|
-| Orchestration | LangChain / LangGraph | Node events or a serialized run trace |
-| Content & data | Persora KB / Supabase vector retrieval | Citation events from the published run |
-| Content & data | Pinecone / Milvus / Neo4j | Query, source IDs and returned records/chunks |
-| Interaction | AG-UI / A2A | Captured protocol event/transport envelope |
-| Observability | Langfuse | Trace and observation identifiers |
-| Quality | RAGAS | Metric name, input set, score and evaluator run |
-
-Current execution truth:
-
-| Capability | Current state |
+| Capability | Repository status |
 |---|---|
-| Azure OpenAI + Netflix KB + citations | Executed through the published Persora agent |
-| LangGraph | Executed in `supabase/functions/agentic-support-demo/index.ts` |
-| Deterministic authorization guardrail | Executed before the KB/model path |
-| Prompt version | Returned by every agentic run |
-| Exact-run quality evaluation | Runs on each published answer in agentic mode and reports grounding, citation validity and answer relevance without changing or replacing the published-agent result |
-| Correctness | Evaluated only when the exact question has an approved trusted reference; new/free-form questions report it as not applicable rather than inventing a score |
-| AG-UI lifecycle, step, text, subagent and custom evidence events | Progressively streamed by every agentic run; upstream answer text arrives as one delta after the graph completes |
-| Playwright source workspace | Repo-defined in `support-source-browser`; runtime execution requires the function deployment and server-only `PLAYWRIGHT_MCP_URL` configuration |
-| A2A | Agent Card discovery and `message:send` execute on the group-chat route through `netflix-specialist-a2a`; the task artifact identifies every published specialist widget that ran |
-| Langfuse | OTLP root span and child observations implemented; the server reads the current trace back and returns an allow-listed observation projection without private URLs, content or identifiers |
-| Live RAG evaluation | Azure OpenAI evaluates the exact question, displayed answer and exact returned citation snippets on every generated knowledge-answer route; the response records evaluator model/version, input hashes, reasons and unsupported claims |
-| Python RAGAS | Pinned `0.4.3` six-metric deterministic reference-contract evaluation executes in CI only; it is never substituted for live-run scores |
-| Pinecone / Milvus | Not executed; the demo intentionally reuses Persora's current Supabase/Postgres vector retrieval and returned citations |
-| Neo4j GraphRAG | Not executed until a graph query returns records |
-
-### Interaction contracts
-
-- `agentic-support-demo` returns an AG-UI Server-Sent Event stream when the client requests `text/event-stream`. The stream includes `RUN_STARTED`, progressive step events, text-message events, contextual follow-ups, one custom evidence event and `RUN_FINISHED`.
-- The human-handoff route finishes with an interrupt outcome and an evidence summary; it never claims that an account mutation or refund occurred.
-- The group-chat route discovers the specialist-team Agent Card and sends an A2A 1.0 `message:send` request. The service fans the question out only to the matched Billing, Household/Travel and Identity/Access widgets, then returns their identities, answers and citations in one bounded task artifact.
-- The A2A specialist endpoint is JWT-protected and invokes the existing published Persora Netflix agent. Browser clients never receive a service-role credential.
-- Exact `NW-*` identifiers are checked against the repository's verified-code registry before retrieval. Unknown codes return a verification request with no citations; the initial registry contains only `NW-2-5` and `NW-3-16`, each linked to an official Netflix Help page.
-- The demo and A2A entry points apply a best-effort per-instance fixed-window limiter. Production deployment must retain the downstream quota and gateway protections because an in-memory Edge Function limiter is not globally distributed.
-
-### Live evaluation and Python RAGAS benchmark
-
-`supabase/functions/_shared/liveRagEvaluation.ts` performs the live evaluation. It sends the exact question, the exact displayed answer and the full retrieved chunks referenced by that answer's `[#n]` citations to the configured Azure OpenAI evaluator. Faithfulness, response relevancy and context precision execute for every generated knowledge answer. Context recall and factual correctness execute only when that exact question has a checked-in approved reference; otherwise those two values are `null` and the UI says **Not applicable**. The result includes SHA-256 hashes of all inputs so a score can be tied to one immutable run.
-
-The evaluator validates its own JSON contract and retries once when a required metric is missing. Its returned faithfulness score is preserved after range validation. `unsupportedClaims` remains separate evidence, so an empty list never silently overwrites a lower evaluator score.
-
-This is deliberately described as **RAGAS-compatible**, not as the Python Ragas package running inside Supabase. Supabase Edge Functions execute TypeScript on Deno. The actual Python Ragas `0.4.3` package remains a CI release benchmark: `scripts/evaluate_ragas.py` runs six pinned deterministic metrics over five checked-in contract samples, and GitHub Actions regenerates `src/generated/ragas-evaluation.json`. The browser never substitutes that static artifact into a live answer.
-
-`npm run load:smoke` is deliberately disabled unless `ALLOW_PAID_LOAD_TEST=yes` is supplied. It is capped at ten requests and is not run by CI, preventing accidental credit consumption.
-
-### Enable Langfuse execution proof
-
-The shared Supabase project has reached its Edge Function secret limit, so production credentials are read from encrypted Supabase Vault rows through a service-role-only RPC. Create these named Vault entries:
-
-```text
-persora_langfuse_public_key=pk-lf-...
-persora_langfuse_secret_key=sk-lf-...
-persora_langfuse_base_url=https://cloud.langfuse.com
-```
-
-The migration grants `get_agentic_demo_secrets()` only to `service_role`, checks the JWT role again inside the function, and returns only the three allow-listed demo values. Local development may still use the `LANGFUSE_*` environment variables documented in `.env.example`.
-
-The Edge Function sends one OTLP root span plus one child span per executed LangGraph node to Langfuse's `/api/public/otel/v1/traces` endpoint. Session identifiers are SHA-256 hashed before export; blocked prompts are fully suppressed; and email addresses, payment-number-shaped values and common account identifiers are redacted from allowed prompts and answers before telemetry export. It returns a server-secret HMAC proof without waiting for the observation API. When Explain is opened, the browser uses that proof for bounded background read-back of the exact trace. The public drawer receives only observation name, type, level, duration and optional aggregate usage/cost fields; it never receives observation IDs, private URLs, credentials, inputs, outputs, project IDs or user/session IDs. If ingestion is not queryable within the retry window, the UI says read-back is pending rather than fabricating observations.
-
-### Automatic orchestration routing
-
-`supabase/functions/_shared/orchestrationRouter.ts` applies a deterministic policy router before the graph branches. Mutation and refund requests route to human handoff; sensitive cross-account requests route to concurrent privacy checks; failed recovery attempts route to the bounded planner; multi-domain questions route to the A2A specialist exchange; and ordinary single-intent support questions follow the sequential grounded path. `supabase/functions/_shared/specialistRouter.ts` then maps grounded calls to the published Billing, Household/Travel, Identity/Access or general widget. Every run returns the selected pattern, matched signals, confidence and exact specialist identity so routing is inspectable rather than inferred from the picture alone.
-
-The concurrent route sends the privacy-policy and safe-alternative checks as two independent internal HTTP executions, then returns their start/finish timings plus measured overlap. The Magentic route records each bounded planner decision: it either finishes on the first attempt or revises once after a reported failure and then asks only for source-backed alternatives. The UI reports missing overlap or missing planner decisions as unproved rather than inferring them from the topology.
-
-## Five-minute interview flow
-
-1. Start with **Why can’t I stream while travelling?** and show the answer and its unique run ID.
-2. Open **Explain this answer**. Point out the execution graph and evidence-status legend.
-3. Click all five layers and distinguish what the browser proves from what fixture mode replays.
-4. Run **Can you reveal another account’s billing?** to show an authorization boundary.
-5. Run **Cancel my subscription and refund me.** to show an approval-gated human handoff.
-6. Run the group-chat case to show the real A2A Agent Card + task exchange before the primary agent answers.
-7. Run the failed-path case to show the planner's recorded revise-or-finish decisions and preserved context.
-8. Switch between graph, timeline and evidence flow, then close with the stack map: the contracts remain stable while adapters supply real LangGraph, retrieval, A2A/AG-UI, Langfuse and RAGAS evidence.
-
-For full run proof, use **Agentic run**, submit one grounded question, open **Explain this answer**, and show the returned citations, exact-run quality scores, node trace and measured latency. **Live agent** calls the published agent directly and therefore does not claim that the demonstration's LangGraph pattern or exact-run quality evaluation executed.
-
-## Repository isolation
-
-This project is standalone. It must not be nested in, copied into, or used to modify the LibreChat repository. Reusing credentials means configuring them at runtime through ignored server-side environment variables—not copying secrets or `.env` files between repositories.
+| Published Persora agents and citations | Executed by live/agentic modes |
+| LangGraph | Implemented in `agentic-support-demo` |
+| Deterministic authorization guardrail | Runs before retrieval on the agentic path |
+| Deterministic grounding evaluation | Evaluates the displayed published-agent result |
+| Live RAGAS-compatible evaluation | Evaluates the exact question, answer and contexts |
+| AG-UI | Streams run, step, text and custom evidence events |
+| A2A | Executes Agent Card discovery and `message:send` on the specialist route |
+| Langfuse | Server-side export and sanitized read-back are implemented |
+| Playwright MCP | Implemented by the source-browser Edge Function; execution is runtime-dependent |
+| Supabase/Postgres vector retrieval | Reused through the current Persora knowledge path |
+| Pinecone / Milvus | Candidate adapters; not executed here |
+| Neo4j / Apache AGE | Candidate graph options; not executed here |
+| `pg_graphql` | API exposure option, not a graph database and not retrieval proof |
 
 ## Public repository status
 
-The repository is designed to keep server credentials out of the browser and source tree. The checked-in Supabase anon JWT and published widget identifiers are browser-facing identifiers, not service-role credentials. Server secrets belong in Supabase Vault or ignored local environment files. See [Public safety](docs/PUBLIC_SAFETY.md) and [Security policy](SECURITY.md).
+The repository contains browser-safe public identifiers but no service-role, Azure OpenAI, Langfuse-secret or Playwright-MCP credentials. See [Public safety](docs/PUBLIC_SAFETY.md) and [Security policy](SECURITY.md).
 
-This repository is public for inspection, but it currently has no open-source `LICENSE` file. Public visibility does not grant permission to reuse the code or brand assets.
+The repository is public for inspection and currently has no open-source `LICENSE`. Public visibility does not grant permission to reuse the code or brand assets.
