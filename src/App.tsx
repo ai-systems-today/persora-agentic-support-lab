@@ -46,6 +46,10 @@ function Header() {
         <strong>Persora</strong>
         <span>Agentic Evidence Lab</span>
       </div>
+      <nav className="header-links" aria-label="Project links">
+        <a href={`${import.meta.env.BASE_URL}docs/`}>Docs</a>
+        <a href="https://github.com/ai-systems-today/persora-agentic-support-lab" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
       <div className="mode"><i /> Evidence-first support demonstration</div>
     </header>
   );
