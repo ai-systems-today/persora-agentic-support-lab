@@ -2,6 +2,23 @@
 
 An interview-ready, evidence-first Netflix support demonstration. The application is intentionally separate from LibreChat and does not import or modify that repository.
 
+[![Validate and deploy demo](https://github.com/ai-systems-today/persora-agentic-support-lab/actions/workflows/pages.yml/badge.svg)](https://github.com/ai-systems-today/persora-agentic-support-lab/actions/workflows/pages.yml)
+
+**[Live demo](https://ai-systems-today.github.io/persora-agentic-support-lab/)** · **[GitHub repository](https://github.com/ai-systems-today/persora-agentic-support-lab)** · **[Documentation](docs/README.md)** · **[How Explain works](docs/EXPLAIN.md)**
+
+> This is an independent technical demonstration. It is not affiliated with, endorsed by, or operated by Netflix. Netflix names and marks belong to their respective owner.
+
+## Start here
+
+| Goal | Link |
+|---|---|
+| Try the public demonstration | [Open the live demo](https://ai-systems-today.github.io/persora-agentic-support-lab/) |
+| Understand the system | [Architecture](docs/ARCHITECTURE.md) |
+| Understand **Explain this answer** | [Explain documentation](docs/EXPLAIN.md) |
+| Review public-safety boundaries | [Public safety](docs/PUBLIC_SAFETY.md) |
+| Report a vulnerability | [Security policy](SECURITY.md) |
+| Contribute safely | [Contributing guide](CONTRIBUTING.md) |
+
 ## What the demo shows
 
 - A working support chatbot with five conversational starters and multi-turn history.
@@ -28,6 +45,18 @@ An interview-ready, evidence-first Netflix support demonstration. The applicatio
 - Ranked retrieval evidence derived from the exact citations returned by the existing Persora KB path; no second vector database is implied.
 
 The labels are the central design rule: an optional technology is never presented as live merely because the UI has a field for it.
+
+## How Explain works
+
+**Explain this answer** opens a run-specific evidence drawer. It does not reveal hidden model reasoning or claim that every displayed technology executed. It presents:
+
+- the run identifier and evidence-status counts;
+- execution graph, ordered timeline and evidence lineage;
+- orchestration, content/data, interaction, observability and quality layers;
+- exact-run citations, trace projection, evaluation results and handoff state when returned;
+- explicit `Not captured`, `Not executed` or `Not evaluated` labels when proof is absent.
+
+Fixture runs show fixture evidence. Full agentic runs use the returned trace and integration evidence. A direct free-form **Live answer** has no Explain button unless it is tied to a supported demonstration case. See [How Explain works](docs/EXPLAIN.md) for the complete contract.
 
 ## Run locally
 
@@ -144,3 +173,9 @@ For full run proof, use **Agentic run**, submit one grounded question, open **Ex
 ## Repository isolation
 
 This project is standalone. It must not be nested in, copied into, or used to modify the LibreChat repository. Reusing credentials means configuring them at runtime through ignored server-side environment variables—not copying secrets or `.env` files between repositories.
+
+## Public repository status
+
+The repository is designed to keep server credentials out of the browser and source tree. The checked-in Supabase anon JWT and published widget identifiers are browser-facing identifiers, not service-role credentials. Server secrets belong in Supabase Vault or ignored local environment files. See [Public safety](docs/PUBLIC_SAFETY.md) and [Security policy](SECURITY.md).
+
+This repository is public for inspection, but it currently has no open-source `LICENSE` file. Public visibility does not grant permission to reuse the code or brand assets.
