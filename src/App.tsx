@@ -6,6 +6,7 @@ import { askAgenticDemo, askPublishedAgent, readLangfuseMirror, resolveAgenticHa
 import { formatRetrievalScore } from "./retrievalScore";
 import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern, RunProgress } from "./types";
 import { selectOrchestrationPattern } from "../supabase/functions/_shared/orchestrationRouter";
+import { openSourceInBrowser, type SourceBrowserResult } from "./browserClient";
 
 const statusLabel: Record<EvidenceStatus, string> = {
   "runtime-proven": "Runtime-proven",
@@ -60,6 +61,23 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
 }) {
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [browser, setBrowser] = useState<SourceBrowserResult | null>(null);
+  const [browserUrl, setBrowserUrl] = useState<string | null>(null);
+  const [browserState, setBrowserState] = useState<"idle" | "loading" | "error">("idle");
+  const [browserError, setBrowserError] = useState<string | null>(null);
+
+  const openCitation = async (url: string) => {
+    setBrowserUrl(url);
+    setBrowserState("loading");
+    setBrowserError(null);
+    try {
+      setBrowser(await openSourceInBrowser(url));
+      setBrowserState("idle");
+    } catch (error) {
+      setBrowserState("error");
+      setBrowserError(error instanceof Error ? error.message : "The live source browser failed.");
+    }
+  };
 
   const submit = async () => {
     const question = draft.trim();
@@ -77,7 +95,22 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
   };
 
   return (
-    <main className="chat-shell">
+    <main className="workspace-shell">
+      <section className="source-browser" aria-label="Live citation browser">
+        <div className="browser-toolbar">
+          <span className="browser-status"><i /> {browser?.executed ? "Playwright-MCP live source" : "Source browser"}</span>
+          <div className="browser-address">{browserUrl ?? "Select a returned citation to open its original webpage"}</div>
+          {browserUrl && <a href={browserUrl} target="_blank" rel="noreferrer" title="Open the original page in a new tab">↗</a>}
+        </div>
+        <div className="browser-stage">
+          {browserState === "loading" && <div className="browser-empty"><div className="progress-pulse"><i /></div><strong>Playwright is opening the original source…</strong></div>}
+          {browserState === "error" && <div className="browser-empty browser-failure"><strong>Live browser unavailable</strong><p>{browserError}</p>{browserUrl && <a href={browserUrl} target="_blank" rel="noreferrer">Open original source directly ↗</a>}</div>}
+          {browserState !== "loading" && browser && <img src={`data:${browser.mimeType};base64,${browser.screenshot}`} alt={`Live Playwright view of ${browser.url}`} />}
+          {browserState === "idle" && !browser && <div className="browser-empty"><div className="empty-orbit"><span /></div><strong>Original source workspace</strong><p>Ask a question, then choose a citation. The server-side Playwright browser will navigate to the real Netflix Help page.</p></div>}
+        </div>
+      </section>
+
+      <section className="chat-panel">
       <section className="intro">
         <div className="assistant-avatar">N</div>
         <p className="eyebrow">Netflix support demonstration</p>
@@ -125,7 +158,7 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
                   <strong>{turn.runtime.quality?.status === "failed" ? "Sources used (format check failed)" : "Sources used"}</strong>
                   <div>{turn.runtime.citations.map((citation, index) => <article key={`${citation.url ?? citation.label}-${index}`}>
                     {citation.url
-                      ? <a href={citation.url} target="_blank" rel="noreferrer">{index + 1}. {citation.label}</a>
+                      ? <button type="button" onClick={() => void openCitation(citation.url!)}>{index + 1}. {citation.label}</button>
                       : <span>{index + 1}. {citation.label}</span>}
                     {citation.snippet && <small>{citation.snippet}</small>}
                   </article>)}</div>
@@ -166,6 +199,7 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
           <button aria-label="Send" disabled={submitting} title="Send question">{submitting ? "…" : "↑"}</button>
         </form>
       </div>
+      </section>
     </main>
   );
 }
