@@ -20,7 +20,8 @@ button { color: inherit; }
 
 .app { min-height: 100vh; }
 .app-header { height: 68px; border-bottom: 1px solid var(--line); background: rgba(5, 11, 20, .88); backdrop-filter: blur(18px); display: flex; align-items: center; padding: 0 34px; position: sticky; top: 0; z-index: 10; }
-.brand-mark { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; font-size: 18px; font-weight: 900; color: #052018; background: linear-gradient(145deg, #64f2c2, #29b989); box-shadow: 0 8px 24px #3ee6ad3d; }
+.brand-mark { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; overflow: hidden; box-shadow: 0 8px 24px #3ee6ad3d; }
+.brand-mark img { width: 100%; height: 100%; object-fit: cover; }
 .brand-copy { display: flex; align-items: center; gap: 13px; margin-left: 12px; }
 .brand-copy strong { font-size: 15px; }
 .brand-copy span { color: var(--muted); padding-left: 13px; border-left: 1px solid var(--line); font-size: 13px; }
@@ -51,12 +52,13 @@ button { color: inherit; }
 .assistant-intro h1 { margin: 0; color: #f4f6fa; font-size: 18px; line-height: 1.2; letter-spacing: -.02em; }
 .assistant-intro p { margin: 5px 0 0; color: #9aabc1; font-size: 12px; line-height: 1.4; }
 .assistant-intro small { display: block; margin-top: 5px; color: #70849f; font-size: 9px; }
-.assistant-intro small b { color: var(--mint); font-size: 11px; }
+.assistant-intro small img { width: 13px; height: 13px; margin-left: 3px; vertical-align: -3px; border-radius: 50%; }
 .new-conversation { margin-left: auto; flex: 0 0 auto; border: 1px solid #2a4666; background: #0c1d31; color: #9cb3ce; border-radius: 9px; padding: 7px 9px; font-size: 9px; cursor: pointer; }
 .new-conversation:hover { border-color: var(--mint); color: white; }
 .chat-shell { width: min(920px, calc(100% - 40px)); margin: 0 auto; padding: 74px 0 42px; }
 .intro { max-width: 760px; }
-.assistant-avatar { width: 45px; height: 45px; flex: 0 0 45px; border: 1px solid #e50914; background: linear-gradient(145deg, #241014, #090a0d); border-radius: 13px; display: grid; place-items: center; color: #e50914; font-size: 22px; font-weight: 950; text-shadow: 2px 0 #820009; box-shadow: 0 10px 28px #e5091426; }
+.assistant-avatar { width: 45px; height: 45px; flex: 0 0 45px; border-radius: 50%; display: grid; place-items: center; overflow: hidden; box-shadow: 0 10px 28px #e5091426; }
+.assistant-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .eyebrow { margin: 0 0 8px; color: #55e0bd; text-transform: uppercase; letter-spacing: .12em; font-weight: 800; font-size: 10px; }
 h1 { font-size: clamp(36px, 6vw, 64px); letter-spacing: -.045em; line-height: 1.02; margin: 0; max-width: 760px; }
 .lede { color: var(--muted); line-height: 1.7; font-size: 16px; max-width: 700px; margin: 22px 0 0; }

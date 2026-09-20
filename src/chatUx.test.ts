@@ -5,6 +5,13 @@ const appSource = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 
 describe("compact Netflix support chat", () => {
+  it("uses the supplied Persora and Netflix brand assets", () => {
+    expect(appSource).toContain("persora-heart.png");
+    expect(appSource).toContain("netflix-support-logo.png");
+    expect(appSource).not.toContain('aria-label="Persora">♥');
+    expect(appSource).not.toContain('className="assistant-avatar">N');
+  });
+
   it("keeps every starter in a labelled examples menu and populates the selected question", () => {
     expect(appSource).toContain('className="examples-menu"');
     expect(appSource).toContain("Examples · {cases.length}");
