@@ -63,6 +63,10 @@ The load-smoke script requires `ALLOW_PAID_LOAD_TEST=yes` and caps execution at 
 | A metric is null | whether it needs a trusted reference or the evaluator failed |
 | Documentation build fails | broken links, missing nav files and MkDocs warnings |
 
+## Interview demonstration
+
+Use the [interview demonstration runbook](INTERVIEW_DEMO.md) for the recommended sequence, acceptance checks and fallback route. Run the smoke checklist against production after every Edge Function promotion; a green Pages build proves the static artifact, not the deployed Edge Function revision.
+
 ## Release safety
 
 Review diffs for credentials, private URLs, personal data and overclaimed capabilities. If repository behavior and deployment differ, report both and inspect the deployed revision before diagnosing the cause.
