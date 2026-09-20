@@ -26,6 +26,11 @@ const patternDescription: Record<Pattern, string> = {
 };
 
 type AnswerSource = "fixture" | "live" | "agentic";
+const sourceLabel: Record<AnswerSource, string> = {
+  fixture: "Demo replay",
+  live: "Live answer",
+  agentic: "Full agentic run",
+};
 
 function normalizeAssistantMarkdown(answer: string) {
   return answer
@@ -33,7 +38,7 @@ function normalizeAssistantMarkdown(answer: string) {
     .replace(/([^\n])\s+(\d+\.\s+\*\*)/g, "$1\n\n$2");
 }
 
-function Header({ source, onSourceChange }: { source: AnswerSource; onSourceChange: (value: AnswerSource) => void }) {
+function Header() {
   return (
     <header className="app-header">
       <div className="brand-mark" aria-label="Persora">♥</div>
@@ -41,20 +46,16 @@ function Header({ source, onSourceChange }: { source: AnswerSource; onSourceChan
         <strong>Persora</strong>
         <span>Agentic Evidence Lab</span>
       </div>
-      <div className="mode-switch" role="group" aria-label="Answer source">
-        <button className={source === "fixture" ? "active" : ""} onClick={() => onSourceChange("fixture")}>Fixture</button>
-        <button className={source === "live" ? "active" : ""} onClick={() => onSourceChange("live")}>Live KB</button>
-        <button className={source === "agentic" ? "active" : ""} onClick={() => onSourceChange("agentic")}>Agentic run</button>
-      </div>
-      <div className={`mode ${source !== "fixture" ? "live" : ""}`}><i /> {source === "agentic" ? "LangGraph + published Persora agent" : source === "live" ? "Published Persora agent" : "Evidence mode · fixture replay"}</div>
+      <div className="mode"><i /> Evidence-first support demonstration</div>
     </header>
   );
 }
 
-function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progress }: {
+function Conversation({ turns, onAsk, onExplain, onReset, source, onSourceChange, progress }: {
   turns: ChatTurn[];
   onAsk: (question: string, selectedCase?: DemoCase) => Promise<void>;
   onExplain: (turn: ChatTurn) => void;
+  onReset: () => void;
   source: AnswerSource;
   onSourceChange: (value: AnswerSource) => void;
   progress: RunProgress | null;
@@ -69,6 +70,8 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
   const [starterAnimating, setStarterAnimating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const conversationEndRef = useRef<HTMLDivElement>(null);
+  const examplesRef = useRef<HTMLDetailsElement>(null);
+  const modeRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
     conversationEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -112,6 +115,7 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
   };
 
   const askStarter = async (item: DemoCase) => {
+    examplesRef.current?.removeAttribute("open");
     setDraft(item.customer);
     setStarterAnimating(true);
     inputRef.current?.focus();
@@ -141,6 +145,7 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
       <section className="assistant-intro">
         <div className="assistant-avatar">N</div>
         <div><h1>Netflix Support</h1><p>Hi, I’m the Netflix Support Assistant. How can I help?</p><small>Powered by Persora <b>♥</b></small></div>
+        {turns.length > 0 && <button className="new-conversation" type="button" onClick={onReset}>New conversation</button>}
       </section>
 
       <section className="conversation" aria-live="polite">
@@ -165,23 +170,23 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
                     {normalizeAssistantMarkdown(turn.answer)}
                   </ReactMarkdown>
                 </div>
-                {turn.runtime.citations.length > 0 && <div className="citations">
-                  <strong>{turn.runtime.quality?.status === "failed" ? "Sources used (format check failed)" : "Sources used"}</strong>
+                {turn.runtime.citations.length > 0 && <details className="citations">
+                  <summary><span>Sources · {turn.runtime.citations.length}</span>{turn.runtime.quality?.status === "failed" && <em>Citation format issue</em>}<b>⌄</b></summary>
                   <div>{turn.runtime.citations.map((citation, index) => <article key={`${citation.url ?? citation.label}-${index}`}>
                     {citation.url
                       ? <button type="button" onClick={() => void openCitation(citation.url!)}>{index + 1}. {citation.label}</button>
                       : <span>{index + 1}. {citation.label}</span>}
                     {citation.snippet && <small>{citation.snippet}</small>}
                   </article>)}</div>
-                </div>}
+                </details>}
                 <div className="answer-footer">
                   <div><i /> Answered in {(turn.runtime.totalMs / 1000).toFixed(1)}s</div>
                   {turn.demoCase && <button onClick={() => onExplain(turn)}>Explain this answer <b>↗</b></button>}
                 </div>
-                {turn.runtime.followUps && turn.runtime.followUps.length > 0 && <div className="follow-ups">
-                  <strong>Continue this conversation</strong>
+                {turn.runtime.followUps && turn.runtime.followUps.length > 0 && <details className="follow-ups">
+                  <summary><span>Continue conversation · {turn.runtime.followUps.length}</span><b>⌄</b></summary>
                   <div>{turn.runtime.followUps.map((question) => <button key={question} disabled={submitting} onClick={() => void submitQuestion(question)}>{question}<span>↗</span></button>)}</div>
-                </div>}
+                </details>}
               </div>
             </div>
           ))
@@ -196,14 +201,18 @@ function Conversation({ turns, onAsk, onExplain, source, onSourceChange, progres
 
       <div className={`composer-dock ${source !== "fixture" ? "live" : "fixture"}`}>
         <div className="composer-tools">
-          <div className="starter-strip" aria-label="Conversation starters">
-            {cases.map((item) => <button type="button" key={item.id} disabled={submitting} onClick={() => void askStarter(item)}>{item.starter}</button>)}
-          </div>
-          <div className="answer-source-switch" role="group" aria-label="Choose answer source">
-            <button type="button" aria-pressed={source === "fixture"} className={source === "fixture" ? "active" : ""} onClick={() => onSourceChange("fixture")}>Fixture</button>
-            <button type="button" aria-pressed={source === "live"} className={source === "live" ? "active" : ""} onClick={() => onSourceChange("live")}>Live Netflix KB</button>
-            <button type="button" aria-pressed={source === "agentic"} className={source === "agentic" ? "active" : ""} onClick={() => onSourceChange("agentic")}>Agentic run</button>
-          </div>
+          <details className="examples-menu" ref={examplesRef}>
+            <summary>Examples · {cases.length} <b>⌄</b></summary>
+            <div>{cases.map((item, index) => <button type="button" key={item.id} disabled={submitting} onClick={() => void askStarter(item)}><span>0{index + 1}</span><strong>{item.starter}</strong></button>)}</div>
+          </details>
+          <details className="mode-menu" ref={modeRef}>
+            <summary>{sourceLabel[source]} <b>⌄</b></summary>
+            <div role="group" aria-label="Choose answer source">
+              <button type="button" className={source === "fixture" ? "active" : ""} onClick={() => { onSourceChange("fixture"); modeRef.current?.removeAttribute("open"); }}><strong>Demo replay</strong><small>Local deterministic example; no network request.</small></button>
+              <button type="button" className={source === "live" ? "active" : ""} onClick={() => { onSourceChange("live"); modeRef.current?.removeAttribute("open"); }}><strong>Live answer</strong><small>Published Netflix agent with live citations.</small></button>
+              <button type="button" className={source === "agentic" ? "active" : ""} onClick={() => { onSourceChange("agentic"); modeRef.current?.removeAttribute("open"); }}><strong>Full agentic run</strong><small>Routing, guardrail, LangGraph, evaluation and trace.</small></button>
+            </div>
+          </details>
         </div>
         <form className={`composer ${starterAnimating ? "starter-loading" : ""}`} onSubmit={(event) => { event.preventDefault(); submit(); }}>
           <input ref={inputRef} aria-label="Message" disabled={submitting} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={submitting ? "Netflix Support is working…" : "Ask Netflix Support…"} />
@@ -637,6 +646,12 @@ export default function App() {
   const [source, setSource] = useState<AnswerSource>("agentic");
   const [progress, setProgress] = useState<RunProgress | null>(null);
 
+  const resetConversation = () => {
+    setTurns([]);
+    setSelectedTurn(null);
+    setProgress(null);
+  };
+
   const ask = async (question: string, selectedCase?: DemoCase) => {
     const demoCase = selectedCase ?? routeFixtureQuestion(question);
     const sequence = turns.length + 1;
@@ -707,8 +722,8 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header source={source} onSourceChange={setSource} />
-      <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} source={source} onSourceChange={setSource} progress={progress} />
+      <Header />
+      <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} onReset={resetConversation} source={source} onSourceChange={setSource} progress={progress} />
       {selectedTurn?.demoCase && selectedTurn.runId && <ExplainDrawer key={`${selectedTurn.id}-${selectedTurn.runtime.handoff?.status ?? "none"}`} turn={selectedTurn} onClose={() => setSelectedTurn(null)} onHandoffDecision={decideHandoff} />}
     </div>
   );
