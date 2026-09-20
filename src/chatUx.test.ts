@@ -12,6 +12,19 @@ describe("compact Netflix support chat", () => {
     expect(appSource).toContain("await submitQuestion(item.customer, item)");
   });
 
+  it("keeps dropdown panels visible above the composer", () => {
+    expect(styles).toContain(".composer-dock { position: relative; flex: 0 0 auto;");
+    expect(styles).toContain("overflow: visible;");
+    expect(styles).not.toContain(".composer-dock { position: relative; flex: 0 0 auto; z-index: 8; margin: 0; border-top: 1px solid #2a4262; background: rgba(8, 18, 31, .98); backdrop-filter: blur(18px); box-shadow: 0 -18px 48px #0007; overflow: hidden;");
+  });
+
+  it("moves a follow-up into the prompt without submitting it", () => {
+    expect(appSource).toContain("const selectFollowUp = (question: string) =>");
+    expect(appSource).toContain("setDraft(question)");
+    expect(appSource).toContain("onClick={() => selectFollowUp(question)}");
+    expect(appSource).not.toContain("onClick={() => void submitQuestion(question)}");
+  });
+
   it("uses one explained answer-mode menu", () => {
     expect(appSource).toContain('className="mode-menu"');
     expect(appSource).toContain("Demo replay");
