@@ -99,6 +99,7 @@ const State = Annotation.Root({
   guardrailReason: Annotation<string>,
   answer: Annotation<string>,
   citations: Annotation<unknown[]>({ reducer: (_left, right) => right, default: () => [] }),
+  followUps: Annotation<string[]>({ reducer: (_left, right) => right, default: () => [] }),
   eventTypes: Annotation<string[]>({ reducer: (left, right) => [...left, ...right], default: () => [] }),
   nodeTrace: Annotation<TraceEntry[]>({ reducer: (left, right) => [...left, ...right], default: () => [] }),
   protocolEvents: Annotation<ProtocolEvent[]>({ reducer: (left, right) => [...left, ...right], default: () => [] }),
@@ -112,44 +113,6 @@ const State = Annotation.Root({
   ragas: Annotation<LiveRagEvaluation>,
   orchestrationProof: Annotation<OrchestrationProof>,
 });
-
-const buildFollowUps = (pattern: Pattern, citations: unknown[], handoffMode: HandoffMode = null): string[] => {
-  const cited = citations.length > 0;
-  const questions: Record<Pattern, string[]> = {
-    sequential: [
-      "How do I update my Netflix Household from the primary TV?",
-      "What can I do if temporary travel access is unavailable?",
-      cited ? "Which cited Netflix article should I follow first?" : "When should I contact authenticated support?",
-    ],
-    concurrent: [
-      "How can the account owner view their own billing history?",
-      "What information should I prepare for authenticated support?",
-      "Why was retrieval skipped for this request?",
-    ],
-    "group-chat": [
-      "Which issue should I resolve first: email access, billing country, or household verification?",
-      "What did the A2A specialist contribute to this answer?",
-      cited ? "Which sources support the recommended recovery sequence?" : "When is a human specialist required?",
-    ],
-    handoff: handoffMode === "contact-requested"
-      ? [
-        "How do I call Netflix from the mobile app?",
-        "How do I start a Netflix support chat?",
-        "What information should I prepare before contacting support?",
-      ]
-      : [
-        "What exactly requires human approval?",
-        "What information is included in the handoff summary?",
-        "What happens if the approval is rejected?",
-      ],
-    magentic: [
-      "Which recovery step should I try next?",
-      "What details should I include when escalating to support?",
-      cited ? "Which cited source explains the alternative route?" : "Why should I stop repeating the failed code?",
-    ],
-  };
-  return questions[pattern];
-};
 
 const retrievalEvidence = (citations: unknown[]) => ({
   provider: "Persora KB · Supabase/Postgres vectors",
@@ -189,13 +152,19 @@ const timed = <T extends Record<string, unknown>>(
   };
 };
 
-function applySsePayload(state: { answer: string; citations: unknown[]; eventTypes: string[] }, payload: string) {
+function applySsePayload(state: { answer: string; citations: unknown[]; followUps: string[]; eventTypes: string[] }, payload: string) {
   if (!payload || payload === "[DONE]") return;
   let event: Record<string, unknown>;
   try { event = JSON.parse(payload); } catch { return; }
   const type = typeof event.type === "string" ? event.type : "message";
   if (!state.eventTypes.includes(type)) state.eventTypes.push(type);
   if (type === "citations" && Array.isArray(event.citations)) state.citations = event.citations;
+  if (type === "follow_ups" && Array.isArray(event.data)) {
+    state.followUps = event.data
+      .filter((question): question is string => typeof question === "string" && question.trim().length > 0)
+      .map((question) => question.trim())
+      .slice(0, 3);
+  }
   const choices = Array.isArray(event.choices) ? event.choices : [];
   const first = choices[0] as { delta?: { content?: unknown } } | undefined;
   if (typeof first?.delta?.content === "string") state.answer += first.delta.content;
@@ -226,7 +195,7 @@ async function requestPublishedAgent(state: typeof State.State) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  const stream = { answer: "", citations: [] as unknown[], eventTypes: [] as string[] };
+  const stream = { answer: "", citations: [] as unknown[], followUps: [] as string[], eventTypes: [] as string[] };
   while (true) {
     const { value, done } = await reader.read();
     buffer += decoder.decode(value, { stream: !done });
@@ -237,7 +206,7 @@ async function requestPublishedAgent(state: typeof State.State) {
   }
   if (buffer.startsWith("data:")) applySsePayload(stream, buffer.slice(5).trim());
   if (!stream.answer.trim()) throw new Error("Published agent completed without answer text");
-  return { ...normalizeCitationBundle(stream.answer.trim(), stream.citations), eventTypes: stream.eventTypes, specialist };
+  return { ...normalizeCitationBundle(stream.answer.trim(), stream.citations), followUps: stream.followUps, eventTypes: stream.eventTypes, specialist };
 }
 
 async function qualityCitations(values: unknown[]): Promise<QualityCitation[]> {
@@ -286,7 +255,7 @@ const requiredQualityTopics = (state: typeof State.State) => state.pattern === "
   : referenceForQuestion(state.message)?.requiredTopics ?? [];
 
 async function callPublishedAgent(state: typeof State.State) {
-  type PublishedResult = { answer: string; citations: unknown[]; eventTypes: string[]; specialist: SpecialistSelection | null };
+  type PublishedResult = { answer: string; citations: unknown[]; followUps?: string[]; eventTypes: string[]; specialist: SpecialistSelection | null };
   const requiredTopics = requiredQualityTopics(state);
   if (state.pattern === "group-chat" && !state.a2a.executed) {
     const answer = "I couldn’t complete the required specialist exchange for this multi-topic request, so I’m not presenting a single-agent fallback as an orchestrated answer. Please retry or ask the billing, Household, and account-access questions separately.";
@@ -951,7 +920,7 @@ function streamAgenticRun(input: typeof State.State, origin: string, started: nu
             totalMs,
           })
           : suppressedLangfuseEvidence();
-        const followUps = buildFollowUps(result.pattern, result.citations, result.handoffMode);
+        const followUps = result.followUps;
         const evidence = {
           traceId: input.traceId,
           totalMs,
@@ -1007,7 +976,7 @@ function streamAgenticRun(input: typeof State.State, origin: string, started: nu
         emit({ type: "TEXT_MESSAGE_START", messageId, role: "assistant" });
         emit({ type: "TEXT_MESSAGE_CONTENT", messageId, delta: result.answer });
         emit({ type: "TEXT_MESSAGE_END", messageId });
-        emit({ type: "CUSTOM", name: "persora.followups", value: { questions: followUps } });
+        if (followUps.length) emit({ type: "CUSTOM", name: "persora.followups", value: { questions: followUps } });
         emit({ type: "CUSTOM", name: "persora.evidence", value: { evidence, citations: result.citations } });
         emit(result.handoffRequired
           ? { type: "RUN_FINISHED", threadId: input.threadId, runId: input.traceId, outcome: { type: "interrupt", interrupts: [{ id: `${input.traceId}-human-approval`, reason: "human_approval" }] } }
@@ -1164,6 +1133,7 @@ Deno.serve(async (req: Request) => {
       specialist: null,
       answer: "",
       citations: [],
+      followUps: [],
       eventTypes: [],
       nodeTrace: [],
       protocolEvents: [],
@@ -1228,7 +1198,7 @@ Deno.serve(async (req: Request) => {
       protocolEvents: result.protocolEvents,
       quality: result.quality,
       orchestrationProof: result.orchestrationProof,
-      followUps: buildFollowUps(result.pattern, result.citations, result.handoffMode),
+      followUps: result.followUps,
       retrieval: retrievalEvidence(result.citations),
       publicTrace: {
         schemaVersion: "1.0",
