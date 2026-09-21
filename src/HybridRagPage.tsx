@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { askHybridRag, type HybridBackend, type HybridEvidence, type HybridResult } from "./hybridRagClient";
+import RelationshipGraph from "./RelationshipGraph";
 import "./hybridRag.css";
 
 const labels: Record<HybridBackend, { eyebrow: string; title: string; description: string }> = {
@@ -73,6 +74,7 @@ export default function HybridRagPage() {
         <div className="hybrid-result-column"><header><div><p className="eyebrow">Pinecone evidence</p><h2>Ranked knowledge chunks</h2></div><span>{result.vectorMatches.length} returned</span></header>{result.vectorMatches.length ? result.vectorMatches.map((match, index) => <article key={match.id}><b>{index + 1}</b><div><strong>{match.title ?? "Netflix Help article"}</strong><p>{match.content.slice(0, 240)}{match.content.length > 240 ? "…" : ""}</p>{match.sourceUrl && <a href={match.sourceUrl} target="_blank" rel="noreferrer">Open original source ↗</a>}</div><em>{match.score.toFixed(3)}</em></article>) : <p className="hybrid-empty">No vector records returned.</p>}</div>
         <div className="hybrid-result-column"><header><div><p className="eyebrow">Neo4j evidence</p><h2>Graph relationships</h2></div><span>{result.graphFacts.length} returned</span></header>{result.graphFacts.length ? result.graphFacts.map((fact, index) => <article className="graph-fact" key={`${fact.from}-${fact.relationship}-${fact.to}-${index}`}><div><strong>{fact.from}</strong><span>{fact.relationship.replaceAll("_", " ")}</span><strong>{fact.to}</strong></div><small>{fact.sourceChunkIds.length} source chunks · {fact.sourceUrls.length} source URLs</small></article>) : <p className="hybrid-empty">No bounded graph relationship matched this run.</p>}</div>
       </section>}
+      {result && <RelationshipGraph key={result.runId} facts={result.graphFacts} />}
     </main>
   );
 }

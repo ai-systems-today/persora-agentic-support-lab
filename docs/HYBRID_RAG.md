@@ -31,6 +31,8 @@ Each backend returns a separate evidence record:
 
 The interface never turns a node green from configuration or fixture data. A failed backend remains visibly not executed, and no fixture is substituted.
 
+The knowledge relationship graph is built in the browser only from `graphFacts` returned by the selected run. Selecting a topic highlights its returned relationships; selecting a relationship exposes its source-chunk count and allow-listed Netflix source URLs. The graph never adds inferred or fixture relationships.
+
 ## Security boundary
 
 The browser contains only the existing Supabase publishable key and the public function URL. These secrets remain in the Supabase project:
