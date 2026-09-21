@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import neo4j from "npm:neo4j-driver@5.28.2";
 import { consumeEntryRateLimit, requestRateLimitKey } from "../_shared/entryRateLimit.ts";
 
 const ALLOWED_ORIGINS = new Set([
@@ -29,6 +30,18 @@ type Evidence = {
 };
 type VectorMatch = { id: string; score: number; content: string; title: string | null; sourceUrl: string | null };
 type GraphFact = { from: string; relationship: string; to: string; sourceChunkIds: string[]; sourceUrls: string[] };
+
+const PINECONE_NAMESPACE = "netflix-support-v1";
+
+const netflixSourceUrl = (value: unknown): string | null => {
+  if (typeof value !== "string" || !value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && (url.hostname === "netflix.com" || url.hostname.endsWith(".netflix.com")) ? url.href : null;
+  } catch {
+    return null;
+  }
+};
 
 const cors = (origin: string) => ({
   "Access-Control-Allow-Origin": origin,
@@ -100,7 +113,7 @@ async function queryPinecone(vector: number[]): Promise<VectorMatch[]> {
       "X-Pinecone-Api-Version": "2025-01",
     },
     body: JSON.stringify({
-      namespace: Deno.env.get("PINECONE_NAMESPACE")?.trim() || "netflix-support-v1",
+      namespace: PINECONE_NAMESPACE,
       vector,
       topK: 8,
       includeMetadata: true,
@@ -117,7 +130,7 @@ async function queryPinecone(vector: number[]): Promise<VectorMatch[]> {
       score: typeof match.score === "number" ? match.score : 0,
       content: typeof metadata.content === "string" ? metadata.content : "",
       title: typeof metadata.title === "string" && metadata.title ? metadata.title : null,
-      sourceUrl: typeof metadata.sourceUrl === "string" && metadata.sourceUrl ? metadata.sourceUrl : null,
+      sourceUrl: netflixSourceUrl(metadata.sourceUrl),
     }];
   });
 }
@@ -126,43 +139,35 @@ const topicsForText = (text: string) => TOPIC_RULES.filter(({ terms }) => terms.
 
 async function queryNeo4j(topics: string[]): Promise<GraphFact[]> {
   if (!topics.length) return [];
-  const uri = required("NEO4J_URI");
-  const host = uri.replace(/^neo4j(?:\+s)?:\/\//, "https://").replace(/\/$/, "");
   const username = Deno.env.get("NEO4J_USERNAME")?.trim() || "neo4j";
-  const response = await fetch(`${host}/db/neo4j/query/v2`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Basic ${btoa(`${username}:${required("NEO4J_PASSWORD")}`)}`,
-      "Accept": "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      statement: `MATCH (from:Topic)-[r:RELATED]->(to:Topic)
+  const driver = neo4j.driver(required("NEO4J_URI"), neo4j.auth.basic(username, required("NEO4J_PASSWORD")));
+  try {
+    const result = await driver.executeQuery(
+      `MATCH (from:Topic)-[r:RELATED]->(to:Topic)
         WHERE from.name IN $topics OR to.name IN $topics
         RETURN from.name AS from, r.kind AS relationship, to.name AS to,
                r.sourceChunkIds AS sourceChunkIds, r.sourceUrls AS sourceUrls
         LIMIT 20`,
-      parameters: { topics },
-    }),
-  });
-  if (!response.ok) throw new Error(`Neo4j query failed with HTTP ${response.status}`);
-  const payload = await response.json() as {
-    data?: { fields?: string[]; values?: unknown[][] };
-    errors?: Array<{ message?: string }>;
-  };
-  if (payload.errors?.length) throw new Error("Neo4j query returned an error");
-  const fields = payload.data?.fields ?? [];
-  return (payload.data?.values ?? []).flatMap((values) => {
-    const row = Object.fromEntries(fields.map((field, index) => [field, values[index]]));
-    if (typeof row.from !== "string" || typeof row.relationship !== "string" || typeof row.to !== "string") return [];
-    return [{
-      from: row.from,
-      relationship: row.relationship,
-      to: row.to,
-      sourceChunkIds: Array.isArray(row.sourceChunkIds) ? row.sourceChunkIds.filter((value): value is string => typeof value === "string") : [],
-      sourceUrls: Array.isArray(row.sourceUrls) ? row.sourceUrls.filter((value): value is string => typeof value === "string") : [],
-    }];
-  });
+      { topics },
+    );
+    return result.records.flatMap((record) => {
+      const from = record.get("from");
+      const relationship = record.get("relationship");
+      const to = record.get("to");
+      if (typeof from !== "string" || typeof relationship !== "string" || typeof to !== "string") return [];
+      const sourceChunkIds = record.get("sourceChunkIds");
+      const sourceUrls = record.get("sourceUrls");
+      return [{
+        from,
+        relationship,
+        to,
+        sourceChunkIds: Array.isArray(sourceChunkIds) ? sourceChunkIds.filter((value): value is string => typeof value === "string") : [],
+        sourceUrls: Array.isArray(sourceUrls) ? sourceUrls.flatMap((value) => netflixSourceUrl(value) ?? []) : [],
+      }];
+    });
+  } finally {
+    await driver.close();
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -174,7 +179,9 @@ Deno.serve(async (req: Request) => {
   const started = performance.now();
   const runId = req.headers.get("x-trace-id") ?? crypto.randomUUID();
   try {
-    const body = await req.json();
+    const bodyValue: unknown = await req.json();
+    if (!bodyValue || typeof bodyValue !== "object" || Array.isArray(bodyValue)) return json(origin, { error: "Request body must be a JSON object" }, 400);
+    const body = bodyValue as Record<string, unknown>;
     const question = typeof body.question === "string" ? body.question.trim() : "";
     const sessionToken = typeof body.sessionToken === "string" ? body.sessionToken : crypto.randomUUID();
     if (!question || question.length > 1000) return json(origin, { error: "Question must contain 1–1,000 characters" }, 400);
