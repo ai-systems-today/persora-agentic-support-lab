@@ -15,7 +15,7 @@ flowchart LR
     N4J --> UI
 ```
 
-The Edge Function validates the question, applies the shared entry rate limit, generates the 1,536-dimensional query embedding, queries the `netflix-support-v1` Pinecone namespace, extracts bounded support topics and queries Neo4j relationships for those topics.
+The Edge Function validates the question, applies the shared entry rate limit, generates the 1,536-dimensional query embedding, queries the repository-defined `netflix-support-v1` Pinecone namespace, extracts bounded support topics and queries Neo4j relationships for those topics through the official Neo4j driver.
 
 ## Evidence contract
 
@@ -41,7 +41,6 @@ The browser contains only the existing Supabase publishable key and the public f
 - `AZURE_OPENAI_API_VERSION`
 - `PINECONE_API_KEY`
 - `PINECONE_INDEX_HOST`
-- `PINECONE_NAMESPACE`
 - `NEO4J_URI`
 - `NEO4J_USERNAME`
 - `NEO4J_PASSWORD`
