@@ -30,6 +30,7 @@ By the end of the manual, you should be able to:
 - separate observability from evaluation;
 - understand AG-UI, A2A, MCP and server-sent events;
 - choose between Postgres/pgvector, Pinecone, Milvus, Neo4j and Apache AGE using evidence-based triggers;
+- identify which components are implemented, runtime-dependent, demonstrated or deliberate alternatives;
 - identify what `pg_graphql` does—and why it is not a graph database;
 - apply Persora's evidence labels to avoid overstating system capabilities.
 
@@ -56,3 +57,5 @@ It does **not** claim to expose every private service or every builder capabilit
 | An operator | [Observability](OBSERVABILITY.md), then [Operations](OPERATIONS.md) |
 
 Use the **Next** link at the bottom of every page for the complete guided path.
+
+For the complete component inventory, read [Technology stack](TECH_STACK.md). For the vector option not executed in this proof, read [Milvus for enterprise workloads](MILVUS_ENTERPRISE.md).

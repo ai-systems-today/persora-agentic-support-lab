@@ -43,7 +43,7 @@ Every capability is classified using one of six labels:
 | Not executed | The selected path did not run the capability |
 | Not evaluated | No valid evaluation result exists |
 
-Pinecone, Milvus, Neo4j and other candidate adapters are documented as decision options. They are not presented as executed unless a run captures their query and returned records.
+Pinecone and Neo4j are implemented in the separate Hybrid RAG route and are presented as executed only when the selected run captures their returned records and timing. Milvus and Apache AGE remain documented alternatives and are not presented as executed.
 
 ## Architecture at a glance
 
@@ -113,6 +113,8 @@ Every push to `main` validates the application and Edge Functions, builds the Vi
 | Neo4j Aura | Bounded graph adapter implemented; execution is shown only when the selected run returns backend evidence |
 | Milvus / Apache AGE | Documented alternatives; not executed here |
 | `pg_graphql` | API exposure option, not a graph database and not retrieval proof |
+
+The [technology stack chapter](docs/TECH_STACK.md) maps every component to its actual role and evidence status. The [Milvus enterprise chapter](docs/MILVUS_ENTERPRISE.md) explains when Kubernetes/AKS is justified, why Azure Container Apps is an application tier rather than managed Milvus, and how to migrate with parity testing and rollback.
 
 For a short, reliable product walkthrough, use the [interview demonstration runbook](docs/INTERVIEW_DEMO.md).
 
