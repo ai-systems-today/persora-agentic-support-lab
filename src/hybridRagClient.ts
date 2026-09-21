@@ -54,6 +54,8 @@ export async function askHybridRag(question: string): Promise<HybridResult> {
     body: JSON.stringify({ question, sessionToken: sessionValue() }),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof payload.error === "string" ? payload.error : `Hybrid endpoint returned HTTP ${response.status}.`);
+  if (!response.ok && (!payload || typeof payload !== "object" || !Array.isArray((payload as Partial<HybridResult>).evidence))) {
+    throw new Error(typeof payload.error === "string" ? payload.error : `Hybrid endpoint returned HTTP ${response.status}.`);
+  }
   return normalizeHybridResult(payload);
 }
