@@ -37,6 +37,7 @@ nav:
       - Orchestration: ORCHESTRATION.md
       - Interaction protocols: PROTOCOLS.md
       - Explain this answer: EXPLAIN.md
+      - Hybrid RAG cloud view: HYBRID_RAG.md
   - Reliability:
       - Grounding and RAG: GROUNDING.md
       - Quality and evaluation: QUALITY.md
