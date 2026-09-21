@@ -12,7 +12,7 @@ export type HybridResult = {
   error: string | null;
 };
 
-export const HYBRID_RAG_URL = "https://oiotkbbwriecdvtnufee.supabase.co/functions/v1/hybrid-rag-demo";
+export const HYBRID_RAG_URL = "https://aaojmerjqlklrozkvhdl.supabase.co/functions/v1/hybrid-rag-demo";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pb3RrYmJ3cmllY2R2dG51ZmVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMDg3MjEsImV4cCI6MjA3MzY4NDcyMX0.dqpT-gmY4hT7zqxGAPHeJnx6xVugtiUnHXTUdtnoMDQ";
 
 const sessionValue = () => {
