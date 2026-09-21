@@ -15,4 +15,14 @@ describe("normalizeHybridResult", () => {
   it("fails closed for malformed responses", () => {
     expect(() => normalizeHybridResult({ runId: "run-1" })).toThrow("invalid evidence contract");
   });
+
+  it("preserves exact-run evidence when a backend failure is returned", () => {
+    const result = normalizeHybridResult({
+      runId: "run-2", question: "travel", vectorMatches: [], graphFacts: [],
+      evidence: [{ backend: "azure-openai", executed: false, durationMs: 7, records: 0, error: "Provider returned HTTP 502" }],
+      totalMs: 7, error: "Query embedding failed; retrieval was not executed.",
+    });
+    expect(result.error).toContain("retrieval was not executed");
+    expect(result.evidence[0].executed).toBe(false);
+  });
 });
