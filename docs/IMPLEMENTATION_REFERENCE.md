@@ -11,6 +11,9 @@
 | Live and agentic SSE clients | `src/liveClient.ts` |
 | Playwright source client | `src/browserClient.ts` |
 | Runtime evidence contracts | `src/types.ts` |
+| Hybrid RAG page | `src/HybridRagPage.tsx` |
+| Hybrid API client and contracts | `src/hybridRagClient.ts` |
+| Exact-run Neo4j graph | `src/RelationshipGraph.tsx`, `src/relationshipGraph.ts` |
 
 ## Server orchestration
 
@@ -22,6 +25,7 @@
 | Concurrent/recovery proof | `supabase/functions/_shared/orchestrationProof.ts` |
 | A2A specialist endpoint | `supabase/functions/netflix-specialist-a2a/index.ts` |
 | Source-browser endpoint | `supabase/functions/support-source-browser/index.ts` |
+| Azure embedding, Pinecone and Neo4j route | `supabase/functions/hybrid-rag-demo/index.ts` |
 
 ## Quality
 
@@ -48,7 +52,9 @@ The public runtime object can include:
 - handoff state;
 - allow-listed Langfuse observations;
 - A2A, AG-UI and LangGraph execution fields;
-- explicit Neo4j non-execution state.
+- separate Azure, Pinecone and Neo4j exact-run evidence records;
+- Pinecone vector matches and Neo4j facts with source provenance;
+- explicit provider failure/non-execution states without fixture substitution.
 
 ## Verification map
 
@@ -61,6 +67,8 @@ The public runtime object can include:
 | Citation evidence | `src/citationEvidence.test.ts` |
 | UI contracts | `src/chatUx.test.ts`, `src/data.test.ts` |
 | Streaming parser | `src/liveClient.test.ts` |
+| Hybrid client contract | `src/hybridRagClient.test.ts` |
+| Relationship graph transformation | `src/relationshipGraph.test.ts` |
 | Release invariants | `scripts/validate_release.mjs` |
 
 Implementation presence is repository evidence. Execution claims still require evidence returned by the selected run.

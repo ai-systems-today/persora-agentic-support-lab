@@ -60,6 +60,20 @@ Expected result:
 - selecting one copies it into the composer without submitting;
 - when the published agent returns no valid suggestions, the section is absent.
 
+### 6. Show Hybrid RAG and GraphRAG evidence
+
+Select **Hybrid RAG** and ask **How does Netflix Household work while travelling?**
+
+Expected result:
+
+- Azure OpenAI reports the query embedding execution;
+- Pinecone returns ranked chunks with scores and original Netflix sources;
+- Neo4j returns bounded relationships with source provenance;
+- selecting a graph topic or relationship opens exact-run details;
+- any unavailable backend remains visibly failed or not executed.
+
+Explain that Pinecone and Neo4j are implemented and were demonstrated in staging. Milvus is the documented enterprise/self-hosted vector alternative, not an executed part of this run. Do not claim that the displayed duration proves one database is faster than another.
+
 ## How to present a quality warning
 
 An **Unsupported claims detected** label is evidence that the exact-run evaluator found at least one substantive claim without adequate citation or lexical support. Open **Sources** to show the reason. Do not describe the warning as a UI failure and do not imply that Persora guarantees hallucination elimination; the proof is that unsupported claims are measured and exposed instead of hidden.
@@ -77,5 +91,6 @@ If a provider-backed knowledge answer is slow or unavailable, use the privacy-bo
 | Protected action | No mutation claim and bounded human-approval state |
 | Human contact | Official links and live mobile-width source capture |
 | Multi-agent | `group-chat`, three specialists, A2A task, LangGraph nodes |
+| Hybrid RAG | Azure embedding, Pinecone matches and Neo4j facts from the same run |
 
 Record failures honestly. A visible quality warning, unavailable trace, or absent follow-up is part of the evidence contract and must not be replaced with fixture data.

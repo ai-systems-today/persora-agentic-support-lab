@@ -33,6 +33,7 @@ nav:
       - Terminology and glossary: GLOSSARY.md
   - System:
       - Architecture: ARCHITECTURE.md
+      - Technology stack: TECH_STACK.md
       - Request lifecycle: LIFECYCLE.md
       - Orchestration: ORCHESTRATION.md
       - Interaction protocols: PROTOCOLS.md
@@ -45,6 +46,7 @@ nav:
       - Security and public safety: PUBLIC_SAFETY.md
   - Decisions and operations:
       - Technology decisions: TECHNOLOGY_DECISIONS.md
+      - Milvus for enterprise workloads: MILVUS_ENTERPRISE.md
       - Operations and validation: OPERATIONS.md
       - Interview demonstration: INTERVIEW_DEMO.md
       - Implementation reference: IMPLEMENTATION_REFERENCE.md

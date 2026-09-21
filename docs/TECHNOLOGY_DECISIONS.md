@@ -16,9 +16,9 @@ For every technology, ask:
 | Technology | Category | Status here | Consider it when | Do not add it merely because |
 |---|---|---|---|---|
 | Supabase/Postgres + vectors | Relational and vector data | Current Persora retrieval path | One governed platform satisfies metadata, tenancy and vector needs | A separate vector logo looks more “enterprise” |
-| Pinecone | Managed vector service | Candidate; not executed | A managed vector service is justified by measured scale, latency, isolation or operational needs | Vector search already works adequately in Postgres |
-| Milvus | Vector database | Candidate; not executed | Very large vector workloads or deployment control justify operating a dedicated vector system | Open-source availability alone creates value |
-| Neo4j | Native graph database | Candidate; not executed | Relationship-heavy retrieval and graph algorithms materially improve evaluated answers | Documents contain occasional cross-references |
+| Pinecone | Managed vector service | Implemented; runtime-dependent; demonstrated in staging | A managed vector service is justified by measured scale, latency, isolation or operational needs | Vector search already works adequately in Postgres |
+| Milvus | Vector database | Alternative; not executed | Self-hosting, Kubernetes control, data residency or measured dedicated-vector scale justifies its operations | Open-source availability or an “enterprise” label alone creates value |
+| Neo4j | Native graph database | Implemented; runtime-dependent; demonstrated in staging | Relationship-heavy retrieval and graph traversal materially improve evaluated answers | Documents contain occasional cross-references |
 | Apache AGE | PostgreSQL graph extension | Candidate; not executed | Graph querying is needed while keeping graph and relational data in PostgreSQL | The team wants to claim “GraphRAG” |
 | `pg_graphql` | GraphQL API extension | Candidate API option; not graph retrieval | A GraphQL interface over PostgreSQL fits client/API requirements | Its name contains “graph” |
 | LangGraph | Agent orchestration | Implemented | Stateful branching, interrupts and inspectable graph execution are required | A single model call is sufficient |
@@ -26,9 +26,18 @@ For every technology, ask:
 | Langfuse | Observability | Implemented, runtime-dependent | Private traces, timings and cost/usage projections are required | A trace alone proves answer correctness |
 | RAGAS-compatible evaluation | Quality evaluation | Implemented | Exact-run RAG quality needs measurable reasons and unsupported-claim detection | One aggregate score is desired |
 
+## Vector-store decision
+
+| Requirement | Postgres/pgvector | Pinecone | Milvus |
+|---|---|---|---|
+| Current role | Existing Persora knowledge path | Demonstrated Hybrid RAG vector path | Documented alternative |
+| Operations | Shares the governed Postgres estate | Managed service | Self-managed on Kubernetes or obtained as a managed Milvus service |
+| Best reason to choose | Relational metadata, tenancy and vectors belong together | Dedicated managed vector scale with low database operations | Infrastructure control, self-hosting, data placement or specialized large vector workloads |
+| Proof required | Captured product retrieval records | Captured Pinecone query results and timing | Captured Milvus query results and timing after parity testing |
+
 ## Vector-store adoption gates
 
-Before adding Pinecone or Milvus, capture a reproducible benchmark covering:
+Before replacing the current provider or adding Milvus, capture a reproducible benchmark covering:
 
 - corpus size and vector count;
 - write/update rate;
@@ -63,7 +72,13 @@ Adoption requires an entity/relationship model, graph-query benchmark and measur
 | Best fit | Graph is a central workload with dedicated tooling | Graph is additive to an existing Postgres estate |
 | Evidence required here | Captured graph query and returned records | Captured AGE query and returned graph rows |
 
-This is a decision framework, not a declaration that either is deployed.
+Neo4j is implemented in the Hybrid RAG path and is runtime-proven only for runs returning its backend evidence. Apache AGE remains a documented alternative and is not executed here.
+
+## Milvus on Azure
+
+Use AKS when Persora must operate a distributed Milvus cluster on Azure. Milvus's official Azure deployment guidance uses AKS and Helm. Azure Container Apps is appropriate for stateless retrieval APIs or ingestion workers around Milvus, but Microsoft does not describe ACA as a managed Milvus offering. A managed Milvus provider is the lower-operations alternative.
+
+See [Milvus for enterprise workloads](MILVUS_ENTERPRISE.md) for adoption triggers, deployment choices, a fail-safe migration plan and authoritative references.
 
 ## `pg_graphql` is not GraphRAG
 

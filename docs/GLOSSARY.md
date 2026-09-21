@@ -59,9 +59,15 @@
 | Term | Meaning |
 |---|---|
 | pgvector | PostgreSQL extension for storing and searching vectors |
+| Pinecone | Managed vector service used by the Hybrid RAG demonstration to return ranked chunks |
+| Milvus | Open-source vector database documented here as a future self-hosted or managed alternative; not executed by this repository |
+| Neo4j | Native graph database used by the Hybrid RAG demonstration for bounded relationship queries |
 | `pg_graphql` | PostgreSQL extension that exposes a GraphQL API; it is not a graph database |
 | Apache AGE | Graph extension that adds graph structures and Cypher-style querying to PostgreSQL |
 | GraphRAG | Retrieval that uses entities and relationships in a graph alongside or instead of vector similarity |
+| AKS | Azure Kubernetes Service: Azure's managed Kubernetes platform and the documented Azure fit for a self-hosted Milvus cluster |
+| ACA | Azure Container Apps: a serverless container application platform suitable for APIs and workers around Milvus, not a managed Milvus database |
+| Helm | Kubernetes package manager used by Milvus's documented cluster installation path |
 | RLS | Row-Level Security: database policies that restrict which rows a caller can access |
 | JWT | JSON Web Token: a signed token carrying identity/authorization claims |
 

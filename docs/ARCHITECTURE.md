@@ -20,6 +20,19 @@ flowchart TD
 
 `S` includes the Azure OpenAI evaluator, private Langfuse project and Playwright MCP endpoint. Their credentials and private URLs are not returned to the browser.
 
+## Hybrid RAG boundary
+
+```mermaid
+flowchart LR
+    H[Hybrid RAG UI] --> E[Hybrid Edge Function]
+    E --> A[Azure embedding]
+    E --> P[Pinecone search]
+    E --> N[Neo4j query]
+    E --> H
+```
+
+The Hybrid RAG page is a parallel demonstration route. Pinecone supplies ranked chunks; Neo4j supplies bounded relationships with provenance. Neither backend silently replaces the existing Persora knowledge path. Milvus and Apache AGE remain alternatives until a captured run proves their execution.
+
 ## Five architecture layers
 
 | Layer | Responsibility | Examples |
@@ -64,3 +77,8 @@ The lab is standalone. It neither imports nor modifies LibreChat. It is also not
 | RAGAS-compatible evaluation | `supabase/functions/_shared/liveRagEvaluation.ts` |
 | A2A endpoint | `supabase/functions/netflix-specialist-a2a/index.ts` |
 | Playwright source browser | `supabase/functions/support-source-browser/index.ts` |
+| Hybrid RAG UI and client | `src/HybridRagPage.tsx`, `src/hybridRagClient.ts` |
+| Neo4j relationship visualization | `src/RelationshipGraph.tsx`, `src/relationshipGraph.ts` |
+| Pinecone and Neo4j backend adapters | `supabase/functions/hybrid-rag-demo/index.ts` |
+
+For a layer-by-layer inventory, see [Technology stack](TECH_STACK.md).

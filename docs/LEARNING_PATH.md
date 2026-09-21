@@ -45,3 +45,5 @@ This prevents a long list of fashionable technologies from becoming a false arch
 3. Run a multi-domain question and inspect the A2A specialists.
 4. Compare a deterministic quality result with a RAGAS-compatible evaluator result.
 5. Find one field labelled **Not captured** and explain what evidence would be needed.
+6. Run the Hybrid RAG view and distinguish Pinecone vector matches from Neo4j relationships.
+7. Use the Milvus decision chapter to explain why AKS, ACA and a managed Milvus service solve different operational problems.
