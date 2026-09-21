@@ -52,6 +52,7 @@ export default function HybridRagPage() {
         <label htmlFor="hybrid-question">Netflix knowledge question</label>
         <div><input id="hybrid-question" value={question} disabled={loading} maxLength={1000} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void run(); }} /><button type="button" disabled={loading || !question.trim()} onClick={() => void run()}>{loading ? <span className="typing-dots"><i /><i /><i /></span> : "Run hybrid search"}</button></div>
         {error && <p className="hybrid-error" role="alert">{error} No fixture evidence was substituted.</p>}
+        {result?.error && <p className="hybrid-error" role="alert">{result.error} No fixture evidence was substituted.</p>}
       </section>
 
       <section className="cloud-execution" aria-label="Cloud execution evidence">
