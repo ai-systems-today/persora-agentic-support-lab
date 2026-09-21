@@ -182,7 +182,7 @@ Deno.serve(async (req: Request) => {
     const rateLimit = consumeEntryRateLimit(await requestRateLimitKey(req, "hybrid-rag-demo", sessionToken));
     if (!rateLimit.allowed) return json(origin, { error: "Too many requests" }, 429, { "Retry-After": String(rateLimit.retryAfterSeconds) });
 
-    const embedding = await measured<number>("azure-openai", async () => [await embed(question)]);
+    const embedding = await measured<number[]>("azure-openai", async () => [await embed(question)]);
     if (!embedding.evidence.executed || !embedding.values[0]) {
       return json(origin, {
         runId,
