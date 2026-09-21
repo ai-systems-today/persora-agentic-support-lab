@@ -7,6 +7,7 @@ import { formatRetrievalScore } from "./retrievalScore";
 import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Pattern, RunProgress } from "./types";
 import { selectOrchestrationPattern } from "../supabase/functions/_shared/orchestrationRouter";
 import { openSourceInBrowser, type SourceBrowserResult } from "./browserClient";
+import HybridRagPage from "./HybridRagPage";
 
 const statusLabel: Record<EvidenceStatus, string> = {
   "runtime-proven": "Runtime-proven",
@@ -38,7 +39,7 @@ function normalizeAssistantMarkdown(answer: string) {
     .replace(/([^\n])\s+(\d+\.\s+\*\*)/g, "$1\n\n$2");
 }
 
-function Header() {
+function Header({ view, onViewChange }: { view: "support" | "hybrid"; onViewChange: (view: "support" | "hybrid") => void }) {
   return (
     <header className="app-header">
       <div className="brand-mark" aria-label="Persora"><img src={`${import.meta.env.BASE_URL}persora-heart.png`} alt="" /></div>
@@ -47,6 +48,8 @@ function Header() {
         <span>Agentic Evidence Lab</span>
       </div>
       <nav className="header-links" aria-label="Project links">
+        <button type="button" className={view === "support" ? "active" : ""} onClick={() => onViewChange("support")}>Support Agent</button>
+        <button type="button" className={view === "hybrid" ? "active" : ""} onClick={() => onViewChange("hybrid")}>Hybrid RAG</button>
         <a href={`${import.meta.env.BASE_URL}docs/`}>Docs</a>
         <a href="https://github.com/ai-systems-today/persora-agentic-support-lab" target="_blank" rel="noreferrer">GitHub</a>
       </nav>
@@ -668,6 +671,7 @@ export default function App() {
   const [selectedTurn, setSelectedTurn] = useState<ChatTurn | null>(null);
   const [source, setSource] = useState<AnswerSource>("agentic");
   const [progress, setProgress] = useState<RunProgress | null>(null);
+  const [view, setView] = useState<"support" | "hybrid">("support");
 
   const resetConversation = () => {
     setTurns([]);
@@ -749,9 +753,11 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header />
-      <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} onReset={resetConversation} source={source} onSourceChange={setSource} progress={progress} />
-      {selectedTurn?.demoCase && selectedTurn.runId && <ExplainDrawer key={`${selectedTurn.id}-${selectedTurn.runtime.handoff?.status ?? "none"}`} turn={selectedTurn} onClose={() => setSelectedTurn(null)} onHandoffDecision={decideHandoff} />}
+      <Header view={view} onViewChange={setView} />
+      {view === "support" ? <>
+        <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} onReset={resetConversation} source={source} onSourceChange={setSource} progress={progress} />
+        {selectedTurn?.demoCase && selectedTurn.runId && <ExplainDrawer key={`${selectedTurn.id}-${selectedTurn.runtime.handoff?.status ?? "none"}`} turn={selectedTurn} onClose={() => setSelectedTurn(null)} onHandoffDecision={decideHandoff} />}
+      </> : <HybridRagPage />}
     </div>
   );
 }
