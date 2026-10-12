@@ -1,11 +1,19 @@
 [
   {
+    "file": "official-30-2026-10-12.json",
+    "label": "12 Oct — 30 live questions with official RAGAS: 28 live checks passed, two withheld"
+  },
+  {
+    "file": "official-retry-2026-10-12.json",
+    "label": "12 Oct — multi-issue retry: all five official metric types evaluated"
+  },
+  {
     "file": "candidate-30-2026-10-12.json",
-    "label": "12 Oct — 30 live questions: 25 checks passed, five failed"
+    "label": "12 Oct — earlier 30-question candidate: 25 live checks passed"
   },
   {
     "file": "targeted-5-2026-10-12.json",
-    "label": "12 Oct — targeted rerun: four checks passed, one failed"
+    "label": "12 Oct — targeted rerun: four live checks passed"
   },
   {
     "file": "baseline-2026-10-12.json",
