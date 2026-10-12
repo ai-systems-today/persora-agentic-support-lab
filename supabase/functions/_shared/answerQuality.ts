@@ -13,6 +13,7 @@ export type LiveQuality = {
   answerRelevance: number | null;
   intentCoverage: number | null;
   correctness: null;
+  citationCoverage?: number | null;
   claimCount: number;
   supportedClaimCount: number;
   referencedCitationCount: number;
@@ -283,6 +284,7 @@ export function evaluateLiveAnswer(input: {
     answerRelevance,
     intentCoverage,
     correctness: null,
+    citationCoverage: claims.length ? round(claims.filter(claim => citationReferences(claim).some(ref => ref >= 1 && ref <= input.citations.length)).length / claims.length) : null,
     claimCount: claims.length,
     supportedClaimCount,
     referencedCitationCount: uniqueReferences.length,

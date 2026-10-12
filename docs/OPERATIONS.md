@@ -70,3 +70,8 @@ Use the [interview demonstration runbook](INTERVIEW_DEMO.md) for the recommended
 ## Release safety
 
 Review diffs for credentials, private URLs, personal data and overclaimed capabilities. If repository behavior and deployment differ, report both and inspect the deployed revision before diagnosing the cause.
+
+
+## Fresh-answer evaluation
+
+See [Evaluation and Test Results](EVALUATION.md) for captured retrieval evidence, reviewed source expectations, live decisions, offline RAGAS, benchmark gates and Langfuse exports. Pending reviews and missing measurements are explicit. Running a benchmark does not deploy a release.

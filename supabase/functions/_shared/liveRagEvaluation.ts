@@ -8,9 +8,9 @@ export type LiveRagMetricName =
 export type LiveRagEvaluation = {
   executed: boolean;
   scope: "request" | null;
-  implementation: "azure-openai-ragas-compatible-v1";
+  implementation: "azure-openai-custom-judge-v2";
   evaluatorModel: string | null;
-  evaluatorVersion: "2026-09-19.9";
+  evaluatorVersion: "2026-10-12.2";
   status: "passed" | "failed" | "not-evaluated";
   referenceId: string | null;
   metrics: Record<LiveRagMetricName, number | null>;
@@ -20,6 +20,7 @@ export type LiveRagEvaluation = {
   inputHashes: { question: string; answer: string; contexts: string } | null;
   durationMs: number | null;
   error: string | null;
+  diagnostics?: string[];
 };
 
 export type LiveRagReference = {
@@ -76,8 +77,8 @@ const emptyMetrics = (): LiveRagEvaluation["metrics"] => ({
 });
 
 const clampMetric = (value: unknown): number | null => {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  return Math.round(Math.max(0, Math.min(1, value)) * 1000) / 1000;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) return null;
+  return Math.round(value * 1000) / 1000;
 };
 
 const normalizeQuestion = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -92,9 +93,9 @@ const sha256 = async (value: string) => Array.from(
 export const notEvaluatedLiveRag = (reason: string): LiveRagEvaluation => ({
   executed: false,
   scope: null,
-  implementation: "azure-openai-ragas-compatible-v1",
+  implementation: "azure-openai-custom-judge-v2",
   evaluatorModel: null,
-  evaluatorVersion: "2026-09-19.9",
+  evaluatorVersion: "2026-10-12.2",
   status: "not-evaluated",
   referenceId: null,
   metrics: emptyMetrics(),
@@ -115,19 +116,20 @@ export async function evaluateExactRun(input: {
   apiKey: string;
   model?: string;
   fetcher?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<LiveRagEvaluation> {
   const started = performance.now();
   const model = input.model ?? "gpt-4o-mini";
   const reference = input.reference ?? null;
-  const contexts = input.contexts.map((context) => context.trim()).filter(Boolean).slice(0, 32);
+  const contexts = input.contexts.map((context) => context.trim()).filter(Boolean);
   const inputHashes = {
     question: await sha256(input.question),
     answer: await sha256(input.answer),
     contexts: await sha256(JSON.stringify(contexts)),
   };
-  if (!input.answer.trim() || !contexts.length) {
+  if (!input.answer.trim() || !contexts.length || contexts.length > 32) {
     return {
-      ...notEvaluatedLiveRag("A generated answer and retrieved context are both required."),
+      ...notEvaluatedLiveRag(contexts.length > 32 ? "Context budget exceeded; no passages were silently dropped" : "A generated answer and retrieved context are both required."),
       inputHashes,
       durationMs: Math.round(performance.now() - started),
     };
@@ -154,9 +156,9 @@ Return one JSON object with this exact shape:
   "relevantContextIndices": []
 }
 Metric rules:
-- faithfulness: fraction of factual answer claims entailed by the contexts.
+- faithfulness: fraction of factual answer claims entailed by the contexts. Missing requested advice belongs to responseRelevancy, not faithfulness. Do not reduce faithfulness merely because the answer is incomplete or irrelevant; identify the actual unsupported factual claims.
 - responseRelevancy: how directly and completely the answer addresses the question.
-- contextPrecision: fraction of supplied contexts useful for answering the question.
+- contextPrecision: fraction of supplied contexts useful for answering any part of the question. For a multi-issue question, a passage can be useful for one issue without covering every other issue.
 - contextRecall: fraction of trusted-reference claims covered by the contexts; null without a trusted reference.
 - factualCorrectness: factual precision/recall of the answer against the trusted reference; null without a trusted reference.
 All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (for example, saying a source does not use GPS when the source says nothing about GPS) as unsupported.`;
@@ -170,12 +172,21 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
   };
 
   let lastError = "Exact-run evaluator failed";
+  const deadline = performance.now() + (input.timeoutMs ?? 15000);
   for (let evaluatorAttempt = 0; evaluatorAttempt < 2; evaluatorAttempt += 1) {
     try {
-      const response = await (input.fetcher ?? fetch)(
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) throw new Error("Exact-run evaluation deadline exceeded");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), remaining);
+      let response: Response;
+      let body: { choices?: Array<{ message?: { content?: string } }> };
+      try {
+      response = await (input.fetcher ?? fetch)(
       `${input.endpoint.replace(/\/$/, "")}/openai/deployments/${model}/chat/completions?api-version=2024-08-01-preview`,
       {
         method: "POST",
+        signal: controller.signal,
         headers: { "api-key": input.apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [
@@ -189,7 +200,8 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
       },
     );
       if (!response.ok) throw new Error(`Azure evaluator returned HTTP ${response.status}`);
-      const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+      body = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+      } finally { clearTimeout(timeout); }
       const content = body.choices?.[0]?.message?.content;
       if (!content) throw new Error("Azure evaluator returned no JSON content");
       const parsed = JSON.parse(content) as Record<string, unknown>;
@@ -215,8 +227,11 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
       const unsupportedClaims = Array.isArray(parsed.unsupportedClaims)
         ? parsed.unsupportedClaims.filter((value): value is string => typeof value === "string").slice(0, 20)
         : [];
+      if (!Array.isArray(parsed.relevantContextIndices) || parsed.relevantContextIndices.some(value => !Number.isInteger(value) || value < 1 || value > contexts.length)) {
+        throw new Error("Azure evaluator returned missing or invalid relevant-context indices");
+      }
       const relevantContextIndices = Array.isArray(parsed.relevantContextIndices)
-        ? parsed.relevantContextIndices.filter((value): value is number => Number.isInteger(value) && value >= 1 && value <= contexts.length)
+        ? [...new Set(parsed.relevantContextIndices.filter((value): value is number => Number.isInteger(value) && value >= 1 && value <= contexts.length))]
         : [];
       if (metrics.contextPrecision === 0 && relevantContextIndices.length > 0) {
         throw new Error("Azure evaluator returned zero context precision while identifying relevant contexts");
@@ -234,9 +249,9 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
       return {
         executed: true,
         scope: "request",
-        implementation: "azure-openai-ragas-compatible-v1",
+        implementation: "azure-openai-custom-judge-v2",
         evaluatorModel: model,
-        evaluatorVersion: "2026-09-19.9",
+        evaluatorVersion: "2026-10-12.2",
         status: passed ? "passed" : "failed",
         referenceId: reference?.id ?? null,
         metrics,
@@ -246,6 +261,7 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
         inputHashes,
         durationMs: Math.round(performance.now() - started),
         error: null,
+        diagnostics: metrics.faithfulness < .8 && !unsupportedClaims.length ? ["Low faithfulness with no unsupported-claim explanation; failure preserved"] : [],
       };
     } catch (error) {
       lastError = error instanceof Error ? error.message : "Exact-run evaluator failed";

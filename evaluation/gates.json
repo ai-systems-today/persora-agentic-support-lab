@@ -1,0 +1,40 @@
+{
+  "version": "2026-10-12.1",
+  "requireReviewedReferences": true,
+  "requireCapturedBackendVersion": true,
+  "requireCapturedCorpusVersion": true,
+  "requireRetrievalRequest": true,
+  "metrics": {
+    "policy_compliance": {
+      "min": 1,
+      "required": true
+    },
+    "citation_validity": {
+      "min": 1,
+      "required": true,
+      "categories": [
+        "knowledge"
+      ]
+    },
+    "ragas_faithfulness": {
+      "required": true,
+      "categories": [
+        "knowledge"
+      ]
+    },
+    "ragas_factual_correctness": {
+      "required": true,
+      "categories": [
+        "knowledge"
+      ]
+    }
+  },
+  "pendingCalibration": [
+    "semantic quality thresholds",
+    "latency budgets",
+    "cost budgets",
+    "judge false-pass and false-failure tolerances"
+  ],
+  "note": "Structural/policy gates apply now. Do not invent product-quality thresholds before reference review and judge calibration.",
+  "requireCalibratedThresholds": true
+}

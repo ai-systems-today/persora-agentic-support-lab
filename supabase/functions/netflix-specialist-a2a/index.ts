@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { allowServerCapture, parseUpstreamEvidence, type UpstreamRetrievalEvidence } from "../_shared/upstreamRetrievalEvidence.ts";
 import { normalizeCitationBundle } from "../_shared/citationEvidence.ts";
 import { selectSpecialists, specialistTaskMessage, type SpecialistSelection } from "../_shared/specialistRouter.ts";
 import { unknownNetflixErrorResponse } from "../_shared/netflixErrorCodes.ts";
@@ -29,23 +30,26 @@ function a2aError(status: number, message: string, reason: string, details: unkn
   }, status, extraHeaders);
 }
 
-function applySsePayload(state: { answer: string; citations: unknown[] }, payload: string) {
+function applySsePayload(state: { answer: string; citations: unknown[]; upstream?: unknown }, payload: string) {
   if (!payload || payload === "[DONE]") return;
   let event: Record<string, unknown>;
   try { event = JSON.parse(payload); } catch { return; }
+  if (event.type === "evaluation_retrieval_evidence") state.upstream = event.evidence;
   if (event.type === "citations" && Array.isArray(event.citations)) state.citations = event.citations;
   const choices = Array.isArray(event.choices) ? event.choices : [];
   const first = choices[0] as { delta?: { content?: unknown } } | undefined;
   if (typeof first?.delta?.content === "string") state.answer += first.delta.content;
 }
 
-async function askPublishedSpecialist(specialist: SpecialistSelection, message: string, taskId: string) {
+async function askPublishedSpecialist(specialist: SpecialistSelection, message: string, taskId: string, capture = false) {
   const response = await fetch(UPSTREAM, {
     method: "POST",
+    signal: AbortSignal.timeout(45000),
     headers: {
       "Content-Type": "application/json",
       "Origin": "https://ai-systems-today.github.io",
       "x-trace-id": taskId,
+      ...(capture ? { Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` } : {}),
     },
     body: JSON.stringify({
       widgetId: specialist.widgetId,
@@ -53,12 +57,13 @@ async function askPublishedSpecialist(specialist: SpecialistSelection, message: 
       sessionToken: `a2a-${taskId}`,
       deviceId: `a2a-${taskId}`,
       mode: "chat",
+      captureEvaluationEvidence: capture,
     }),
   });
   if (!response.ok || !response.body) throw new Error(`Published specialist returned HTTP ${response.status}`);
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  const state = { answer: "", citations: [] as unknown[] };
+  const state = { answer: "", citations: [] as unknown[], upstream: undefined as unknown };
   let buffer = "";
   while (true) {
     const { value, done } = await reader.read();
@@ -70,20 +75,21 @@ async function askPublishedSpecialist(specialist: SpecialistSelection, message: 
   }
   if (buffer.startsWith("data:")) applySsePayload(state, buffer.slice(5).trim());
   if (!state.answer.trim()) throw new Error("Published specialist returned no answer");
-  return { ...normalizeCitationBundle(state.answer.trim(), state.citations), specialist };
+  const upstream = capture ? await parseUpstreamEvidence(state.upstream, taskId) : null;
+  return { upstream, ...normalizeCitationBundle(state.answer.trim(), state.citations), specialist };
 }
 
 function shiftCitationReferences(answer: string, offset: number) {
   return answer.replace(/\[#(\d+)\]/g, (_match: string, value: string) => `[#${Number(value) + offset}]`);
 }
 
-async function askSpecialistTask(message: string, taskId: string) {
+async function askSpecialistTask(message: string, taskId: string, capture = false) {
   const specialists = selectSpecialists(message);
   const multiDomain = specialists.length > 1;
   const results = await Promise.all(specialists.map(async (specialist, index) => {
     const question = specialistTaskMessage(specialist, message, multiDomain);
     const specialistTaskId = `${taskId}-${index + 1}`;
-    return askPublishedSpecialist(specialist, question, specialistTaskId);
+    return askPublishedSpecialist(specialist, question, specialistTaskId, capture);
   }));
   let offset = 0;
   const answers: string[] = [];
@@ -97,6 +103,7 @@ async function askSpecialistTask(message: string, taskId: string) {
     answer: answers.join("\n\n"),
     citations,
     specialists: results.map(({ specialist }) => specialist),
+    retrievalCaptures: results.map(r => r.upstream).filter((r): r is UpstreamRetrievalEvidence => r !== null),
   };
 }
 
@@ -135,7 +142,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const body = await req.json() as { message?: { role?: unknown; messageId?: unknown; parts?: Array<{ text?: unknown }> } };
+    const body = await req.json() as { configuration?: { captureEvaluationEvidence?: unknown }; message?: { role?: unknown; messageId?: unknown; parts?: Array<{ text?: unknown }> } };
     const rateFallback = typeof body.message?.messageId === "string" ? body.message.messageId : "anonymous";
     const rateLimit = consumeEntryRateLimit(await requestRateLimitKey(req, "netflix-specialist-a2a", rateFallback));
     if (!rateLimit.allowed) {
@@ -150,7 +157,7 @@ Deno.serve(async (req: Request) => {
     const unknownCodeAnswer = unknownNetflixErrorResponse(text);
     const result = unknownCodeAnswer
       ? { answer: unknownCodeAnswer, citations: [], specialists: [] }
-      : await askSpecialistTask(text, taskId);
+      : await askSpecialistTask(text, taskId, allowServerCapture(req.headers.get("Authorization"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), body.configuration?.captureEvaluationEvidence));
     return json({
       task: {
         id: taskId,
@@ -160,7 +167,7 @@ Deno.serve(async (req: Request) => {
           artifactId: crypto.randomUUID(),
           name: "grounded-support-result",
           parts: [{ text: result.answer }],
-          metadata: { citations: result.citations, specialists: result.specialists },
+          metadata: { citations: result.citations, specialists: result.specialists, ...("retrievalCaptures" in result ? { retrievalCaptures: result.retrievalCaptures } : {}) },
         }],
       },
     });

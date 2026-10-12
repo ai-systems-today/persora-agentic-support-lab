@@ -8,6 +8,7 @@ import type { ChatTurn, DemoCase, EvidenceLayer, EvidenceStatus, GraphNode, Patt
 import { selectOrchestrationPattern } from "../supabase/functions/_shared/orchestrationRouter";
 import { openSourceInBrowser, type SourceBrowserResult } from "./browserClient";
 import HybridRagPage from "./HybridRagPage";
+import TestResultsPage from "./TestResultsPage";
 
 const statusLabel: Record<EvidenceStatus, string> = {
   "runtime-proven": "Runtime-proven",
@@ -39,7 +40,7 @@ function normalizeAssistantMarkdown(answer: string) {
     .replace(/([^\n])\s+(\d+\.\s+\*\*)/g, "$1\n\n$2");
 }
 
-function Header({ view, onViewChange }: { view: "support" | "hybrid"; onViewChange: (view: "support" | "hybrid") => void }) {
+function Header({ view, onViewChange }: { view: "support" | "hybrid" | "tests"; onViewChange: (view: "support" | "hybrid" | "tests") => void }) {
   return (
     <header className="app-header">
       <div className="brand-mark" aria-label="Persora"><img src={`${import.meta.env.BASE_URL}persora-heart.png`} alt="" /></div>
@@ -50,6 +51,7 @@ function Header({ view, onViewChange }: { view: "support" | "hybrid"; onViewChan
       <nav className="header-links" aria-label="Project links">
         <button type="button" className={view === "support" ? "active" : ""} onClick={() => onViewChange("support")}>Support Agent</button>
         <button type="button" className={view === "hybrid" ? "active" : ""} onClick={() => onViewChange("hybrid")}>Hybrid RAG</button>
+        <button type="button" className={view === "tests" ? "active" : ""} onClick={() => onViewChange("tests")}>Test Results</button>
         <a href={`${import.meta.env.BASE_URL}docs/`}>Docs</a>
         <a href="https://github.com/ai-systems-today/persora-agentic-support-lab" target="_blank" rel="noreferrer">GitHub</a>
       </nav>
@@ -536,20 +538,26 @@ function layersForTurn(turn: ChatTurn, langfuseOverride?: NonNullable<ChatTurn["
   return next.map((layer) => layer.id === "quality" ? { ...layer, fields: [
     { label: "Answer present", value: turn.answer.trim() ? "Passed" : "Failed", status: "runtime-proven", detail: "Programmatic validation checked that the live stream produced answer text." },
     { label: "Exact-run quality evaluation", value: quality?.status === "passed" ? "Passed" : quality?.status === "failed" ? "Failed — answer preserved" : "Not evaluated", status: quality?.executed ? "runtime-proven" : "not-evaluated", detail: quality?.reason ?? "This path did not generate a published knowledge answer, so grounding and relevance were not evaluated.", metrics: quality?.executed ? [
-      { label: "Grounding", value: `${((quality.grounding ?? 0) * 100).toFixed(1)}%` },
+      { label: "Lexical grounding (heuristic)", value: `${((quality.grounding ?? 0) * 100).toFixed(1)}%` },
       { label: "Citation validity", value: `${((quality.citationValidity ?? 0) * 100).toFixed(1)}%` },
-      { label: "Answer relevance", value: `${((quality.answerRelevance ?? 0) * 100).toFixed(1)}%` },
+      { label: "Question word overlap (heuristic)", value: `${((quality.answerRelevance ?? 0) * 100).toFixed(1)}%` },
+      { label: "Citation coverage", value: quality.citationCoverage == null ? "Not captured" : `${(quality.citationCoverage * 100).toFixed(1)}%` },
       ...(quality.intentCoverage === null ? [] : [{ label: "Intent coverage", value: `${(quality.intentCoverage * 100).toFixed(1)}% (${quality.coveredIntentCount}/${quality.requiredIntentCount})` }]),
       { label: "Supported claims", value: `${quality.supportedClaimCount}/${quality.claimCount}` },
     ] : undefined },
     { label: "Live exact-run RAG evaluation", value: ragas?.executed ? `${ragas.status} · ${ragas.durationMs ?? 0} ms` : "Not evaluated", status: ragas?.executed ? "runtime-proven" : "not-evaluated", detail: ragas?.executed ? `${ragas.implementation}; model ${ragas.evaluatorModel}; evaluator ${ragas.evaluatorVersion}. Exact input hashes: question ${ragas.inputHashes?.question.slice(0, 10)}, answer ${ragas.inputHashes?.answer.slice(0, 10)}, contexts ${ragas.inputHashes?.contexts.slice(0, 10)}.` : ragas?.error ?? "The exact-run evaluator did not execute.", metrics: ragas?.metrics ? Object.entries(ragas.metrics).map(([name, score]) => ({
-      label: name.replace(/([A-Z])/g, " $1").replace(/^./, (value) => value.toUpperCase()),
-      value: score === null ? "Not applicable" : `${(score * 100).toFixed(1)}%`,
+      label: name === "contextPrecision" ? "Custom context relevance fraction" : `Custom ${name.replace(/([A-Z])/g, " $1").toLowerCase()}`,
+      value: score === null ? (ragas.executed ? "Not applicable" : "Not evaluated") : `${(score * 100).toFixed(1)}%`,
     })) : undefined },
     { label: "Unsupported claims", value: ragas?.executed ? `${ragas.unsupportedClaims.length}` : "Not evaluated", status: ragas?.executed ? "runtime-proven" : "not-evaluated", detail: ragas?.unsupportedClaims.length ? ragas.unsupportedClaims.join(" · ") : ragas?.executed ? "The evaluator returned no unsupported factual claim." : "No evaluator result was returned." },
     { label: "Reference-dependent correctness", value: ragas?.metrics.factualCorrectness === null || ragas?.metrics.factualCorrectness === undefined ? "Not applicable" : `${(ragas.metrics.factualCorrectness * 100).toFixed(1)}%`, status: ragas?.metrics.factualCorrectness === null || ragas?.metrics.factualCorrectness === undefined ? "not-evaluated" : "runtime-proven", detail: ragas?.referenceId ? `Compared this exact answer with trusted reference ${ragas.referenceId}.` : "This was a new/free-form question with no approved reference. Faithfulness and relevancy still executed; correctness was not invented." },
     { label: "Authorization guardrail", value: turn.runtime.guardrail ? `${turn.runtime.guardrail.decision}: ${turn.runtime.guardrail.reason}` : "Not captured", status: turn.runtime.guardrail ? "runtime-proven" : "not-captured", detail: "A deterministic server-side decision runs before retrieval." },
-    { label: "Python RAGAS release benchmark", value: "CI only", status: "repo-defined", detail: "The pinned Python RAGAS suite remains release evidence and is never substituted into this live run." },
+    { label: "Response decision", value: turn.runtime.evaluationSnapshot?.decision.action ?? "Not captured", status: turn.runtime.evaluationSnapshot ? "runtime-proven" : "not-captured", detail: turn.runtime.evaluationSnapshot?.decision.reason ?? "No response decision returned." },
+    { label: "Original draft evaluation", value: turn.runtime.draftEvaluation?.status ?? "Not captured", status: turn.runtime.draftEvaluation?.executed ? "runtime-proven" : "not-evaluated", detail: "Original failures remain separate from the final displayed answer's scores." },
+    { label: "First visible answer text", value: turn.runtime.timings?.firstAnswerTextMs == null ? "Not captured" : `${turn.runtime.timings.firstAnswerTextMs} ms`, status: turn.runtime.timings?.firstAnswerTextMs == null ? "not-captured" : "runtime-proven", detail: "Browser measurement; status and progress events do not count as answer text." },
+    { label: "Evaluation time", value: turn.runtime.timings?.evaluationMs == null ? "Not captured" : `${turn.runtime.timings.evaluationMs} ms`, status: turn.runtime.timings?.evaluationMs == null ? "not-captured" : "runtime-proven", detail: "Blocking evaluation and response-decision stages." },
+    ...Object.entries(ragas?.reasons ?? {}).map(([name, reason]) => ({ label: `${name} explanation`, value: ragas?.status ?? "Not evaluated", status: "runtime-proven" as const, detail: reason ?? "No explanation" })),
+    { label: "Python RAGAS release benchmark", value: "Offline only", status: "repo-defined", detail: "Fixture metrics and fresh-answer RAGAS metrics are separate reports and never substitute for this live run." },
   ] } : layer);
 }
 
@@ -671,7 +679,7 @@ export default function App() {
   const [selectedTurn, setSelectedTurn] = useState<ChatTurn | null>(null);
   const [source, setSource] = useState<AnswerSource>("agentic");
   const [progress, setProgress] = useState<RunProgress | null>(null);
-  const [view, setView] = useState<"support" | "hybrid">("support");
+  const [view, setView] = useState<"support" | "hybrid" | "tests">("support");
 
   const resetConversation = () => {
     setTurns([]);
@@ -757,7 +765,7 @@ export default function App() {
       {view === "support" ? <>
         <Conversation turns={turns} onAsk={ask} onExplain={setSelectedTurn} onReset={resetConversation} source={source} onSourceChange={setSource} progress={progress} />
         {selectedTurn?.demoCase && selectedTurn.runId && <ExplainDrawer key={`${selectedTurn.id}-${selectedTurn.runtime.handoff?.status ?? "none"}`} turn={selectedTurn} onClose={() => setSelectedTurn(null)} onHandoffDecision={decideHandoff} />}
-      </> : <HybridRagPage />}
+      </> : view === "hybrid" ? <HybridRagPage /> : <TestResultsPage />}
     </div>
   );
 }

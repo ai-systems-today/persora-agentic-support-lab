@@ -83,3 +83,8 @@ flowchart TD
     B[Pinned CI dataset] --> C[Release benchmark]
     C --> A[Generated CI artifact]
 ```
+
+
+## Fresh-answer evaluation
+
+See [Evaluation and Test Results](EVALUATION.md) for captured retrieval evidence, reviewed source expectations, live decisions, offline RAGAS, benchmark gates and Langfuse exports. Pending reviews and missing measurements are explicit. Running a benchmark does not deploy a release.

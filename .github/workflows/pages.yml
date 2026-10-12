@@ -46,6 +46,9 @@ jobs:
       - name: Run evidence-contract tests
         run: npm test
 
+      - name: Validate offline metric adapters and calibration accounting
+        run: python scripts/test_evaluation.py
+
       - name: Validate release contracts
         run: npm run validate:release
 
@@ -56,6 +59,9 @@ jobs:
 
       - name: Type-check Supabase Edge Functions
         run: deno check --node-modules-dir=auto supabase/functions/agentic-support-demo/index.ts supabase/functions/netflix-specialist-a2a/index.ts supabase/functions/support-source-browser/index.ts supabase/functions/hybrid-rag-demo/index.ts
+
+      - name: Test candidate handler against controlled services
+        run: deno test --config supabase/functions/agentic-support-demo/deno.json --allow-env --allow-net --allow-read --node-modules-dir=auto supabase/functions/agentic-support-demo/index.test.ts
 
       - name: Build production application
         run: npm run build
@@ -74,7 +80,7 @@ jobs:
           path: dist
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

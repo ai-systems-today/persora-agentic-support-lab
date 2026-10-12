@@ -43,6 +43,7 @@ nav:
   - Reliability:
       - Grounding and RAG: GROUNDING.md
       - Quality and evaluation: QUALITY.md
+      - Fresh-answer Test Results: EVALUATION.md
       - Observability: OBSERVABILITY.md
       - Security and public safety: PUBLIC_SAFETY.md
   - Decisions and operations:

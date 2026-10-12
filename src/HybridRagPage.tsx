@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { askHybridRag, type HybridBackend, type HybridEvidence, type HybridResult } from "./hybridRagClient";
-import RelationshipGraph from "./RelationshipGraph";
+import RelationshipGraph from "./RelationshipGraphView";
 import "./hybridRag.css";
 
 const labels: Record<HybridBackend, { eyebrow: string; title: string; description: string }> = {

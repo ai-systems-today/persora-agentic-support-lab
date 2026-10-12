@@ -123,3 +123,8 @@ For a short, reliable product walkthrough, use the [interview demonstration runb
 The repository contains browser-safe public identifiers but no service-role, Azure OpenAI, Langfuse-secret or Playwright-MCP credentials. See [Public safety](docs/PUBLIC_SAFETY.md) and [Security policy](SECURITY.md).
 
 The repository is public for inspection and currently has no open-source `LICENSE`. Public visibility does not grant permission to reuse the code or brand assets.
+
+
+## Fresh-answer evaluation
+
+See [Evaluation and Test Results](docs/EVALUATION.md) for captured retrieval evidence, reviewed source expectations, live decisions, offline RAGAS, benchmark gates and Langfuse exports. Pending reviews and missing measurements are explicit. Running a benchmark does not deploy a release.
