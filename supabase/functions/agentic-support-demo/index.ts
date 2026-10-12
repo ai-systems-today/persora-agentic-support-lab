@@ -2,7 +2,10 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { Annotation, END, START, StateGraph } from "npm:@langchain/langgraph@1.4.15";
 import { evaluateLiveAnswer, notEvaluatedQuality, type LiveQuality, type QualityCitation } from "../_shared/answerQuality.ts";
 import { citationEvidenceText, normalizeCitationBundle } from "../_shared/citationEvidence.ts";
-import { evaluateExactRun, notEvaluatedLiveRag, referenceForQuestion, type LiveRagEvaluation } from "../_shared/liveRagEvaluation.ts";
+import { evaluateExactRun, notEvaluatedLiveRag, type LiveRagEvaluation } from "../_shared/liveRagEvaluation.ts";
+import { decideAnswer, type EvidenceSnapshot } from "../_shared/evaluationReport.ts";
+import { allowServerCapture, parseUpstreamEvidence, retrievalWindow, type UpstreamRetrievalEvidence } from "../_shared/upstreamRetrievalEvidence.ts";
+import { exportNumericScores } from "../_shared/langfuseScores.ts";
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type HandoffMode, type Pattern } from "../_shared/orchestrationRouter.ts";
 import { selectPrimarySpecialist, type SpecialistSelection } from "../_shared/specialistRouter.ts";
@@ -18,7 +21,7 @@ const PROJECT_URL = Deno.env.get("SUPABASE_URL")?.trim().replace(/\/$/, "");
 if (!PROJECT_URL) throw new Error("SUPABASE_URL is required.");
 const UPSTREAM = `${PROJECT_URL}/functions/v1/orchestrate-chat`;
 const A2A_SPECIALIST = `${PROJECT_URL}/functions/v1/netflix-specialist-a2a`;
-const PROMPT_VERSION = "netflix-support-demo@2026-09-19.4-observational-evaluation";
+const PROMPT_VERSION = "netflix-support-demo@2026-10-12.1-evaluation-decisions";
 const LANGGRAPH_VERSION = "1.4.15";
 const NETFLIX_CONTACT_URL = "https://help.netflix.com/en/contactus?locale=en-US";
 const NETFLIX_CONTACT_INSTRUCTIONS_URL = "https://help.netflix.com/en/node/33335";
@@ -38,7 +41,7 @@ async function signReadback(traceId: string, sessionToken: string): Promise<stri
   return Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-type TraceEntry = { node: string; status: "complete" | "blocked" | "failed"; durationMs: number };
+type TraceEntry = { node: string; status: "complete" | "blocked" | "failed"; durationMs: number; startedAt?: string; finishedAt?: string };
 type ProtocolEvent = Record<string, unknown> & { type: string; timestamp?: string };
 type A2AEvidence = {
   executed: boolean;
@@ -49,6 +52,7 @@ type A2AEvidence = {
   error: string | null;
 };
 type LangfuseEvidence = {
+  scoreExport?: { status: string; exported: number; failed: number };
   configured: boolean;
   executed: boolean;
   traceId: string | null;
@@ -111,6 +115,11 @@ const State = Annotation.Root({
   a2a: Annotation<A2AEvidence>,
   quality: Annotation<LiveQuality>,
   ragas: Annotation<LiveRagEvaluation>,
+  draftEvaluation: Annotation<LiveRagEvaluation>,
+  evaluationContexts: Annotation<QualityCitation[]>({ reducer: (_left, right) => right, default: () => [] }),
+  snapshot: Annotation<EvidenceSnapshot | null>,
+  upstreamRetrieval: Annotation<UpstreamRetrievalEvidence[]>({ reducer: (_left, right) => right, default: () => [] }),
+  privateCapture: Annotation<boolean>,
   orchestrationProof: Annotation<OrchestrationProof>,
 });
 
@@ -139,25 +148,27 @@ const timed = <T extends Record<string, unknown>>(
   run: (state: typeof State.State) => Promise<T> | T,
 ) => async (state: typeof State.State): Promise<T & { nodeTrace: TraceEntry[]; protocolEvents: ProtocolEvent[] }> => {
   const started = performance.now();
+  const startedAt = new Date().toISOString();
   const result = await run(state);
   const resultEvents = Array.isArray(result.protocolEvents) ? result.protocolEvents as ProtocolEvent[] : [];
   return {
     ...result,
-    nodeTrace: [{ node, status: "complete", durationMs: Math.round(performance.now() - started) }],
+    nodeTrace: [{ node, status: "complete", durationMs: Math.round(performance.now() - started), startedAt, finishedAt: new Date().toISOString() }],
     protocolEvents: [
-      { type: "STEP_STARTED", stepName: node, timestamp: new Date().toISOString() },
+      { type: "STEP_STARTED", stepName: node, timestamp: startedAt },
       ...resultEvents,
       { type: "STEP_FINISHED", stepName: node, timestamp: new Date().toISOString() },
     ],
   };
 };
 
-function applySsePayload(state: { answer: string; citations: unknown[]; followUps: string[]; eventTypes: string[] }, payload: string) {
+function applySsePayload(state: { answer: string; citations: unknown[]; followUps: string[]; eventTypes: string[]; upstream?: unknown }, payload: string) {
   if (!payload || payload === "[DONE]") return;
   let event: Record<string, unknown>;
   try { event = JSON.parse(payload); } catch { return; }
   const type = typeof event.type === "string" ? event.type : "message";
   if (!state.eventTypes.includes(type)) state.eventTypes.push(type);
+  if (type === "evaluation_retrieval_evidence") state.upstream = event.evidence;
   if (type === "citations" && Array.isArray(event.citations)) state.citations = event.citations;
   if (type === "follow_ups" && Array.isArray(event.data)) {
     state.followUps = event.data
@@ -178,10 +189,12 @@ async function requestPublishedAgent(state: typeof State.State) {
   }
   const response = await fetch(UPSTREAM, {
     method: "POST",
+    signal: AbortSignal.timeout(45000),
     headers: {
       "Content-Type": "application/json",
       "Origin": state.origin,
       "x-trace-id": state.traceId,
+      ...(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ? { Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` } : {}),
     },
     body: JSON.stringify({
       widgetId: specialist.widgetId,
@@ -189,13 +202,14 @@ async function requestPublishedAgent(state: typeof State.State) {
       sessionToken: `${state.sessionToken}:${state.traceId}:primary`,
       deviceId: state.deviceId,
       mode: "chat",
+      captureEvaluationEvidence: true,
     }),
   });
   if (!response.ok || !response.body) throw new Error(`Published agent returned HTTP ${response.status}`);
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  const stream = { answer: "", citations: [] as unknown[], followUps: [] as string[], eventTypes: [] as string[] };
+  const stream = { answer: "", citations: [] as unknown[], followUps: [] as string[], eventTypes: [] as string[], upstream: undefined as unknown };
   while (true) {
     const { value, done } = await reader.read();
     buffer += decoder.decode(value, { stream: !done });
@@ -206,7 +220,8 @@ async function requestPublishedAgent(state: typeof State.State) {
   }
   if (buffer.startsWith("data:")) applySsePayload(stream, buffer.slice(5).trim());
   if (!stream.answer.trim()) throw new Error("Published agent completed without answer text");
-  return { ...normalizeCitationBundle(stream.answer.trim(), stream.citations), followUps: stream.followUps, eventTypes: stream.eventTypes, specialist };
+  const capture = await parseUpstreamEvidence(stream.upstream, state.traceId);
+  return { upstreamRetrieval: capture ? [capture] : [], ...normalizeCitationBundle(stream.answer.trim(), stream.citations), followUps: stream.followUps, eventTypes: stream.eventTypes, specialist };
 }
 
 async function qualityCitations(values: unknown[]): Promise<QualityCitation[]> {
@@ -252,10 +267,10 @@ const MULTI_INTENT_QUALITY_TOPICS: Record<SpecialistSelection["domain"], { label
 
 const requiredQualityTopics = (state: typeof State.State) => state.pattern === "group-chat"
   ? state.a2a.specialists.map((specialist) => MULTI_INTENT_QUALITY_TOPICS[specialist.domain])
-  : referenceForQuestion(state.message)?.requiredTopics ?? [];
+  : []; // Legacy exact-string reference topics have no documented review provenance.
 
 async function callPublishedAgent(state: typeof State.State) {
-  type PublishedResult = { answer: string; citations: unknown[]; followUps?: string[]; eventTypes: string[]; specialist: SpecialistSelection | null };
+  type PublishedResult = { answer: string; citations: unknown[]; followUps?: string[]; eventTypes: string[]; specialist: SpecialistSelection | null; upstreamRetrieval?: UpstreamRetrievalEvidence[] };
   const requiredTopics = requiredQualityTopics(state);
   if (state.pattern === "group-chat" && !state.a2a.executed) {
     const answer = "I couldn’t complete the required specialist exchange for this multi-topic request, so I’m not presenting a single-agent fallback as an orchestrated answer. Please retry or ask the billing, Household, and account-access questions separately.";
@@ -273,13 +288,23 @@ async function callPublishedAgent(state: typeof State.State) {
       citations: state.specialistCitations,
       eventTypes: ["a2a_grounded_result_used"],
       specialist: null,
+      upstreamRetrieval: state.upstreamRetrieval,
     }
     : await requestPublishedAgent(state);
   const answer = result.answer.trim();
+  const captures = result.upstreamRetrieval ?? [];
+  const capturedPassages = captures.flatMap(c => c.passages);
+  const evaluationContexts = capturedPassages.length ? result.citations.map((value, index) => {
+    const citation = value as Record<string, unknown>;
+    const passages = capturedPassages.filter(p => p.documentId && p.documentId === citation.document_id || p.id && p.id === citation.chunk_id);
+    return { label: String(citation.filename ?? citation.title ?? `Source ${index + 1}`),
+      url: typeof citation.source_url === "string" ? citation.source_url : typeof citation.url === "string" ? citation.url : null,
+      snippet: passages.length ? passages.map(p => p.text).join("\n") : citationEvidenceText(value) };
+  }) : await qualityCitations(result.citations);
   const quality = evaluateLiveAnswer({
     question: state.message,
     answer,
-    citations: await qualityCitations(result.citations),
+    citations: evaluationContexts,
     retryCount: 0,
     requiredTopics,
   });
@@ -287,6 +312,7 @@ async function callPublishedAgent(state: typeof State.State) {
     ...result,
     answer,
     quality,
+    evaluationContexts,
     eventTypes: [...result.eventTypes, `live_quality_${quality.status}_observed`],
   };
 }
@@ -423,6 +449,8 @@ async function emitLangfuseTrace(input: {
   citations: unknown[];
   nodeTrace: TraceEntry[];
   totalMs: number;
+  snapshot?: EvidenceSnapshot | null;
+  ragas?: LiveRagEvaluation;
 }): Promise<LangfuseEvidence> {
   const loaded = await loadLangfuseConfig();
   if (!loaded.config) {
@@ -446,8 +474,8 @@ async function emitLangfuseTrace(input: {
   let cursorNanos = startNanos;
   const childSpans = input.nodeTrace.map((entry) => {
     const isGeneration = entry.node === "published_netflix_agent" || entry.node === "group_a2a_specialist";
-    const spanStart = cursorNanos;
-    const spanEnd = spanStart + BigInt(Math.max(entry.durationMs, 1)) * 1_000_000n;
+    const spanStart = entry.startedAt ? BigInt(Date.parse(entry.startedAt)) * 1_000_000n : cursorNanos;
+    const spanEnd = entry.finishedAt ? BigInt(Date.parse(entry.finishedAt)) * 1_000_000n : spanStart + BigInt(Math.max(entry.durationMs, 1)) * 1_000_000n;
     cursorNanos = spanEnd;
     return {
       traceId,
@@ -491,6 +519,9 @@ async function emitLangfuseTrace(input: {
       otelAttribute("persora.guardrail.decision", input.guardrailDecision),
       otelAttribute("persora.citation_count", input.citations.length),
       otelAttribute("persora.telemetry.redaction", true),
+      otelAttribute("persora.evaluation.status", input.ragas?.status ?? "not-evaluated"),
+      otelAttribute("persora.evaluation.input_hashes", JSON.stringify(input.ragas?.inputHashes ?? null)),
+      otelAttribute("persora.evaluation.decision", input.snapshot?.decision.action ?? "not-captured"),
     ],
     status: { code: 1 },
   };
@@ -498,6 +529,7 @@ async function emitLangfuseTrace(input: {
   try {
     const response = await fetch(`${baseUrl}/api/public/otel/v1/traces`, {
       method: "POST",
+      signal: AbortSignal.timeout(5000),
       headers: {
         "Authorization": `Basic ${btoa(`${publicKey}:${secretKey}`)}`,
         "Content-Type": "application/json",
@@ -511,7 +543,14 @@ async function emitLangfuseTrace(input: {
       }),
     });
     if (!response.ok) throw new Error(`Langfuse OTLP returned HTTP ${response.status}`);
+    const scoreExport = await exportNumericScores({ baseUrl, publicKey, secretKey, traceId,
+      scores: [
+        ...Object.entries(input.ragas?.metrics ?? {}).map(([name, value]) => ({ name: name === "contextPrecision" ? "custom_context_relevance_fraction" : `custom_${name}`, value })),
+        { name: "server_processing_ms", value: input.totalMs },
+      ],
+    });
     return {
+      scoreExport,
       configured: true,
       executed: true,
       traceId,
@@ -561,7 +600,7 @@ async function runA2ASpecialist(state: typeof State.State) {
           role: "ROLE_USER",
           parts: [{ text: state.message }],
         },
-        configuration: { acceptedOutputModes: ["text/plain"] },
+        configuration: { acceptedOutputModes: ["text/plain"], captureEvaluationEvidence: true },
       }),
     });
     if (!response.ok) {
@@ -580,7 +619,7 @@ async function runA2ASpecialist(state: typeof State.State) {
       throw new Error(`A2A message:send returned HTTP ${response.status}${detail ? ` (${detail})` : ""}`);
     }
     const payload = await response.json() as {
-      task?: { id?: unknown; artifacts?: Array<{ parts?: Array<{ text?: unknown }>; metadata?: { citations?: unknown; specialists?: unknown } }> };
+      task?: { id?: unknown; artifacts?: Array<{ parts?: Array<{ text?: unknown }>; metadata?: { citations?: unknown; specialists?: unknown; retrievalCaptures?: unknown } }> };
     };
     const context = payload.task?.artifacts?.flatMap((artifact) => artifact.parts ?? [])
       .map((part) => typeof part.text === "string" ? part.text : "")
@@ -596,11 +635,14 @@ async function runA2ASpecialist(state: typeof State.State) {
         return typeof record.domain === "string" && typeof record.agentId === "string" && typeof record.agentName === "string" && typeof record.widgetId === "string";
       }) ?? [];
     if (!specialists.length) throw new Error("A2A specialist returned no executed specialist identities");
+    const rawCaptures = payload.task?.artifacts?.flatMap(artifact => Array.isArray(artifact.metadata?.retrievalCaptures) ? artifact.metadata.retrievalCaptures : []) ?? [];
+    const upstreamRetrieval = (await Promise.all(rawCaptures.map(value => parseUpstreamEvidence(value)))).filter((c): c is UpstreamRetrievalEvidence => c !== null);
     const taskId = typeof payload.task?.id === "string" ? payload.task.id : null;
     const agentName = typeof card.name === "string" ? card.name : "Netflix Support Specialist";
     return {
       specialistContext: context,
       specialistCitations: citations,
+      upstreamRetrieval,
       a2a: { executed: true, version: typeof card.version === "string" ? card.version : "1.0", agentName, taskId, specialists, error: null },
       eventTypes: ["a2a_task_completed"],
       protocolEvents: [
@@ -735,21 +777,24 @@ async function runExactEvaluation(state: typeof State.State) {
       eventTypes: ["live_rag_evaluation_unavailable_observed"],
     };
   }
-  const qualityContext = await qualityCitations(state.citations);
-  const allContexts = qualityContext
+  const qualityContext = state.evaluationContexts.length ? state.evaluationContexts : await qualityCitations(state.citations);
+  const capturedContexts = state.upstreamRetrieval.flatMap(c => c.passages.map(p => p.text));
+  const allContexts = capturedContexts.length ? capturedContexts : qualityContext
     .map((citation, index) => `[#${index + 1}] ${citation.label}\n${citation.snippet ?? ""}`.trim());
   const contexts = allContexts;
   const ragas = await evaluateExactRun({
     question: state.message,
     answer: state.answer,
     contexts,
-    reference: referenceForQuestion(state.message),
+    // Legacy references lack documented human review; offline reviewed case references are supplied separately.
+    reference: null,
     endpoint,
     apiKey,
     model: "gpt-4o-mini",
   });
   return {
     ragas,
+    evaluationContexts: qualityContext,
     eventTypes: [`live_rag_evaluation_${ragas.status}_observed`],
     protocolEvents: [{
       type: "CUSTOM",
@@ -763,6 +808,40 @@ async function runExactEvaluation(state: typeof State.State) {
       },
     }],
   };
+}
+
+
+async function applyEvaluationDecision(state: typeof State.State) {
+  const knowledgeAnswer = state.allowed && state.pattern !== "handoff" && state.specialist !== null && !state.eventTypes.includes("verified_code_not_found");
+  const decision = decideAnswer({ knowledgeAnswer, judgeStatus: state.ragas.status,
+    generatorEvidenceCaptured: state.upstreamRetrieval.length > 0 && state.upstreamRetrieval.every(c => c.generatorContextCaptured),
+    invalidCitations: knowledgeAnswer && (state.citations.length === 0 || (state.quality.executed && state.quality.referencedCitationCount > state.quality.validCitationCount)),
+    unsupportedCount: state.ragas.unsupportedClaims.length });
+  const draftAnswer = state.answer;
+  const answer = decision.action === "fallback"
+    ? "I could not verify the generated answer against its sources. Please consult the returned official sources or Netflix Support before acting on it."
+    : decision.action === "qualify"
+      ? `Verification warning: this answer did not pass the semantic check or the check was unavailable. Confirm the guidance against the official sources before acting.\n\n${draftAnswer}`
+      : draftAnswer;
+  const snapshot: EvidenceSnapshot = {
+    schemaVersion: "1.0", runId: state.traceId, question: state.message, draftAnswer, finalAnswer: answer,
+    contexts: state.citations.map((value, index) => {
+      const c = value as Record<string, unknown>;
+      return { id: typeof c.chunk_id === "string" ? c.chunk_id : null, rank: index + 1,
+        label: String(c.title ?? c.source ?? `Source ${index + 1}`),
+        url: typeof c.url === "string" ? c.url : typeof c.source_url === "string" ? c.source_url : null,
+        text: citationEvidenceText(value) ?? "" };
+    }),
+    contextOrigin: "returned-citations", generatorContextCaptured: state.upstreamRetrieval.length > 0 && state.upstreamRetrieval.every(c => c.generatorContextCaptured),
+    retrievalRequest: state.upstreamRetrieval.flatMap(c => c.searches).at(-1) ?? null,
+    versions: { application: null, backend: Deno.env.get("APP_COMMIT_SHA") ?? null,
+      prompt: PROMPT_VERSION, corpus: state.upstreamRetrieval[0]?.corpusVersion ?? Deno.env.get("CORPUS_VERSION") ?? null, evaluator: state.ragas.evaluatorVersion }, decision,
+  };
+  // Preserve the original failure and evaluate the exact final displayed answer separately.
+  const finalEvaluation = answer === draftAnswer ? state.ragas : (await runExactEvaluation({ ...state, answer })).ragas;
+  const finalQuality = answer === draftAnswer ? state.quality : evaluateLiveAnswer({ question: state.message, answer, citations: state.evaluationContexts, requiredTopics: requiredQualityTopics(state) });
+  return { answer, snapshot, draftEvaluation: state.ragas, ragas: finalEvaluation, quality: finalQuality,
+    eventTypes: [`evaluation_decision_${decision.action}`] };
 }
 
 const graph = new StateGraph(State)
@@ -823,7 +902,9 @@ const graph = new StateGraph(State)
   .addEdge("recovery_planner", "published_netflix_agent")
   .addEdge("published_netflix_agent", "response_validation")
   .addEdge("response_validation", "exact_run_evaluation")
-  .addEdge("exact_run_evaluation", END)
+  .addNode("evaluation_decision", timed("evaluation_decision", applyEvaluationDecision))
+  .addEdge("exact_run_evaluation", "evaluation_decision")
+  .addEdge("evaluation_decision", END)
   .compile();
 
 function agUiEvents(input: {
@@ -866,6 +947,7 @@ const nextNodeFor = (node: string, state: typeof State.State): string | null => 
   if (node === "group_a2a_specialist" || node === "recovery_planner") return "published_netflix_agent";
   if (node === "concurrent_privacy_checks" || node === "human_handoff" || node === "published_netflix_agent") return "response_validation";
   if (node === "response_validation") return "exact_run_evaluation";
+  if (node === "exact_run_evaluation") return "evaluation_decision";
   return null;
 };
 
@@ -918,6 +1000,7 @@ function streamAgenticRun(input: typeof State.State, origin: string, started: nu
             citations: result.citations,
             nodeTrace: result.nodeTrace,
             totalMs,
+            snapshot: result.snapshot, ragas: result.ragas,
           })
           : suppressedLangfuseEvidence();
         const followUps = result.followUps;
@@ -953,9 +1036,13 @@ function streamAgenticRun(input: typeof State.State, origin: string, started: nu
           nodeTrace: result.nodeTrace,
           protocolEvents: result.protocolEvents,
           quality: result.quality,
+          evaluationSnapshot: result.allowed ? result.snapshot : null,
+          privateEvaluationEvidence: result.allowed && result.privateCapture ? result.upstreamRetrieval : undefined,
+          draftEvaluation: result.draftEvaluation,
+          timings: { serverProcessingMs: totalMs, evaluationMs: result.nodeTrace.filter(n => /evaluation/.test(n.node)).reduce((a, n) => a + n.durationMs, 0), retrievalMs: retrievalWindow(result.upstreamRetrieval) },
           orchestrationProof: result.orchestrationProof,
           followUps,
-          retrieval: retrievalEvidence(result.citations),
+          retrieval: { ...retrievalEvidence(result.citations), durationMs: retrievalWindow(result.upstreamRetrieval) },
           publicTrace: {
             schemaVersion: "1.0",
             generatedAt: new Date().toISOString(),
@@ -1142,6 +1229,11 @@ Deno.serve(async (req: Request) => {
       a2a: emptyA2A(),
       quality: notEvaluatedQuality("No published knowledge answer has run yet."),
       ragas: notEvaluatedLiveRag("No published knowledge answer has run yet."),
+      draftEvaluation: notEvaluatedLiveRag("No draft evaluated yet."),
+      evaluationContexts: [],
+      snapshot: null,
+      upstreamRetrieval: [],
+      privateCapture: allowServerCapture(req.headers.get("Authorization"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), body.captureBenchmarkEvidence),
       orchestrationProof: { concurrent: null, recovery: null },
     };
     if (req.headers.get("accept")?.includes("text/event-stream")) {
@@ -1163,6 +1255,7 @@ Deno.serve(async (req: Request) => {
         citations: result.citations,
         nodeTrace: result.nodeTrace,
         totalMs,
+        snapshot: result.snapshot, ragas: result.ragas,
       })
       : suppressedLangfuseEvidence();
     const evidence = {
@@ -1197,9 +1290,13 @@ Deno.serve(async (req: Request) => {
       nodeTrace: result.nodeTrace,
       protocolEvents: result.protocolEvents,
       quality: result.quality,
+      evaluationSnapshot: result.allowed ? result.snapshot : null,
+          privateEvaluationEvidence: result.allowed && result.privateCapture ? result.upstreamRetrieval : undefined,
+      draftEvaluation: result.draftEvaluation,
+      timings: { serverProcessingMs: totalMs, evaluationMs: result.nodeTrace.filter(n => /evaluation/.test(n.node)).reduce((a, n) => a + n.durationMs, 0), retrievalMs: retrievalWindow(result.upstreamRetrieval) },
       orchestrationProof: result.orchestrationProof,
       followUps: result.followUps,
-      retrieval: retrievalEvidence(result.citations),
+      retrieval: { ...retrievalEvidence(result.citations), durationMs: retrievalWindow(result.upstreamRetrieval) },
       publicTrace: {
         schemaVersion: "1.0",
         generatedAt: new Date().toISOString(),

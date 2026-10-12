@@ -85,6 +85,7 @@ async function requestAgenticDemo(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let firstAnswerTextMs: number | null = null;
   let state: StreamState = { answer: "", citations: [], eventTypes: [], protocolEvents: [] };
   while (true) {
     const { value, done } = await reader.read();
@@ -93,6 +94,7 @@ async function requestAgenticDemo(
     buffer = lines.pop() ?? "";
     for (const line of lines) if (line.startsWith("data:")) {
       state = applyAgUiPayload(state, line.slice(5).trim());
+      if (state.answer && firstAnswerTextMs === null) firstAnswerTextMs = Math.round(performance.now() - started);
       const last = state.protocolEvents?.at(-1);
       if (last) {
         const stage = typeof last.stepName === "string"
@@ -111,6 +113,7 @@ async function requestAgenticDemo(
     if (done) break;
   }
   if (buffer.startsWith("data:")) state = applyAgUiPayload(state, buffer.slice(5).trim());
+  if (state.answer && firstAnswerTextMs === null) firstAnswerTextMs = Math.round(performance.now() - started);
   if (state.streamError) throw new Error(state.streamError);
   if (!state.answer.trim() || !state.evidence) throw new Error("AG-UI stream completed without answer or runtime evidence.");
   return {
@@ -123,6 +126,9 @@ async function requestAgenticDemo(
       eventTypes: state.eventTypes,
       citations: state.citations,
       error: null,
+      evaluationSnapshot: state.evidence.evaluationSnapshot,
+      draftEvaluation: state.evidence.draftEvaluation,
+      timings: { ...state.evidence.timings, firstAnswerTextMs, finalAnswerMs: Math.round(performance.now() - started) },
       pattern: state.evidence.pattern,
       specialist: state.evidence.specialist,
       routing: state.evidence.routing,

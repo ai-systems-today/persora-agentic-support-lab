@@ -7,9 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:benchmark",
     "validate:release": "node scripts/validate_release.mjs",
-    "load:smoke": "node scripts/load_smoke.mjs"
+    "load:smoke": "node scripts/load_smoke.mjs",
+    "benchmark": "node --experimental-strip-types scripts/run_benchmark.mjs",
+    "test:benchmark": "node --experimental-strip-types --test scripts/benchmark_core.test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "6.1.1",

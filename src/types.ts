@@ -60,6 +60,9 @@ export type SpecialistEvidence = {
 };
 
 export type RuntimeEvidence = {
+  evaluationSnapshot?: import("../supabase/functions/_shared/evaluationReport").EvidenceSnapshot;
+  draftEvaluation?: import("../supabase/functions/_shared/liveRagEvaluation").LiveRagEvaluation;
+  timings?: { firstAnswerTextMs: number | null; finalAnswerMs: number; serverProcessingMs?: number; evaluationMs?: number | null; retrievalMs?: number | null };
   mode: "agentic" | "live" | "fixture";
   transport: "json" | "sse" | "local";
   traceId: string;
@@ -97,6 +100,7 @@ export type RuntimeEvidence = {
     answerRelevance: number | null;
     intentCoverage: number | null;
     correctness: null;
+    citationCoverage?: number | null;
     claimCount: number;
     supportedClaimCount: number;
     referencedCitationCount: number;
@@ -156,6 +160,7 @@ export type RuntimeEvidence = {
   integrations?: {
     langGraph: { executed: boolean; version: string };
     langfuse: {
+      scoreExport?: { status: string; exported: number; failed: number };
       configured: boolean;
       executed: boolean;
       traceId: string | null;
@@ -176,9 +181,9 @@ export type RuntimeEvidence = {
     ragas: {
       executed: boolean;
       scope: "request" | null;
-      implementation: "azure-openai-ragas-compatible-v1";
+      implementation: "azure-openai-ragas-compatible-v1" | "azure-openai-custom-judge-v2";
       evaluatorModel: string | null;
-      evaluatorVersion: "2026-09-19.9";
+      evaluatorVersion: "2026-09-19.9" | "2026-10-12.1";
       status: "passed" | "failed" | "not-evaluated";
       referenceId: string | null;
       metrics: {

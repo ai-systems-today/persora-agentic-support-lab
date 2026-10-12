@@ -1,0 +1,56 @@
+name: Fresh-answer benchmark
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    environment: evaluation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --requirement requirements-eval.txt
+      - name: Generate fresh answers and persist progress
+        continue-on-error: true
+        env:
+          BENCHMARK_ENDPOINT: ${{ secrets.BENCHMARK_ENDPOINT }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_BENCHMARK_SERVICE_KEY: ${{ secrets.SUPABASE_BENCHMARK_SERVICE_KEY }}
+        run: node --experimental-strip-types scripts/run_benchmark.mjs --output work/benchmark-report.json --max-requests 6
+      - name: Apply official offline RAGAS metrics
+        env:
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+          AZURE_OPENAI_EMBEDDING_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDING_DEPLOYMENT }}
+        run: python scripts/evaluate_fresh_ragas.py --report work/benchmark-report.json
+      - name: Evaluate claim/citation diagnostics
+        env:
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+        run: python scripts/evaluate_diagnostics.py --report work/benchmark-report.json
+      - name: Export experiment metadata and available scores
+        continue-on-error: true
+        env:
+          LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+        run: node --experimental-strip-types scripts/export_langfuse.mjs work/benchmark-report.json
+      - name: Generate a public-safe report projection
+        if: always()
+        run: node scripts/public_report.mjs work/benchmark-report.json work/benchmark-report.public.json
+      - name: Enforce benchmark gates
+        run: node --experimental-strip-types scripts/check_benchmark.mjs work/benchmark-report.json
+      - name: Preserve result evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: persora-benchmark
+          path: work/benchmark-report.public.json

@@ -8,3 +8,8 @@ dist/
 vite.config.js
 vite.config.d.ts
 .DS_Store
+work/
+__pycache__/
+*.pyc
+deno.lock
+site/
