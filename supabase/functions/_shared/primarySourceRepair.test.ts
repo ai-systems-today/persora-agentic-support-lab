@@ -15,6 +15,10 @@ Deno.test("selects substantive article content while preserving the country cond
   check(result.text.includes("account-owner"), "Country placeholder hid substantive content");
   check(result.text.includes("Country-specific applicability"), "Country condition was removed");
 });
+Deno.test("keeps accordion device headings alongside their instructions", () => {
+  const result = officialArticleText('<h1>Device help</h1><div class="kb-article"><button>Watch on TV or TV streaming device</button><p>Select I am Traveling to request temporary access.</p><button>Watch on mobile phone or computer</button><p>Select Watch Temporarily and follow the account-owner verification instructions.</p></div>');
+  check(result.text.includes("TV streaming device") && result.text.includes("mobile phone or computer"), "Device scope was removed from accordion instructions");
+});
 Deno.test("repair records the exact fetched generator context and actual usage", async () => {
   let prompt = "";
   const result = await repairFromPrimarySources({ question: "Kids profile on a hotel TV", runId: "run", endpoint: "https://test.openai.azure.com", apiKey: "test",
