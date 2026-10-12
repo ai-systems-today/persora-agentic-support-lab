@@ -4,6 +4,7 @@ import { publicReport } from './public_report.mjs';
 const report = JSON.parse(await readFile(process.argv[2], 'utf8'));
 const gates = JSON.parse(await readFile(new URL('../evaluation/gates.json', import.meta.url), 'utf8'));
 const failures = applyGates(report, gates);
+if (report.status === 'running') failures.push('Benchmark is incomplete or still running');
 report.gateFailures = failures;
 report.status = failures.length || report.status === 'running' ? 'failed' : 'passed';
 await writeFile(process.argv[2], JSON.stringify(report, null, 2) + '\n');
