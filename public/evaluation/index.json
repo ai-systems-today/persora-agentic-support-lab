@@ -1,3 +1,14 @@
 [
-  { "file": "baseline-2026-10-12.json", "label": "12 Oct — existing deployment baseline (unreviewed)" }
+  {
+    "file": "candidate-30-2026-10-12.json",
+    "label": "12 Oct — 30 live questions: 25 checks passed, five failed"
+  },
+  {
+    "file": "targeted-5-2026-10-12.json",
+    "label": "12 Oct — targeted rerun: four checks passed, one failed"
+  },
+  {
+    "file": "baseline-2026-10-12.json",
+    "label": "12 Oct — older six-question baseline (unreviewed)"
+  }
 ]

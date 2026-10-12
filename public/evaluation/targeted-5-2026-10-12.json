@@ -1,0 +1,1891 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "45977832-a3dd-4786-8f85-e7807fd05d0b",
+  "createdAt": "2026-10-12T09:23:01.933Z",
+  "datasetVersion": "netflix-targeted-retrieval-repair-5-2026-10-12.1",
+  "sourceVersion": "78a8cdb457c179cff99581aa86c3d09deb17af60a56cbe567bff9f70bbf93e28",
+  "applicationVersion": "candidate-source-sha256:61718514adc04b9aa3b117dbc9f5a5035800623a099d86afa17ba67a8764de2d",
+  "evaluatorVersion": "2026-10-12.2",
+  "scope": "fresh-application",
+  "status": "failed",
+  "projection": "public-summary",
+  "comparisonWarnings": [
+    "Public summary omits full source passages and private execution payloads"
+  ],
+  "gateFailures": [
+    "Release quality thresholds remain pending calibration",
+    "One or more cases failed",
+    "travel-kids-profile: citation_validity violates configured gate",
+    "travel-kids-profile: required ragas_faithfulness unavailable",
+    "travel-kids-profile: required ragas_factual_correctness unavailable",
+    "travel-mobile-option: citation_validity violates configured gate",
+    "travel-mobile-option: required ragas_faithfulness unavailable",
+    "travel-mobile-option: required ragas_factual_correctness unavailable",
+    "move-new-country: required ragas_faithfulness unavailable",
+    "move-new-country: required ragas_factual_correctness unavailable",
+    "app-help-member: required ragas_faithfulness unavailable",
+    "app-help-member: required ragas_factual_correctness unavailable",
+    "app-call-problem: required ragas_faithfulness unavailable",
+    "app-call-problem: required ragas_factual_correctness unavailable"
+  ],
+  "cases": [
+    {
+      "caseId": "travel-kids-profile",
+      "question": "I am the account owner at a hotel and using a Kids profile. Where should I request temporary TV access?",
+      "category": "knowledge",
+      "runId": "77f80dab-6214-4872-b73c-c3423e60b160",
+      "status": "passed",
+      "answer": "If you're at a hotel and using a Kids profile, you cannot request temporary TV access directly from the Kids profile because it does not have access to account settings. You would need to use the main account profile or any adult profile to request temporary access for the TV.\n\nTo proceed, follow these steps:\n\n1. **Switch to an adult profile**: If you're currently signed into a Kids profile, switch to an adult profile on the Netflix app or website. Kids profiles are restricted from certain actions, including managing account settings or household verification.\n\n2. **Request temporary access**: Once on an adult profile, you can confirm your location and request temporary access for the hotel TV. This process often involves verifying your account through an email or text message sent to the account owner.\n\nIf you're unable to access an adult profile or encounter issues, you may need to contact Netflix Support directly for assistance.",
+      "metrics": [
+        {
+          "name": "total_answer_ms",
+          "value": 22430,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "client-monotonic-clock-v1",
+          "reason": "Request start through complete response"
+        },
+        {
+          "name": "retrieval_ms",
+          "value": 731,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "retrieval-span-v1",
+          "reason": "Missing retrieval-only span is not estimated from generation time"
+        },
+        {
+          "name": "first_answer_text_ms",
+          "value": 22407,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "first-answer-content-v1",
+          "reason": "JSON transport cannot measure first streamed answer text"
+        },
+        {
+          "name": "evaluation_ms",
+          "value": 3733,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "server-evaluator-span-v1",
+          "reason": "Includes blocking checks when captured"
+        },
+        {
+          "name": "repair_input_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-repair-usage",
+          "reason": "Repair generation only; not total request usage"
+        },
+        {
+          "name": "repair_output_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-repair-usage",
+          "reason": "Repair generation only; not total request usage"
+        },
+        {
+          "name": "lexical_grounding",
+          "value": 0,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "The answer did not link its claims to returned sources with [#n] references."
+        },
+        {
+          "name": "citation_validity",
+          "value": 0,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "The answer did not link its claims to returned sources with [#n] references."
+        },
+        {
+          "name": "citation_coverage",
+          "value": 0,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "The answer did not link its claims to returned sources with [#n] references."
+        },
+        {
+          "name": "lexical_question_overlap",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "The answer did not link its claims to returned sources with [#n] references."
+        },
+        {
+          "name": "lexical_intent_coverage",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "The answer did not link its claims to returned sources with [#n] references."
+        },
+        {
+          "name": "custom_faithfulness",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The answer correctly states that a Kids profile cannot request temporary TV access and provides the necessary steps to switch to an adult profile to make the request."
+        },
+        {
+          "name": "custom_answer_relevancy",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The answer directly addresses the question by explaining how to request temporary TV access when using a Kids profile."
+        },
+        {
+          "name": "custom_context_relevance_fraction",
+          "value": 0,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "None of the provided contexts directly support the claims made in the answer regarding the process of requesting temporary TV access or the limitations of Kids profiles."
+        },
+        {
+          "name": "custom_context_recall",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "2026-10-12.2",
+          "reason": "No applicable custom judgement"
+        },
+        {
+          "name": "custom_factual_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "2026-10-12.2",
+          "reason": "No applicable custom judgement"
+        },
+        {
+          "name": "unsupported_claims",
+          "value": 0,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "custom-judge",
+          "reason": "Count is diagnostic; empty list does not override a failing faithfulness score"
+        },
+        {
+          "name": "precision_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "recall_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "ndcg_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "request_success",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "http-application-v1",
+          "reason": "Successful transport does not prove relevant retrieval"
+        },
+        {
+          "name": "required_filter_compliance",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "case-filter-contract-v1",
+          "reason": "Actual upstream request and reviewed required filters must both be captured"
+        },
+        {
+          "name": "query_intent_preservation",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "review-required",
+          "reason": "Actual query and semantic intent assessment not captured"
+        },
+        {
+          "name": "authorization_scope_compliance",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "returned-row-scope-membership-v1",
+          "reason": "Checks returned row membership against the actual scoped request; does not replace an authorization security audit"
+        },
+        {
+          "name": "returned_count",
+          "value": 9,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "returned-citations-v1",
+          "reason": "Returned citations may be a subset of retrieval results"
+        },
+        {
+          "name": "unique_document_count",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "captured-document-ids-v1",
+          "reason": "Requires actual document IDs; chunk IDs are not counted as distinct documents"
+        },
+        {
+          "name": "policy_compliance",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "case-behaviour-contract-v1",
+          "reason": "Only the explicitly asserted behaviour is covered"
+        },
+        {
+          "name": "tool_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "tool-trajectory-v1",
+          "reason": "Complete tool arguments/results are not captured by the public evidence contract"
+        },
+        {
+          "name": "task_success",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "case-observable-outcome-v1",
+          "reason": "Knowledge task success requires reviewed required facts"
+        },
+        {
+          "name": "answer_transformation_count",
+          "value": 0,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "decision-v1",
+          "reason": "Count of fallback/qualification transformations; not a model repair count"
+        },
+        {
+          "name": "input_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "output_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "total_cost",
+          "value": null,
+          "unit": "USD",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "ragas_faithfulness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_context_precision",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_context_recall",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_factual_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_answer_relevancy",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "required_fact_coverage",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "contradicted_claims",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "citation_semantic_support",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        }
+      ],
+      "failures": [],
+      "evidence": null,
+      "sources": [
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/114275",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/128339",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/128339",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/114833",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/100624",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/114275",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/121877",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/322532375336036",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/127200",
+          "text": ""
+        }
+      ],
+      "expectedFacts": [
+        "Use a non-Kids profile and the displayed travel option; account eligibility applies."
+      ],
+      "reviewStatus": "approved",
+      "reviewKind": "ai-source",
+      "reviewer": "Codex",
+      "langfuseExported": true
+    },
+    {
+      "caseId": "travel-mobile-option",
+      "question": "My laptop is away from home and Netflix offers Watch Temporarily. Is this the same screen option as on a TV?",
+      "category": "knowledge",
+      "runId": "4b9cd069-3d44-4385-8109-1f0c1ea0a561",
+      "status": "failed",
+      "answer": "I could not verify the generated answer against its sources. Please consult the returned official sources or Netflix Support before acting on it.",
+      "metrics": [
+        {
+          "name": "total_answer_ms",
+          "value": 27977,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "client-monotonic-clock-v1",
+          "reason": "Request start through complete response"
+        },
+        {
+          "name": "retrieval_ms",
+          "value": 667,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "retrieval-span-v1",
+          "reason": "Missing retrieval-only span is not estimated from generation time"
+        },
+        {
+          "name": "first_answer_text_ms",
+          "value": 27963,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "first-answer-content-v1",
+          "reason": "JSON transport cannot measure first streamed answer text"
+        },
+        {
+          "name": "evaluation_ms",
+          "value": 12773,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "server-evaluator-span-v1",
+          "reason": "Includes blocking checks when captured"
+        },
+        {
+          "name": "repair_input_tokens",
+          "value": 2787,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "provider-repair-usage",
+          "reason": "Repair generation only; not total request usage"
+        },
+        {
+          "name": "repair_output_tokens",
+          "value": 95,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "provider-repair-usage",
+          "reason": "Repair generation only; not total request usage"
+        },
+        {
+          "name": "lexical_grounding",
+          "value": 0,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "The answer did not link its claims to returned sources with [#n] references."
+        },
+        {
+          "name": "citation_validity",
+          "value": 0,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "The answer did not link its claims to returned sources with [#n] references."
+        },
+        {
+          "name": "citation_coverage",
+          "value": 0,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "The answer did not link its claims to returned sources with [#n] references."
+        },
+        {
+          "name": "lexical_question_overlap",
+          "value": 0.1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "The answer did not link its claims to returned sources with [#n] references."
+        },
+        {
+          "name": "lexical_intent_coverage",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "The answer did not link its claims to returned sources with [#n] references."
+        },
+        {
+          "name": "custom_faithfulness",
+          "value": 0,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The answer does not provide any factual claims that are supported by the contexts. It does not address whether 'Watch Temporarily' is the same as the screen option on a TV."
+        },
+        {
+          "name": "custom_answer_relevancy",
+          "value": 0,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The answer does not directly address the question about the 'Watch Temporarily' feature and its comparison to TV options."
+        },
+        {
+          "name": "custom_context_relevance_fraction",
+          "value": 0,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "None of the contexts provided information relevant to the specific question about 'Watch Temporarily' and its equivalence to TV options."
+        },
+        {
+          "name": "custom_context_recall",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "2026-10-12.2",
+          "reason": "No applicable custom judgement"
+        },
+        {
+          "name": "custom_factual_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "2026-10-12.2",
+          "reason": "No applicable custom judgement"
+        },
+        {
+          "name": "unsupported_claims",
+          "value": 0,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "custom-judge",
+          "reason": "Count is diagnostic; empty list does not override a failing faithfulness score"
+        },
+        {
+          "name": "precision_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "recall_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "ndcg_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "request_success",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "http-application-v1",
+          "reason": "Successful transport does not prove relevant retrieval"
+        },
+        {
+          "name": "required_filter_compliance",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "case-filter-contract-v1",
+          "reason": "Actual upstream request and reviewed required filters must both be captured"
+        },
+        {
+          "name": "query_intent_preservation",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "review-required",
+          "reason": "Actual query and semantic intent assessment not captured"
+        },
+        {
+          "name": "authorization_scope_compliance",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "returned-row-scope-membership-v1",
+          "reason": "Checks returned row membership against the actual scoped request; does not replace an authorization security audit"
+        },
+        {
+          "name": "returned_count",
+          "value": 10,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "returned-citations-v1",
+          "reason": "Returned citations may be a subset of retrieval results"
+        },
+        {
+          "name": "unique_document_count",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "captured-document-ids-v1",
+          "reason": "Requires actual document IDs; chunk IDs are not counted as distinct documents"
+        },
+        {
+          "name": "policy_compliance",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "case-behaviour-contract-v1",
+          "reason": "Only the explicitly asserted behaviour is covered"
+        },
+        {
+          "name": "tool_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "tool-trajectory-v1",
+          "reason": "Complete tool arguments/results are not captured by the public evidence contract"
+        },
+        {
+          "name": "task_success",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "case-observable-outcome-v1",
+          "reason": "Knowledge task success requires reviewed required facts"
+        },
+        {
+          "name": "answer_transformation_count",
+          "value": 1,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "decision-v1",
+          "reason": "Count of fallback/qualification transformations; not a model repair count"
+        },
+        {
+          "name": "input_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "output_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "total_cost",
+          "value": null,
+          "unit": "USD",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "ragas_faithfulness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_context_precision",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_context_recall",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_factual_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_answer_relevancy",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "required_fact_coverage",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "contradicted_claims",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "citation_semantic_support",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        }
+      ],
+      "failures": [
+        "Custom semantic evaluation failed",
+        "Answer decision: fallback"
+      ],
+      "evidence": null,
+      "sources": [
+        {
+          "label": "Source",
+          "url": null,
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/114059",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": null,
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/128339",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/49",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/115018",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": null,
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": null,
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": null,
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/128339",
+          "text": ""
+        }
+      ],
+      "expectedFacts": [
+        "Use the displayed mobile/computer option; do not insist on the TV-only label."
+      ],
+      "reviewStatus": "approved",
+      "reviewKind": "ai-source",
+      "reviewer": "Codex",
+      "langfuseExported": true
+    },
+    {
+      "caseId": "move-new-country",
+      "question": "I permanently moved to a new country. What is the sequence for changing my Netflix account country?",
+      "category": "knowledge",
+      "runId": "58ece79e-b3fa-4dd8-abcb-538398ea3bbf",
+      "status": "passed",
+      "answer": "To change your Netflix account country after moving permanently, follow this sequence:\n\n1. **Cancel your current membership**: This is necessary to change your account to a new country.\n2. **Wait until your membership ends**: You will continue to have access until the end of your billing period.\n3. **Restart your account**: Make sure you are in the new country at the time you restart your account.\n\nBe aware that pricing, billing currency, and available payment methods will vary by country, and your selection of TV shows and movies may change as well [#1].",
+      "metrics": [
+        {
+          "name": "total_answer_ms",
+          "value": 22640,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "client-monotonic-clock-v1",
+          "reason": "Request start through complete response"
+        },
+        {
+          "name": "retrieval_ms",
+          "value": 1082,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "retrieval-span-v1",
+          "reason": "Missing retrieval-only span is not estimated from generation time"
+        },
+        {
+          "name": "first_answer_text_ms",
+          "value": 22613,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "first-answer-content-v1",
+          "reason": "JSON transport cannot measure first streamed answer text"
+        },
+        {
+          "name": "evaluation_ms",
+          "value": 8277,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "server-evaluator-span-v1",
+          "reason": "Includes blocking checks when captured"
+        },
+        {
+          "name": "repair_input_tokens",
+          "value": 544,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "provider-repair-usage",
+          "reason": "Repair generation only; not total request usage"
+        },
+        {
+          "name": "repair_output_tokens",
+          "value": 116,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "provider-repair-usage",
+          "reason": "Repair generation only; not total request usage"
+        },
+        {
+          "name": "lexical_grounding",
+          "value": 0.25,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "citation_validity",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "citation_coverage",
+          "value": 0.25,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "lexical_question_overlap",
+          "value": 0.75,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "lexical_intent_coverage",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "custom_faithfulness",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The answer accurately reflects the steps required to change the Netflix account country as outlined in the context."
+        },
+        {
+          "name": "custom_answer_relevancy",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The answer directly addresses the question about changing the Netflix account country with a clear sequence of steps."
+        },
+        {
+          "name": "custom_context_relevance_fraction",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "All provided context is relevant and useful for answering the question about changing the Netflix account country."
+        },
+        {
+          "name": "custom_context_recall",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "2026-10-12.2",
+          "reason": "No trusted reference is provided, so this metric is null."
+        },
+        {
+          "name": "custom_factual_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "2026-10-12.2",
+          "reason": "No trusted reference is provided, so this metric is null."
+        },
+        {
+          "name": "unsupported_claims",
+          "value": 0,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "custom-judge",
+          "reason": "Count is diagnostic; empty list does not override a failing faithfulness score"
+        },
+        {
+          "name": "precision_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "recall_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "ndcg_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "request_success",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "http-application-v1",
+          "reason": "Successful transport does not prove relevant retrieval"
+        },
+        {
+          "name": "required_filter_compliance",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "case-filter-contract-v1",
+          "reason": "Actual upstream request and reviewed required filters must both be captured"
+        },
+        {
+          "name": "query_intent_preservation",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "review-required",
+          "reason": "Actual query and semantic intent assessment not captured"
+        },
+        {
+          "name": "authorization_scope_compliance",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "returned-row-scope-membership-v1",
+          "reason": "Checks returned row membership against the actual scoped request; does not replace an authorization security audit"
+        },
+        {
+          "name": "returned_count",
+          "value": 1,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "returned-citations-v1",
+          "reason": "Returned citations may be a subset of retrieval results"
+        },
+        {
+          "name": "unique_document_count",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "captured-document-ids-v1",
+          "reason": "Requires actual document IDs; chunk IDs are not counted as distinct documents"
+        },
+        {
+          "name": "policy_compliance",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "case-behaviour-contract-v1",
+          "reason": "Only the explicitly asserted behaviour is covered"
+        },
+        {
+          "name": "tool_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "tool-trajectory-v1",
+          "reason": "Complete tool arguments/results are not captured by the public evidence contract"
+        },
+        {
+          "name": "task_success",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "case-observable-outcome-v1",
+          "reason": "Knowledge task success requires reviewed required facts"
+        },
+        {
+          "name": "answer_transformation_count",
+          "value": 1,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "decision-v1",
+          "reason": "Count of fallback/qualification transformations; not a model repair count"
+        },
+        {
+          "name": "input_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "output_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "total_cost",
+          "value": null,
+          "unit": "USD",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "ragas_faithfulness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_context_precision",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_context_recall",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_factual_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_answer_relevancy",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "required_fact_coverage",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "contradicted_claims",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "citation_semantic_support",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        }
+      ],
+      "failures": [],
+      "evidence": null,
+      "sources": [
+        {
+          "label": "Moving with Netflix",
+          "url": "https://help.netflix.com/en/node/129273",
+          "text": ""
+        }
+      ],
+      "expectedFacts": [
+        "Cancel, wait until membership ends, then restart while in the new country."
+      ],
+      "reviewStatus": "approved",
+      "reviewKind": "ai-source",
+      "reviewer": "Codex",
+      "langfuseExported": true
+    },
+    {
+      "caseId": "app-help-member",
+      "question": "I am signed into the Netflix mobile app. Where are its Help and Call or Chat controls?",
+      "category": "knowledge",
+      "runId": "0eb3f636-ad41-46c8-990d-66700778141b",
+      "status": "passed",
+      "answer": "To access the Help and Call or Chat controls in the Netflix mobile app, follow these steps:\n\n1. In the lower right, tap **My Netflix**.\n2. At the top, tap the **profile name** or the **menu icon**.\n3. Tap **Help**.\n4. Tap the **Call or Chat** button.\n\nMake sure you are signed in to your Netflix account to access these features [#1].",
+      "metrics": [
+        {
+          "name": "total_answer_ms",
+          "value": 21580,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "client-monotonic-clock-v1",
+          "reason": "Request start through complete response"
+        },
+        {
+          "name": "retrieval_ms",
+          "value": 1133,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "retrieval-span-v1",
+          "reason": "Missing retrieval-only span is not estimated from generation time"
+        },
+        {
+          "name": "first_answer_text_ms",
+          "value": 21564,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "first-answer-content-v1",
+          "reason": "JSON transport cannot measure first streamed answer text"
+        },
+        {
+          "name": "evaluation_ms",
+          "value": 6801,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "server-evaluator-span-v1",
+          "reason": "Includes blocking checks when captured"
+        },
+        {
+          "name": "repair_input_tokens",
+          "value": 423,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "provider-repair-usage",
+          "reason": "Repair generation only; not total request usage"
+        },
+        {
+          "name": "repair_output_tokens",
+          "value": 87,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "provider-repair-usage",
+          "reason": "Repair generation only; not total request usage"
+        },
+        {
+          "name": "lexical_grounding",
+          "value": 0.25,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "citation_validity",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "citation_coverage",
+          "value": 0.25,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "lexical_question_overlap",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "lexical_intent_coverage",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "custom_faithfulness",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The answer accurately reflects the steps to access Help and Call or Chat controls as described in the context."
+        },
+        {
+          "name": "custom_answer_relevancy",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The answer directly addresses the question by providing clear steps to find the Help and Call or Chat controls in the Netflix mobile app."
+        },
+        {
+          "name": "custom_context_relevance_fraction",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "All provided context is relevant and useful for answering the question about accessing Help and Call or Chat controls."
+        },
+        {
+          "name": "custom_context_recall",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "2026-10-12.2",
+          "reason": "No applicable custom judgement"
+        },
+        {
+          "name": "custom_factual_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "2026-10-12.2",
+          "reason": "No applicable custom judgement"
+        },
+        {
+          "name": "unsupported_claims",
+          "value": 0,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "custom-judge",
+          "reason": "Count is diagnostic; empty list does not override a failing faithfulness score"
+        },
+        {
+          "name": "precision_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "recall_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "ndcg_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "request_success",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "http-application-v1",
+          "reason": "Successful transport does not prove relevant retrieval"
+        },
+        {
+          "name": "required_filter_compliance",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "case-filter-contract-v1",
+          "reason": "Actual upstream request and reviewed required filters must both be captured"
+        },
+        {
+          "name": "query_intent_preservation",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "review-required",
+          "reason": "Actual query and semantic intent assessment not captured"
+        },
+        {
+          "name": "authorization_scope_compliance",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "returned-row-scope-membership-v1",
+          "reason": "Checks returned row membership against the actual scoped request; does not replace an authorization security audit"
+        },
+        {
+          "name": "returned_count",
+          "value": 1,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "returned-citations-v1",
+          "reason": "Returned citations may be a subset of retrieval results"
+        },
+        {
+          "name": "unique_document_count",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "captured-document-ids-v1",
+          "reason": "Requires actual document IDs; chunk IDs are not counted as distinct documents"
+        },
+        {
+          "name": "policy_compliance",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "case-behaviour-contract-v1",
+          "reason": "Only the explicitly asserted behaviour is covered"
+        },
+        {
+          "name": "tool_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "tool-trajectory-v1",
+          "reason": "Complete tool arguments/results are not captured by the public evidence contract"
+        },
+        {
+          "name": "task_success",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "case-observable-outcome-v1",
+          "reason": "Knowledge task success requires reviewed required facts"
+        },
+        {
+          "name": "answer_transformation_count",
+          "value": 1,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "decision-v1",
+          "reason": "Count of fallback/qualification transformations; not a model repair count"
+        },
+        {
+          "name": "input_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "output_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "total_cost",
+          "value": null,
+          "unit": "USD",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "ragas_faithfulness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_context_precision",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_context_recall",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_factual_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_answer_relevancy",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "required_fact_coverage",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "contradicted_claims",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "citation_semantic_support",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        }
+      ],
+      "failures": [],
+      "evidence": null,
+      "sources": [
+        {
+          "label": "Contact us from the Netflix app",
+          "url": "https://help.netflix.com/en/node/33335",
+          "text": ""
+        }
+      ],
+      "expectedFacts": [
+        "Use My Netflix, profile/menu, Help, then Call or Chat."
+      ],
+      "reviewStatus": "approved",
+      "reviewKind": "ai-source",
+      "reviewer": "Codex",
+      "langfuseExported": true
+    },
+    {
+      "caseId": "app-call-problem",
+      "question": "The Call button in the Netflix app gives an error. What alternative does Netflix suggest?",
+      "category": "knowledge",
+      "runId": "3efb9d80-2c21-49e6-895d-424364e38fde",
+      "status": "passed",
+      "answer": "If the Call button in the Netflix app gives an error, Netflix suggests trying to contact them via chat instead [#1].",
+      "metrics": [
+        {
+          "name": "total_answer_ms",
+          "value": 20313,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "client-monotonic-clock-v1",
+          "reason": "Request start through complete response"
+        },
+        {
+          "name": "retrieval_ms",
+          "value": 852,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "retrieval-span-v1",
+          "reason": "Missing retrieval-only span is not estimated from generation time"
+        },
+        {
+          "name": "first_answer_text_ms",
+          "value": 20306,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "first-answer-content-v1",
+          "reason": "JSON transport cannot measure first streamed answer text"
+        },
+        {
+          "name": "evaluation_ms",
+          "value": 6659,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "server-evaluator-span-v1",
+          "reason": "Includes blocking checks when captured"
+        },
+        {
+          "name": "repair_input_tokens",
+          "value": 421,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "provider-repair-usage",
+          "reason": "Repair generation only; not total request usage"
+        },
+        {
+          "name": "repair_output_tokens",
+          "value": 25,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "provider-repair-usage",
+          "reason": "Repair generation only; not total request usage"
+        },
+        {
+          "name": "lexical_grounding",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "Every substantive claim links to an existing source number, shares substantive terms with that source text, and the answer addresses the question."
+        },
+        {
+          "name": "citation_validity",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "Every substantive claim links to an existing source number, shares substantive terms with that source text, and the answer addresses the question."
+        },
+        {
+          "name": "citation_coverage",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "Every substantive claim links to an existing source number, shares substantive terms with that source text, and the answer addresses the question."
+        },
+        {
+          "name": "lexical_question_overlap",
+          "value": 0.875,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "Every substantive claim links to an existing source number, shares substantive terms with that source text, and the answer addresses the question."
+        },
+        {
+          "name": "lexical_intent_coverage",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "Every substantive claim links to an existing source number, shares substantive terms with that source text, and the answer addresses the question."
+        },
+        {
+          "name": "custom_faithfulness",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The answer accurately reflects the suggestion provided in the context regarding contacting Netflix via chat if the Call button gives an error."
+        },
+        {
+          "name": "custom_answer_relevancy",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The answer directly addresses the question by providing the alternative method suggested by Netflix."
+        },
+        {
+          "name": "custom_context_relevance_fraction",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The context provided is entirely relevant to the question, as it discusses contacting Netflix and the issue with the Call button."
+        },
+        {
+          "name": "custom_context_recall",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "2026-10-12.2",
+          "reason": "No applicable custom judgement"
+        },
+        {
+          "name": "custom_factual_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "2026-10-12.2",
+          "reason": "No applicable custom judgement"
+        },
+        {
+          "name": "unsupported_claims",
+          "value": 0,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "custom-judge",
+          "reason": "Count is diagnostic; empty list does not override a failing faithfulness score"
+        },
+        {
+          "name": "precision_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "recall_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "ndcg_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "request_success",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "http-application-v1",
+          "reason": "Successful transport does not prove relevant retrieval"
+        },
+        {
+          "name": "required_filter_compliance",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "case-filter-contract-v1",
+          "reason": "Actual upstream request and reviewed required filters must both be captured"
+        },
+        {
+          "name": "query_intent_preservation",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "review-required",
+          "reason": "Actual query and semantic intent assessment not captured"
+        },
+        {
+          "name": "authorization_scope_compliance",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "returned-row-scope-membership-v1",
+          "reason": "Checks returned row membership against the actual scoped request; does not replace an authorization security audit"
+        },
+        {
+          "name": "returned_count",
+          "value": 1,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "returned-citations-v1",
+          "reason": "Returned citations may be a subset of retrieval results"
+        },
+        {
+          "name": "unique_document_count",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "captured-document-ids-v1",
+          "reason": "Requires actual document IDs; chunk IDs are not counted as distinct documents"
+        },
+        {
+          "name": "policy_compliance",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "case-behaviour-contract-v1",
+          "reason": "Only the explicitly asserted behaviour is covered"
+        },
+        {
+          "name": "tool_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "tool-trajectory-v1",
+          "reason": "Complete tool arguments/results are not captured by the public evidence contract"
+        },
+        {
+          "name": "task_success",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "case-observable-outcome-v1",
+          "reason": "Knowledge task success requires reviewed required facts"
+        },
+        {
+          "name": "answer_transformation_count",
+          "value": 1,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "decision-v1",
+          "reason": "Count of fallback/qualification transformations; not a model repair count"
+        },
+        {
+          "name": "input_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "output_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "total_cost",
+          "value": null,
+          "unit": "USD",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "ragas_faithfulness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_context_precision",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_context_recall",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_factual_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_answer_relevancy",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "required_fact_coverage",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "contradicted_claims",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "citation_semantic_support",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        }
+      ],
+      "failures": [],
+      "evidence": null,
+      "sources": [
+        {
+          "label": "Contact us from the Netflix app",
+          "url": "https://help.netflix.com/en/node/33335",
+          "text": ""
+        }
+      ],
+      "expectedFacts": [
+        "Check the current app version and use chat if calling still cannot reach support."
+      ],
+      "reviewStatus": "approved",
+      "reviewKind": "ai-source",
+      "reviewer": "Codex",
+      "langfuseExported": true
+    }
+  ]
+}
