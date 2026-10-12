@@ -596,7 +596,7 @@ async function runA2ASpecialist(state: typeof State.State) {
       },
       body: JSON.stringify({
         message: {
-          messageId: crypto.randomUUID(),
+          messageId: state.traceId,
           role: "ROLE_USER",
           parts: [{ text: state.message }],
         },
@@ -619,7 +619,7 @@ async function runA2ASpecialist(state: typeof State.State) {
       throw new Error(`A2A message:send returned HTTP ${response.status}${detail ? ` (${detail})` : ""}`);
     }
     const payload = await response.json() as {
-      task?: { id?: unknown; artifacts?: Array<{ parts?: Array<{ text?: unknown }>; metadata?: { citations?: unknown; specialists?: unknown; retrievalCaptures?: unknown } }> };
+      task?: { id?: unknown; contextId?: unknown; artifacts?: Array<{ parts?: Array<{ text?: unknown }>; metadata?: { citations?: unknown; specialists?: unknown; retrievalCaptures?: unknown } }> };
     };
     const context = payload.task?.artifacts?.flatMap((artifact) => artifact.parts ?? [])
       .map((part) => typeof part.text === "string" ? part.text : "")
@@ -635,9 +635,15 @@ async function runA2ASpecialist(state: typeof State.State) {
         return typeof record.domain === "string" && typeof record.agentId === "string" && typeof record.agentName === "string" && typeof record.widgetId === "string";
       }) ?? [];
     if (!specialists.length) throw new Error("A2A specialist returned no executed specialist identities");
-    const rawCaptures = payload.task?.artifacts?.flatMap(artifact => Array.isArray(artifact.metadata?.retrievalCaptures) ? artifact.metadata.retrievalCaptures : []) ?? [];
-    const upstreamRetrieval = (await Promise.all(rawCaptures.map(value => parseUpstreamEvidence(value)))).filter((c): c is UpstreamRetrievalEvidence => c !== null);
     const taskId = typeof payload.task?.id === "string" ? payload.task.id : null;
+    const rawCaptures = payload.task?.artifacts?.flatMap(artifact => Array.isArray(artifact.metadata?.retrievalCaptures) ? artifact.metadata.retrievalCaptures : []) ?? [];
+    const expectedCaptureIds = new Set(specialists.map((_specialist, index) => `${taskId}-${index + 1}`));
+    const upstreamRetrieval = payload.task?.contextId === state.traceId && taskId
+      ? (await Promise.all(rawCaptures.map(value => {
+        const id = (value as { requestId?: unknown })?.requestId;
+        return typeof id === "string" && expectedCaptureIds.has(id) ? parseUpstreamEvidence(value, id) : Promise.resolve(null);
+      }))).filter((c): c is UpstreamRetrievalEvidence => c !== null)
+      : [];
     const agentName = typeof card.name === "string" ? card.name : "Netflix Support Specialist";
     return {
       specialistContext: context,

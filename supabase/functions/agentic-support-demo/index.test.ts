@@ -38,7 +38,7 @@ const request = (sse = false) => new Request(`${project}/functions/v1/agentic-su
   body: JSON.stringify({ message: "How do I update my Netflix Household from my TV?", sessionToken: crypto.randomUUID() }) });
 
 Deno.test("candidate handler preserves exact evidence and controls final answer", async t => {
-  await t.step("passes with one hydration snapshot and bounded relevance fraction", async () => {
+  await t.step("passes with captured generator passages and bounded relevance fraction", async () => {
     mode = "pass"; hydrationCount = 0;
     const response = await handler(request());
     const payload = await response.json();
@@ -48,6 +48,7 @@ Deno.test("candidate handler preserves exact evidence and controls final answer"
     check(payload.evidence.integrations.ragas.metrics.contextPrecision === 1, "Duplicate indices inflated metric");
     check(payload.evidence.evaluationSnapshot.generatorContextCaptured === true, "Captured generator evidence lost");
     check(payload.evidence.evaluationSnapshot.decision.action === "deliver", "Wrong decision");
+    check(!payload.evidence.privateEvaluationEvidence, "Private generator context leaked to public caller");
   });
   await t.step("withholds unsupported draft and hashes the final answer separately", async () => {
     mode = "unsupported";
