@@ -1,6 +1,7 @@
 name: Fresh-answer benchmark
 on:
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -16,26 +17,36 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --requirement requirements-eval.txt
+      - name: Verify required benchmark credentials without exposing values
+        env:
+          BENCHMARK_ENDPOINT: ${{ secrets.BENCHMARK_ENDPOINT }}
+          SUPABASE_BENCHMARK_SERVICE_KEY: ${{ secrets.SUPABASE_BENCHMARK_SERVICE_KEY }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+          AZURE_OPENAI_EMBEDDING_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDING_DEPLOYMENT }}
+        run: |
+          node --input-type=module -e 'const names = ["BENCHMARK_ENDPOINT", "SUPABASE_BENCHMARK_SERVICE_KEY", "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_DEPLOYMENT", "AZURE_OPENAI_EMBEDDING_DEPLOYMENT"]; const missing = names.filter(n => !process.env[n]); console.log(missing.length ? "Missing benchmark configuration: " + missing.join(", ") : "All required benchmark credentials are configured"); if (missing.length) process.exit(1);'
       - name: Generate fresh answers and persist progress
         continue-on-error: true
         env:
           BENCHMARK_ENDPOINT: ${{ secrets.BENCHMARK_ENDPOINT }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
           SUPABASE_BENCHMARK_SERVICE_KEY: ${{ secrets.SUPABASE_BENCHMARK_SERVICE_KEY }}
-        run: node --experimental-strip-types scripts/run_benchmark.mjs --output work/benchmark-report.json --max-requests 6
+        run: node --experimental-strip-types scripts/run_benchmark.mjs --dataset evaluation/regression-30.json --output work/benchmark-report.json --max-requests 30
       - name: Apply official offline RAGAS metrics
         env:
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
           AZURE_OPENAI_EMBEDDING_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_EMBEDDING_DEPLOYMENT }}
-        run: python scripts/evaluate_fresh_ragas.py --report work/benchmark-report.json
+        run: python scripts/evaluate_fresh_ragas.py --report work/benchmark-report.json --dataset evaluation/regression-30.json
       - name: Evaluate claim/citation diagnostics
         env:
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
-        run: python scripts/evaluate_diagnostics.py --report work/benchmark-report.json
+        run: python scripts/evaluate_diagnostics.py --report work/benchmark-report.json --dataset evaluation/regression-30.json
       - name: Export experiment metadata and available scores
         continue-on-error: true
         env:

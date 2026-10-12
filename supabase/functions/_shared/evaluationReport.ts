@@ -9,7 +9,7 @@ export type EvidenceSnapshot = {
   retrievalRequest: { query: string; filters: Record<string, string>; topK: number | null; scopeValid?: boolean | null } | null;
   versions: { application: string | null; backend: string | null; prompt: string; corpus: string | null; evaluator: string };
   decision: { action: "deliver" | "repair" | "qualify" | "fallback" | "policy-response"; reason: string };
-  repair?: { attempted: boolean; outcome: string; sourceCount?: number; generationMs?: number; evaluationMs?: number | null; inputTokens?: number | null; outputTokens?: number | null };
+  repair?: { attempted: boolean; outcome: string; sourceCount?: number; generationMs?: number; evaluationMs?: number | null; inputTokens?: number | null; outputTokens?: number | null; verification?: { status: string; faithfulness: number | null; responseRelevancy: number | null; unsupportedClaims: string[]; referencedCitations: number; validCitations: number } };
 };
 export type BenchmarkCase = {
   id: string; category: string; question: string;

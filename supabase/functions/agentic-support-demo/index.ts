@@ -837,7 +837,8 @@ async function applyEvaluationDecision(state: typeof State.State) {
           upstreamRetrieval: [...state.upstreamRetrieval.map(c => ({ ...c, stage: "draft" as const })), { ...repaired.capture, stage: "final" as const }] };
         const checked = (await runExactEvaluation(candidate)).ragas;
         const quality = evaluateLiveAnswer({ question: state.message, answer: repaired.answer, citations: repaired.contexts, requiredTopics: requiredQualityTopics(state) });
-        repair = { attempted: true, outcome: "failed-verification", sourceCount: repaired.contexts.length, generationMs: repaired.generationMs, evaluationMs: checked.durationMs, inputTokens: repaired.inputTokens, outputTokens: repaired.outputTokens };
+        repair = { attempted: true, outcome: "failed-verification", sourceCount: repaired.contexts.length, generationMs: repaired.generationMs, evaluationMs: checked.durationMs, inputTokens: repaired.inputTokens, outputTokens: repaired.outputTokens,
+          verification: { status: checked.status, faithfulness: checked.metrics.faithfulness, responseRelevancy: checked.metrics.responseRelevancy, unsupportedClaims: checked.unsupportedClaims, referencedCitations: quality.referencedCitationCount, validCitations: quality.validCitationCount } };
         if (checked.status === "passed" && checked.unsupportedClaims.length === 0 && quality.validCitationCount === quality.referencedCitationCount && quality.referencedCitationCount > 0) {
           state = { ...candidate, ragas: checked, quality };
           decision = { action: "repair", reason: "One revised answer was generated from fetched official pages and passed its exact-context checks" };

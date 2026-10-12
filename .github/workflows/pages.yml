@@ -17,6 +17,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  candidate-benchmark:
+    if: github.event_name == 'pull_request' && github.head_ref == 'codex/evaluation-results' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+    uses: ./.github/workflows/benchmark.yml
+    secrets: inherit
+
   validate:
     runs-on: ubuntu-latest
     steps:
@@ -80,7 +87,7 @@ jobs:
           path: dist
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
