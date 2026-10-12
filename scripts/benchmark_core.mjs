@@ -62,12 +62,13 @@ export function evaluateCase(test, payload, elapsedMs) {
   return { caseId: test.id, question: test.question, category: test.category, runId: e.traceId ?? '',
     status: failures.length ? 'failed' : pending ? 'not-evaluated' : 'passed', answer: payload.answer ?? '',
     metrics, failures, evidence: snapshot, sources: (payload.citations ?? []).map(c => ({ label: c.title ?? c.label ?? c.source ?? 'Source', url: c.url ?? c.source_url ?? null, text: c.snippet ?? c.content ?? '' })),
-    expectedFacts: test.requiredFacts, reviewStatus: test.review.status, blocked: e.guardrail?.decision === 'block', langfuseExported: Boolean(e.integrations?.langfuse?.executed) };
+    expectedFacts: test.requiredFacts, reviewStatus: test.review.status, reviewKind: test.review.kind ?? 'unknown', reviewer: test.review.reviewer ?? null, blocked: e.guardrail?.decision === 'block', langfuseExported: Boolean(e.integrations?.langfuse?.executed) };
 }
 
 export function applyGates(report, config) {
   const issues = [];
   if (!report.cases.length) issues.push('No cases executed');
+  if (config.requireCalibratedThresholds && config.pendingCalibration?.length) issues.push('Release quality thresholds remain pending calibration');
   if (report.cases.some(c => c.status === 'failed')) issues.push('One or more cases failed');
   if (report.comparisonWarnings?.includes('Partial suite: not all selected dataset cases executed')) issues.push('Incomplete test suite');
   for (const c of report.cases.filter(c => c.category === 'knowledge')) {

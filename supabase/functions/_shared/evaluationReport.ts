@@ -12,7 +12,7 @@ export type EvidenceSnapshot = {
 };
 export type BenchmarkCase = {
   id: string; category: string; question: string;
-  review: { status: "pending" | "approved"; reviewer: string | null; reviewedAt: string | null };
+  review: { status: "pending" | "approved"; reviewer: string | null; reviewedAt: string | null; kind?: "ai-source" | "ai-policy" | "human" };
   sources: Array<{ url: string; conditions: string; snapshot?: string; hash?: string }>;
   reference: string | null; requiredFacts: string[];
   expected: { guardrail?: "allow" | "block"; handoff?: string; prohibitedEvents?: string[]; requiredEvents?: string[] };
@@ -24,7 +24,7 @@ export type CaseResult = {
   status: "passed" | "failed" | "not-evaluated"; answer: string; metrics: Metric[];
   failures: string[]; evidence: EvidenceSnapshot | null;
   sources: Array<{ label: string; url: string | null; text: string }>;
-  expectedFacts: string[]; reviewStatus: string; langfuseExported: boolean;
+  expectedFacts: string[]; reviewStatus: string; reviewKind?: string; reviewer?: string | null; langfuseExported: boolean;
   blocked?: boolean; startedAt?: string; finishedAt?: string;
 };
 export type BenchmarkReport = {

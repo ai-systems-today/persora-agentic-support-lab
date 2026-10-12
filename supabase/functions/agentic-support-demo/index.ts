@@ -818,7 +818,7 @@ async function runExactEvaluation(state: typeof State.State) {
 
 
 async function applyEvaluationDecision(state: typeof State.State) {
-  const knowledgeAnswer = state.allowed && state.pattern !== "handoff" && state.specialist !== null && !state.eventTypes.includes("verified_code_not_found");
+  const knowledgeAnswer = state.allowed && state.pattern !== "handoff" && (state.specialist !== null || state.a2a.executed) && !state.eventTypes.includes("verified_code_not_found");
   const decision = decideAnswer({ knowledgeAnswer, judgeStatus: state.ragas.status,
     generatorEvidenceCaptured: state.upstreamRetrieval.length > 0 && state.upstreamRetrieval.every(c => c.generatorContextCaptured),
     invalidCitations: knowledgeAnswer && (state.citations.length === 0 || (state.quality.executed && state.quality.referencedCitationCount > state.quality.validCitationCount)),

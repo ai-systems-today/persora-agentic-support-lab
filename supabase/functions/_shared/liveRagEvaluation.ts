@@ -10,7 +10,7 @@ export type LiveRagEvaluation = {
   scope: "request" | null;
   implementation: "azure-openai-custom-judge-v2";
   evaluatorModel: string | null;
-  evaluatorVersion: "2026-10-12.1";
+  evaluatorVersion: "2026-10-12.2";
   status: "passed" | "failed" | "not-evaluated";
   referenceId: string | null;
   metrics: Record<LiveRagMetricName, number | null>;
@@ -95,7 +95,7 @@ export const notEvaluatedLiveRag = (reason: string): LiveRagEvaluation => ({
   scope: null,
   implementation: "azure-openai-custom-judge-v2",
   evaluatorModel: null,
-  evaluatorVersion: "2026-10-12.1",
+  evaluatorVersion: "2026-10-12.2",
   status: "not-evaluated",
   referenceId: null,
   metrics: emptyMetrics(),
@@ -156,9 +156,9 @@ Return one JSON object with this exact shape:
   "relevantContextIndices": []
 }
 Metric rules:
-- faithfulness: fraction of factual answer claims entailed by the contexts.
+- faithfulness: fraction of factual answer claims entailed by the contexts. Missing requested advice belongs to responseRelevancy, not faithfulness. Do not reduce faithfulness merely because the answer is incomplete or irrelevant; identify the actual unsupported factual claims.
 - responseRelevancy: how directly and completely the answer addresses the question.
-- contextPrecision: fraction of supplied contexts useful for answering the question.
+- contextPrecision: fraction of supplied contexts useful for answering any part of the question. For a multi-issue question, a passage can be useful for one issue without covering every other issue.
 - contextRecall: fraction of trusted-reference claims covered by the contexts; null without a trusted reference.
 - factualCorrectness: factual precision/recall of the answer against the trusted reference; null without a trusted reference.
 All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (for example, saying a source does not use GPS when the source says nothing about GPS) as unsupported.`;
@@ -251,7 +251,7 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
         scope: "request",
         implementation: "azure-openai-custom-judge-v2",
         evaluatorModel: model,
-        evaluatorVersion: "2026-10-12.1",
+        evaluatorVersion: "2026-10-12.2",
         status: passed ? "passed" : "failed",
         referenceId: reference?.id ?? null,
         metrics,

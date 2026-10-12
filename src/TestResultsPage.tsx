@@ -62,10 +62,10 @@ export default function TestResultsPage() {
         <article><span>Cases</span><strong>{report.cases.length}</strong><small>{report.cases.filter(c => c.status === "failed").length} failed · {report.cases.filter(c => c.status === "not-evaluated").length} not evaluated</small></article>
         <article><span>Median answer time</span><strong>{times.median === null ? "Not captured" : `${Math.round(times.median)} ms`}</strong><small>{times.count} measured samples</small></article>
         <article><span>p95 answer time</span><strong>{times.p95 === null ? "Insufficient samples" : `${Math.round(times.p95)} ms`}</strong><small>{times.reason}</small></article>
-        <article><span>Reviewed expectations</span><strong>{report.cases.filter(c => c.reviewStatus === "approved").length}/{report.cases.length}</strong><small>Unreviewed references cannot establish correctness</small></article>
+        <article><span>Reviewed expectations</span><strong>{report.cases.filter(c => c.reviewStatus === "approved").length}/{report.cases.length}</strong><small>Source review and human judge calibration are separate</small></article>
       </section>
       <div className="test-layout"><section className="test-case-list"><h2>Questions</h2>{report.cases.map((c, i) => <button key={c.caseId} className={selected === i ? "selected" : ""} onClick={() => setSelected(i)}><strong>{c.question}</strong><span>{c.status} · {c.category}</span></button>)}</section>
-      {active && <section className="test-case-detail"><h2>{active.question}</h2><p>Run: {active.runId || "Not captured"} · Review: {active.reviewStatus}</p>
+      {active && <section className="test-case-detail"><h2>{active.question}</h2><p>Run: {active.runId || "Not captured"} · Review: {active.reviewStatus} · {active.reviewKind ?? "Method not recorded"} · {active.reviewer ?? "Reviewer not recorded"}</p>
         <h3>Actual answer</h3><p className="test-answer">{active.answer || "No answer returned"}</p>
         {active.evidence?.draftAnswer !== active.answer && active.evidence && <details><summary>Original draft and response decision</summary><p>{active.evidence.decision.action}: {active.evidence.decision.reason}</p><p className="test-answer">{active.evidence.draftAnswer}</p></details>}
         <h3>Expected facts or behaviour</h3><ul>{active.expectedFacts.map(f => <li key={f}>{f}</li>)}</ul>

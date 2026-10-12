@@ -2,9 +2,9 @@
 
 ## What is tested and what establishes correctness
 
-Official Netflix Help passages establish product facts, subject to their country, device, plan and account conditions. Human-reviewed case expectations must cite those passages. Application policy establishes allowed actions and approvals. Actual tool results establish what an action accomplished. A model judge supplies a fallible measurement; it is not the source of truth.
+Official Netflix Help passages establish product facts, subject to their country, device, plan and account conditions. Reviewed case expectations must cite those passages and identify the reviewer and review method. Application policy establishes allowed actions and approvals. Actual tool results establish what an action accomplished. A model judge supplies a fallible measurement; it is not the source of truth.
 
-evaluation/dataset.json contains six expandable smoke scenarios. Its expectations are researched drafts and deliberately remain pending human review. Source hashes identify the fetched pages; source snapshots remain private under work/. Updating a page invalidates its review. Do not change pending to approved without a named reviewer and review date. Frozen human labels in evaluation/judge-labels.json calibrate judges using separate development and held-out cases.
+evaluation/dataset.json contains six expandable smoke scenarios. Its expectations are source-reviewed by Codex at the user's request; evaluation/regression-30.json extends the same source-scoped suite to 30 questions. Source hashes identify the fetched pages; source snapshots remain private under work/. Updating a page invalidates its review. Approval requires a named reviewer, review date and explicit method. An AI source comparison is not a human calibration label. Frozen human labels in evaluation/judge-labels.json calibrate judges using separate development and held-out cases.
 
 The existing five saved-answer fixtures remain reproducible fixture metrics. They do not measure newly generated chatbot answers.
 
@@ -15,7 +15,7 @@ The existing five saved-answer fixtures remain reproducible fixture metrics. The
 3. Evaluate each live answer. Lexical checks remain diagnostics. The Azure custom judge is labelled explicitly as custom. Invalid citations or unsupported claims cause a fallback; unavailable or failed verification causes qualification. Preserve both draft and final answer and score the exact final text.
 4. Run a fresh-answer benchmark. scripts/run_benchmark.mjs calls the candidate endpoint for every selected case, checkpoints atomically and supports resume. It is usable after a change or whenever a comparison is needed. A benchmark does not publish anything.
 5. Apply offline metrics and export available numeric scores to Langfuse. Official RAGAS metrics are separate from custom diagnostics. Reviewed document labels support ranking metrics. Missing contexts, labels, usage, credentials or measurements remain unavailable, never zero or a fabricated pass.
-6. Inspect Test Results, compare a baseline and apply gates. Publishing is a separate deployment action. A pending review, partial suite or missing required provenance prevents a passing release gate.
+6. Inspect Test Results, compare a baseline and apply gates. Publishing is a separate deployment action. A pending review, partial suite, missing required provenance, missing official metrics or uncalibrated quality thresholds prevents a passing release gate.
 
 ## Where results appear
 
@@ -31,7 +31,7 @@ Track lexical grounding, citation validity/coverage, custom faithfulness/relevan
 
 Track actual filter compliance, returned-row scope membership, policy outcomes, tool correctness/task success, token usage and cost only where corresponding evidence exists. No complete provider tool trajectory or billed usage is inferred from trace counts. Missing values retain reasons.
 
-Reference-dependent correctness cannot pass on unreviewed expectations. Semantic and latency thresholds remain pending calibration instead of arbitrary numbers. Human calibration is still required.
+Reference-dependent metrics require source-reviewed expectations. Reviewer identity/method remains visible; source review does not prove the judge is accurate. Semantic and latency thresholds remain pending calibration instead of arbitrary numbers. Human calibration is still required.
 
 ## Candidate deployment and execution
 
@@ -52,7 +52,7 @@ The manual benchmark workflow uploads only the allowlisted public projection and
 
 ## Validation completed locally
 
-Controlled handler tests cover captured context, unsupported-draft fallback and unavailable-evaluator qualification. Upstream capture tests cover trusted admission, unchanged ordinary calls, actual scope and exact prompt fragments, and missing measurements. Both upstream handlers type-check. These checks validate code contracts; they are not a deployed official RAGAS benchmark.
+Controlled handler tests cover captured context, unsupported-draft fallback, unavailable-evaluator qualification and unsupported multi-specialist responses. Upstream capture tests cover trusted admission, unchanged ordinary calls, actual scope and exact prompt fragments, and missing measurements. Both upstream handlers type-check. These checks validate code contracts; they are not a deployed official RAGAS benchmark.
 
 ## Primary references
 
@@ -61,3 +61,9 @@ Controlled handler tests cover captured context, unsupported-draft fallback and 
 - https://langfuse.com/docs/evaluation/evaluation-methods/scores-via-sdk
 - https://supabase.com/docs/guides/functions/background-tasks
 - Netflix Help source URLs and hashes are recorded in evaluation/dataset.json.
+
+## Live candidate verification — 12 October 2026
+
+Separate -eval-candidate endpoints were deployed in the existing project because staging has no agents or chunks. Existing production endpoints remain in place. A six-case live smoke test captured actual query/prompt evidence and Langfuse score exports, and exposed a group-answer decision bug that was fixed and covered by a real-handler regression test. The custom evaluator prompt also separates missing advice from faithfulness and measures passage usefulness for individual parts of multi-issue questions. Official offline semantic RAGAS remains blocked by benchmark-runner Azure authentication. Source comparison is performed by Codex, while human-labelled judge calibration remains pending.
+
+The runner now requests SSE and measures first displayed answer content separately from total completion time; this is not provider model TTFT. --json retains compatibility but cannot measure first-content timing.

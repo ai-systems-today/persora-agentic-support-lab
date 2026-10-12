@@ -2,6 +2,7 @@ import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { evaluateCase, applyGates } from './benchmark_core.mjs';
+import { readBenchmarkResponse } from './benchmark_transport.mjs';
 
 const args = process.argv.slice(2);
 const option = (key, fallback) => args.includes(key) ? args[args.indexOf(key) + 1] : fallback;
@@ -17,7 +18,7 @@ let revision;
 try { revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true }).trim(); } catch { revision = 'unknown'; }
 const key = createHash('sha256').update(JSON.stringify({ dataset, gates, endpoint, revision })).digest('hex');
 let report = { schemaVersion: '1.0', runId: randomUUID(), createdAt: new Date().toISOString(), datasetVersion: dataset.version,
-  sourceVersion: dataset.sourceVersion, applicationVersion: option('--application-version', 'unknown'), evaluatorVersion: '2026-10-12.1', scope: 'fresh-application', runnerRevision: revision,
+  sourceVersion: dataset.sourceVersion, applicationVersion: option('--application-version', 'unknown'), evaluatorVersion: 'unknown', scope: 'fresh-application', runnerRevision: revision,
   status: 'running', cases: [], comparisonWarnings: [], resumeKey: key, endpointOrigin: parsedUrl.origin, publicSyntheticInput: dataset.publicSyntheticInput === true };
 if (args.includes('--resume')) {
   report = JSON.parse(await readFile(output, 'utf8'));
@@ -36,16 +37,19 @@ for (const test of dataset.cases.slice(0, limit)) {
   const startedAt = new Date().toISOString();
   let payload;
   try {
-    const headers = { 'Content-Type': 'application/json', Origin: option('--origin', 'https://ai-systems-today.github.io') };
+    const headers = { 'Content-Type': 'application/json', Accept: args.includes('--json') ? 'application/json' : 'text/event-stream', Origin: option('--origin', 'https://ai-systems-today.github.io') };
     const anonKey = process.env.SUPABASE_PUBLISHABLE_KEY;
     if (anonKey) { headers.apikey = anonKey; headers.Authorization = `Bearer ${anonKey}`; }
     const serviceKey = process.env.SUPABASE_BENCHMARK_SERVICE_KEY;
     if (serviceKey) { headers.apikey = serviceKey; headers.Authorization = `Bearer ${serviceKey}`; }
     const response = await fetch(endpoint, { method: 'POST', headers, signal: AbortSignal.timeout(Number(option('--timeout-ms', 60000))),
       body: JSON.stringify({ message: test.question, sessionToken: `benchmark-${report.runId}-${test.id}`, deviceId: randomUUID(), captureBenchmarkEvidence: Boolean(serviceKey) }) });
-    payload = await response.json();
+    payload = await readBenchmarkResponse(response, started);
     if (!response.ok) payload.error = `Application HTTP ${response.status}`;
   } catch (error) { payload = { error: error.name === 'TimeoutError' ? 'Application timeout' : 'Application request failed' }; }
+  const observedEvaluator = payload.evidence?.integrations?.ragas?.evaluatorVersion;
+  if (observedEvaluator && report.evaluatorVersion === 'unknown') report.evaluatorVersion = observedEvaluator;
+  if (observedEvaluator && report.evaluatorVersion !== observedEvaluator) payload.error = 'Evaluator changed during benchmark';
   const result = evaluateCase(test, payload, Math.round(performance.now() - started));
   result.startedAt = startedAt; result.finishedAt = new Date().toISOString();
   // Saved privately under work/. Public projection must remove this raw response.

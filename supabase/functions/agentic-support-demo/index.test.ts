@@ -13,6 +13,17 @@ const source = "Update your Netflix Household from a TV connected to your home i
 const draft = "Update your Netflix Household from a TV connected to your home internet [#1].";
 globalThis.fetch = async (url, init) => {
   const target = String(url);
+  if (target.endsWith("/.well-known/agent-card.json")) return Response.json({ name: "Test specialist", version: "1.0" });
+  if (target.endsWith("/message:send")) {
+    const requestBody = JSON.parse(String((init as { body?: unknown })?.body));
+    const taskId = crypto.randomUUID();
+    const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source))), b => b.toString(16).padStart(2, "0")).join("");
+    const capture = { schemaVersion: "1.0", requestId: taskId + "-1", searches: [], passages: [{ id: null, documentId: null, label: "Household", text: source, rank: 1 }], generatorContext: source, generatorContextHash: hash, generatorContextCaptured: true, retrievalMs: 12, embeddingMs: null, documentSearchMs: null, backendVersion: "test", corpusVersion: "test" };
+    return Response.json({ task: { id: taskId, contextId: requestBody.message.messageId, artifacts: [{ parts: [{ text: draft }], metadata: {
+      citations: [{ index: 1, title: "Household", url: "https://help.netflix.com/en/node/128339", snippet: source }],
+      specialists: [{ domain: "household", agentId: "test-agent", agentName: "Test specialist", widgetId: "test-widget" }], retrievalCaptures: [capture],
+    } }] } });
+  }
   if (target.includes("orchestrate-chat")) {
     const citations = [{ index: 1, chunk_id: "00000000-0000-0000-0000-000000000001", title: "Household", url: "https://help.netflix.com/en/node/128339", snippet: source }];
     const traceId = new Headers((init as { headers?: HeadersInit })?.headers).get("x-trace-id");
@@ -34,8 +45,8 @@ globalThis.fetch = async (url, init) => {
 };
 await import("./index.ts");
 const check = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
-const request = (sse = false) => new Request(`${project}/functions/v1/agentic-support-demo`, { method: "POST", headers: { Origin: "http://localhost:5173", "Content-Type": "application/json", ...(sse ? { Accept: "text/event-stream" } : {}) },
-  body: JSON.stringify({ message: "How do I update my Netflix Household from my TV?", sessionToken: crypto.randomUUID() }) });
+const request = (sse = false, message = "How do I update my Netflix Household from my TV?") => new Request(`${project}/functions/v1/agentic-support-demo`, { method: "POST", headers: { Origin: "http://localhost:5173", "Content-Type": "application/json", ...(sse ? { Accept: "text/event-stream" } : {}) },
+  body: JSON.stringify({ message, sessionToken: crypto.randomUUID() }) });
 
 Deno.test("candidate handler preserves exact evidence and controls final answer", async t => {
   await t.step("passes with captured generator passages and bounded relevance fraction", async () => {
@@ -72,6 +83,14 @@ Deno.test("candidate handler preserves exact evidence and controls final answer"
     check(evidence.integrations.ragas.status === "not-evaluated", "Failure turned into zero/pass");
     check(evidence.evaluationSnapshot.finalAnswer === content.delta, "Stream answer differs from evidence");
     check(evidence.evaluationSnapshot.decision.action === "qualify", "Decision missing");
+  });
+  await t.step("withholds an unsupported A2A group answer", async () => {
+    mode = "unsupported";
+    const payload = await (await handler(request(false, "My household verification fails and I cannot access my account email."))).json();
+    check(payload.evidence.pattern === "group-chat", "Group route did not execute");
+    check(payload.evidence.draftEvaluation.status === "failed", "Group draft failure was lost");
+    check(payload.evidence.evaluationSnapshot.decision.action === "fallback", "Group knowledge bypassed the response decision");
+    check(payload.answer !== draft, "Unsupported group answer was delivered");
   });
   globalThis.fetch = originalFetch;
 });
