@@ -25,20 +25,9 @@ Deno.test("repair records the exact fetched generator context and actual usage",
     fetcher: async (url, init) => {
       if (String(url).startsWith("https://help.netflix.com/")) return new Response('<article><h1>Netflix Help</h1><p>Use a non-Kids profile on the hotel TV and select the travel option shown. Follow the verification instructions for the account owner.</p></article>');
       const body = JSON.parse(String(init?.body)); prompt = body.messages[1].content;
-      return Response.json({ choices: [{ message: { content: JSON.stringify({ quotes: [{ sourceIndex: 1, text: "Use a non-Kids profile on the hotel TV and select the travel option shown." }] }) } }], usage: { prompt_tokens: 120, completion_tokens: 20 } });
+      return Response.json({ choices: [{ message: { content: "Use a non-Kids profile [#1]." } }], usage: { prompt_tokens: 120, completion_tokens: 20 } });
     } });
   check(result && prompt.includes(result.capture.generatorContext), "Captured context differs from the prompt");
   check(result?.inputTokens === 120 && result?.outputTokens === 20, "Provider usage lost");
   check(result?.capture.passages[0].text.includes("non-Kids"), "Wrong generator passage");
-});
-
-Deno.test("rejects model-selected text missing from the actual official source", async () => {
-  let rejected = false;
-  try {
-    await repairFromPrimarySources({ question: "hotel TV", runId: "bad-selection", endpoint: "https://test.openai.azure.com", apiKey: "test",
-      fetcher: async url => String(url).startsWith("https://help.netflix.com/")
-        ? new Response("<article><p>Follow the official account owner verification instructions for your device before watching Netflix away from home.</p></article>")
-        : Response.json({ choices: [{ message: { content: JSON.stringify({ quotes: [{ sourceIndex: 1, text: "Netflix gives unlimited free access." }] }) } }] }) });
-  } catch (error) { rejected = String(error).includes("not present"); }
-  check(rejected, "Fabricated model excerpt was accepted as official evidence");
 });

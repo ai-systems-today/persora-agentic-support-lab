@@ -11,8 +11,7 @@ let mode = "pass";
 let hydrationCount = 0;
 const source = "Update your Netflix Household from a TV connected to your home internet.";
 const draft = "Update your Netflix Household from a TV connected to your home internet [#1].";
-const repairedExcerpt = "Use a non-Kids profile and select I'm Traveling on the hotel TV.";
-const repairedAnswer = `"${repairedExcerpt}" [#1]`;
+const repairedAnswer = "Use a non-Kids profile and select I'm Traveling on the TV [#1].";
 globalThis.fetch = async (url, init) => {
   const target = String(url);
   if (target.startsWith("https://help.netflix.com/")) return mode === "repair"
@@ -41,7 +40,7 @@ globalThis.fetch = async (url, init) => {
   if (target.includes("chat/completions")) {
     if (mode === "unavailable") return new Response("", { status: 503 });
     const request = JSON.parse(String((init as { body?: unknown })?.body));
-    if (request.messages[0].content.startsWith("Answer using only")) return Response.json({ choices: [{ message: { content: JSON.stringify({ quotes: [{ sourceIndex: 1, text: repairedExcerpt }] }) } }], usage: { prompt_tokens: 200, completion_tokens: 20 } });
+    if (request.messages[0].content.startsWith("Answer using only")) return Response.json({ choices: [{ message: { content: repairedAnswer } }], usage: { prompt_tokens: 200, completion_tokens: 20 } });
     const exact = JSON.parse(request.messages[1].content);
     const rejected = ["unsupported", "repair"].includes(mode) && exact.answer === draft;
     return Response.json({ choices: [{ message: { content: JSON.stringify({ faithfulness: rejected ? .5 : 1, responseRelevancy: 1, contextPrecision: 1,

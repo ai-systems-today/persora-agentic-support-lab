@@ -71,6 +71,7 @@ export function comparisonWarnings(a: BenchmarkReport, b: BenchmarkReport): stri
 export function decideAnswer(input: { knowledgeAnswer: boolean; judgeStatus: string; invalidCitations: boolean; unsupportedCount: number; generatorEvidenceCaptured?: boolean }) {
   if (!input.knowledgeAnswer) return { action: "policy-response" as const, reason: "Non-knowledge route; existing authorization/approval/contact policy applies" };
   if (input.invalidCitations || input.unsupportedCount > 0) return { action: "fallback" as const, reason: "Invalid citations or unsupported claims; draft withheld" };
+  if (input.judgeStatus === "failed") return { action: "fallback" as const, reason: "Semantic verification failed; draft withheld even when no individual unsupported claim was returned" };
   if (input.generatorEvidenceCaptured === false) return { action: "qualify" as const, reason: "Exact generator retrieval context is unavailable; measurement remains diagnostic" };
   if (input.judgeStatus !== "passed") return { action: "qualify" as const, reason: "Semantic evaluation failed or is unavailable; answer cannot be delivered as verified" };
   return { action: "deliver" as const, reason: "Applicable semantic evaluation passed; lexical checks remain diagnostics" };

@@ -28,3 +28,7 @@ describe("shared evaluation evidence", () => {
     expect(comparisonWarnings(a, { ...a, sourceVersion: "2" })).toEqual(["sourceVersion differs; comparison is not controlled"]);
   });
 });
+
+it("withholds explicitly failed answers even when the judge lists no unsupported claim", () => {
+  expect(decideAnswer({ knowledgeAnswer: true, judgeStatus: "failed", invalidCitations: false, unsupportedCount: 0, generatorEvidenceCaptured: true }).action).toBe("fallback");
+});

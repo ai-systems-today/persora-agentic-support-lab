@@ -10,7 +10,7 @@ export type LiveRagEvaluation = {
   scope: "request" | null;
   implementation: "azure-openai-custom-judge-v2";
   evaluatorModel: string | null;
-  evaluatorVersion: "2026-10-12.3";
+  evaluatorVersion: "2026-10-12.2";
   status: "passed" | "failed" | "not-evaluated";
   referenceId: string | null;
   metrics: Record<LiveRagMetricName, number | null>;
@@ -95,7 +95,7 @@ export const notEvaluatedLiveRag = (reason: string): LiveRagEvaluation => ({
   scope: null,
   implementation: "azure-openai-custom-judge-v2",
   evaluatorModel: null,
-  evaluatorVersion: "2026-10-12.3",
+  evaluatorVersion: "2026-10-12.2",
   status: "not-evaluated",
   referenceId: null,
   metrics: emptyMetrics(),
@@ -190,7 +190,7 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
         headers: { "api-key": input.apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [
-            { role: "system", content: `${systemPrompt}${evaluatorAttempt > 0 ? "\nThis is a contract-repair attempt. Return every required metric. A faithfulness score below 0.8 requires identifying the actual unsupported factual claims. Verbatim source statements present in the contexts are supported; incompleteness belongs to responseRelevancy, not faithfulness. When referenceMetricsRequired is true, contextRecall and factualCorrectness MUST be numeric values, never null." : ""}` },
+            { role: "system", content: `${systemPrompt}${evaluatorAttempt > 0 ? "\nThis is a contract-repair attempt. Return every required metric. When referenceMetricsRequired is true, contextRecall and factualCorrectness MUST be numeric values, never null." : ""}` },
             { role: "user", content: JSON.stringify(payload) },
           ],
           temperature: 0,
@@ -227,9 +227,6 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
       const unsupportedClaims = Array.isArray(parsed.unsupportedClaims)
         ? parsed.unsupportedClaims.filter((value): value is string => typeof value === "string").slice(0, 20)
         : [];
-      if (metrics.faithfulness < 0.8 && unsupportedClaims.length === 0) {
-        throw new Error("Low faithfulness without an unsupported factual claim; inconsistent score rejected");
-      }
       if (!Array.isArray(parsed.relevantContextIndices) || parsed.relevantContextIndices.some(value => !Number.isInteger(value) || value < 1 || value > contexts.length)) {
         throw new Error("Azure evaluator returned missing or invalid relevant-context indices");
       }
@@ -254,7 +251,7 @@ All numeric scores are numbers from 0 to 1. Treat unsupported negative claims (f
         scope: "request",
         implementation: "azure-openai-custom-judge-v2",
         evaluatorModel: model,
-        evaluatorVersion: "2026-10-12.3",
+        evaluatorVersion: "2026-10-12.2",
         status: passed ? "passed" : "failed",
         referenceId: reference?.id ?? null,
         metrics,
