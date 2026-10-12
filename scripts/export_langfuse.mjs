@@ -1,7 +1,7 @@
 // Optional server-side export. No console URL, private input or credentials enter public reports.
 import { readFile, writeFile } from 'node:fs/promises';
-import { randomBytes } from 'node:crypto';
-import { exportNumericScores } from '../supabase/functions/_shared/langfuseScores.ts';
+import { createHash } from 'node:crypto';
+import { exportNumericScoreBatch } from '../supabase/functions/_shared/langfuseScores.ts';
 export async function exportExperiment(report, config, fetcher = fetch) {
   if (!config.baseUrl || !config.publicKey || !config.secretKey) return { status: 'unavailable', reason: 'Langfuse server credentials not configured' };
   if (!new URL(config.baseUrl).protocol.startsWith('https')) throw new Error('HTTPS required for Langfuse');
@@ -10,8 +10,8 @@ export async function exportExperiment(report, config, fetcher = fetch) {
   for (const c of report.cases) {
     // Never export blocked prompts, including synthetic blocked examples.
     if (c.blocked || (c.category === 'policy' && /another Netflix account/i.test(c.question))) { results.push({ caseId: c.caseId, status: 'suppressed' }); continue; }
-    const traceId = randomBytes(16).toString('hex');
-    const spanId = randomBytes(8).toString('hex');
+    const traceId = createHash('sha256').update(`${report.runId}/${c.caseId}/trace`).digest('hex').slice(0, 32);
+    const spanId = createHash('sha256').update(`${report.runId}/${c.caseId}/span`).digest('hex').slice(0, 16);
     const end = BigInt(Date.now()) * 1000000n;
     const startTime = c.startedAt ? BigInt(Date.parse(c.startedAt)) * 1000000n : end;
     const endTime = c.finishedAt ? BigInt(Date.parse(c.finishedAt)) * 1000000n : end;
@@ -28,7 +28,7 @@ export async function exportExperiment(report, config, fetcher = fetch) {
         headers: { Authorization: `Basic ${btoa(`${config.publicKey}:${config.secretKey}`)}`, 'Content-Type': 'application/json', 'x-langfuse-ingestion-version': '4' },
         body: JSON.stringify({ resourceSpans: [{ resource: { attributes: [attr('service.name', 'persora-benchmark')] }, scopeSpans: [{ scope: { name: 'persora-evaluation', version: report.evaluatorVersion }, spans: [span] }] }] }) });
       if (!response.ok) throw new Error(`Trace export HTTP ${response.status}`);
-      const scores = await exportNumericScores({ ...config, traceId, fetcher, scores: c.metrics.filter(m => m.status === 'evaluated').map(m => ({ name: m.name, value: m.value })) });
+      const scores = await exportNumericScoreBatch({ ...config, traceId, fetcher, scores: c.metrics.filter(m => m.status === 'evaluated').map(m => ({ name: m.name, value: m.value })) });
       results.push({ caseId: c.caseId, status: scores.status, exportedScores: scores.exported });
     } catch { results.push({ caseId: c.caseId, status: 'failed' }); }
   }

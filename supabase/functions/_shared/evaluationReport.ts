@@ -8,7 +8,8 @@ export type EvidenceSnapshot = {
   generatorContextCaptured: boolean;
   retrievalRequest: { query: string; filters: Record<string, string>; topK: number | null; scopeValid?: boolean | null } | null;
   versions: { application: string | null; backend: string | null; prompt: string; corpus: string | null; evaluator: string };
-  decision: { action: "deliver" | "qualify" | "fallback" | "policy-response"; reason: string };
+  decision: { action: "deliver" | "repair" | "qualify" | "fallback" | "policy-response"; reason: string };
+  repair?: { attempted: boolean; outcome: string; sourceCount?: number; generationMs?: number; evaluationMs?: number | null; inputTokens?: number | null; outputTokens?: number | null };
 };
 export type BenchmarkCase = {
   id: string; category: string; question: string;
@@ -31,7 +32,7 @@ export type BenchmarkReport = {
   schemaVersion: "1.0"; runId: string; createdAt: string; datasetVersion: string;
   sourceVersion: string; applicationVersion: string; evaluatorVersion: string;
   scope: "fresh-application" | "contract-fixture"; status: "running" | "passed" | "failed" | "not-evaluated";
-  cases: CaseResult[]; comparisonWarnings: string[];
+  cases: CaseResult[]; comparisonWarnings: string[]; gateFailures?: string[];
 };
 
 export const metric = (name: string, value: number | null, unit: Metric["unit"], method: string, reason: string, status?: MetricStatus): Metric => {

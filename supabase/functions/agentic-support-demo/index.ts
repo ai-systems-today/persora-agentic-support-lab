@@ -6,6 +6,7 @@ import { evaluateExactRun, notEvaluatedLiveRag, type LiveRagEvaluation } from ".
 import { decideAnswer, type EvidenceSnapshot } from "../_shared/evaluationReport.ts";
 import { allowServerCapture, parseUpstreamEvidence, retrievalWindow, type UpstreamRetrievalEvidence } from "../_shared/upstreamRetrievalEvidence.ts";
 import { exportNumericScores } from "../_shared/langfuseScores.ts";
+import { repairFromPrimarySources } from "../_shared/primarySourceRepair.ts";
 import { evaluateConcurrentCheck, planRecoveryEvidence, runConcurrentChecks, type ConcurrentCheckName, type OrchestrationProof } from "../_shared/orchestrationProof.ts";
 import { selectOrchestrationPattern, type HandoffMode, type Pattern } from "../_shared/orchestrationRouter.ts";
 import { selectPrimarySpecialist, type SpecialistSelection } from "../_shared/specialistRouter.ts";
@@ -784,7 +785,7 @@ async function runExactEvaluation(state: typeof State.State) {
     };
   }
   const qualityContext = state.evaluationContexts.length ? state.evaluationContexts : await qualityCitations(state.citations);
-  const capturedContexts = state.upstreamRetrieval.flatMap(c => c.passages.map(p => p.text));
+  const capturedContexts = state.upstreamRetrieval.filter(c => c.stage !== "draft").flatMap(c => c.passages.map(p => p.text));
   const allContexts = capturedContexts.length ? capturedContexts : qualityContext
     .map((citation, index) => `[#${index + 1}] ${citation.label}\n${citation.snippet ?? ""}`.trim());
   const contexts = allContexts;
@@ -819,18 +820,39 @@ async function runExactEvaluation(state: typeof State.State) {
 
 async function applyEvaluationDecision(state: typeof State.State) {
   const knowledgeAnswer = state.allowed && state.pattern !== "handoff" && (state.specialist !== null || state.a2a.executed) && !state.eventTypes.includes("verified_code_not_found");
-  const decision = decideAnswer({ knowledgeAnswer, judgeStatus: state.ragas.status,
+  let decision: EvidenceSnapshot["decision"] = decideAnswer({ knowledgeAnswer, judgeStatus: state.ragas.status,
     generatorEvidenceCaptured: state.upstreamRetrieval.length > 0 && state.upstreamRetrieval.every(c => c.generatorContextCaptured),
     invalidCitations: knowledgeAnswer && (state.citations.length === 0 || (state.quality.executed && state.quality.referencedCitationCount > state.quality.validCitationCount)),
     unsupportedCount: state.ragas.unsupportedClaims.length });
   const draftAnswer = state.answer;
+  const draftEvaluation = state.ragas;
+  let repair: EvidenceSnapshot["repair"];
+  if (knowledgeAnswer && decision.action !== "deliver" && state.nodeTrace.reduce((sum, node) => sum + node.durationMs, 0) < 25000) {
+    try {
+      const repaired = await repairFromPrimarySources({ question: state.message, runId: state.traceId,
+        endpoint: Deno.env.get("AZURE_OPENAI_ENDPOINT") ?? "https://ai-genaiappshub118707119222.openai.azure.com",
+        apiKey: Deno.env.get("AZURE_OPENAI_API_KEY") ?? "" });
+      if (repaired) {
+        const candidate = { ...state, answer: repaired.answer, citations: repaired.citations, evaluationContexts: repaired.contexts,
+          upstreamRetrieval: [...state.upstreamRetrieval.map(c => ({ ...c, stage: "draft" as const })), { ...repaired.capture, stage: "final" as const }] };
+        const checked = (await runExactEvaluation(candidate)).ragas;
+        const quality = evaluateLiveAnswer({ question: state.message, answer: repaired.answer, citations: repaired.contexts, requiredTopics: requiredQualityTopics(state) });
+        repair = { attempted: true, outcome: "failed-verification", sourceCount: repaired.contexts.length, generationMs: repaired.generationMs, evaluationMs: checked.durationMs, inputTokens: repaired.inputTokens, outputTokens: repaired.outputTokens };
+        if (checked.status === "passed" && checked.unsupportedClaims.length === 0 && quality.validCitationCount === quality.referencedCitationCount && quality.referencedCitationCount > 0) {
+          state = { ...candidate, ragas: checked, quality };
+          decision = { action: "repair", reason: "One revised answer was generated from fetched official pages and passed its exact-context checks" };
+          repair.outcome = "passed";
+        }
+      }
+    } catch { repair = { attempted: true, outcome: "unavailable" }; }
+  }
   const answer = decision.action === "fallback"
     ? "I could not verify the generated answer against its sources. Please consult the returned official sources or Netflix Support before acting on it."
     : decision.action === "qualify"
       ? `Verification warning: this answer did not pass the semantic check or the check was unavailable. Confirm the guidance against the official sources before acting.\n\n${draftAnswer}`
-      : draftAnswer;
+      : state.answer;
   const snapshot: EvidenceSnapshot = {
-    schemaVersion: "1.0", runId: state.traceId, question: state.message, draftAnswer, finalAnswer: answer,
+    schemaVersion: "1.0", runId: state.traceId, question: state.message, draftAnswer, finalAnswer: answer, repair,
     contexts: state.citations.map((value, index) => {
       const c = value as Record<string, unknown>;
       return { id: typeof c.chunk_id === "string" ? c.chunk_id : null, rank: index + 1,
@@ -838,16 +860,25 @@ async function applyEvaluationDecision(state: typeof State.State) {
         url: typeof c.url === "string" ? c.url : typeof c.source_url === "string" ? c.source_url : null,
         text: citationEvidenceText(value) ?? "" };
     }),
-    contextOrigin: "returned-citations", generatorContextCaptured: state.upstreamRetrieval.length > 0 && state.upstreamRetrieval.every(c => c.generatorContextCaptured),
+    contextOrigin: "returned-citations", generatorContextCaptured: state.upstreamRetrieval.filter(c => c.stage !== "draft").length > 0 && state.upstreamRetrieval.filter(c => c.stage !== "draft").every(c => c.generatorContextCaptured),
     retrievalRequest: state.upstreamRetrieval.flatMap(c => c.searches).at(-1) ?? null,
     versions: { application: null, backend: Deno.env.get("APP_COMMIT_SHA") ?? null,
-      prompt: PROMPT_VERSION, corpus: state.upstreamRetrieval[0]?.corpusVersion ?? Deno.env.get("CORPUS_VERSION") ?? null, evaluator: state.ragas.evaluatorVersion }, decision,
+      prompt: PROMPT_VERSION, corpus: state.upstreamRetrieval.at(-1)?.corpusVersion ?? Deno.env.get("CORPUS_VERSION") ?? null, evaluator: state.ragas.evaluatorVersion }, decision,
   };
   // Preserve the original failure and evaluate the exact final displayed answer separately.
-  const finalEvaluation = answer === draftAnswer ? state.ragas : (await runExactEvaluation({ ...state, answer })).ragas;
-  const finalQuality = answer === draftAnswer ? state.quality : evaluateLiveAnswer({ question: state.message, answer, citations: state.evaluationContexts, requiredTopics: requiredQualityTopics(state) });
-  return { answer, snapshot, draftEvaluation: state.ragas, ragas: finalEvaluation, quality: finalQuality,
+  const finalEvaluation = answer === state.answer ? state.ragas : (await runExactEvaluation({ ...state, answer })).ragas;
+  const finalQuality = answer === state.answer ? state.quality : evaluateLiveAnswer({ question: state.message, answer, citations: state.evaluationContexts, requiredTopics: requiredQualityTopics(state) });
+  return { answer, snapshot, draftEvaluation, ragas: finalEvaluation, quality: finalQuality,
+    citations: state.citations, evaluationContexts: state.evaluationContexts, upstreamRetrieval: state.upstreamRetrieval,
     eventTypes: [`evaluation_decision_${decision.action}`] };
+}
+
+function measuredEvaluationMs(result: typeof State.State): number | null {
+  const initial = result.draftEvaluation?.durationMs ?? null;
+  const final = result.ragas.inputHashes?.answer !== result.draftEvaluation?.inputHashes?.answer ? result.ragas.durationMs : null;
+  const unusedRepair = result.snapshot?.repair?.outcome !== 'passed' ? result.snapshot?.repair?.evaluationMs : null;
+  const values = [initial, final, unusedRepair].filter((v): v is number => typeof v === 'number');
+  return values.length ? values.reduce((a, b) => a + b, 0) : null;
 }
 
 const graph = new StateGraph(State)
@@ -1045,7 +1076,7 @@ function streamAgenticRun(input: typeof State.State, origin: string, started: nu
           evaluationSnapshot: result.allowed ? result.snapshot : null,
           privateEvaluationEvidence: result.allowed && result.privateCapture ? result.upstreamRetrieval : undefined,
           draftEvaluation: result.draftEvaluation,
-          timings: { serverProcessingMs: totalMs, evaluationMs: result.nodeTrace.filter(n => /evaluation/.test(n.node)).reduce((a, n) => a + n.durationMs, 0), retrievalMs: retrievalWindow(result.upstreamRetrieval) },
+          timings: { serverProcessingMs: totalMs, evaluationMs: measuredEvaluationMs(result), retrievalMs: retrievalWindow(result.upstreamRetrieval) },
           orchestrationProof: result.orchestrationProof,
           followUps,
           retrieval: { ...retrievalEvidence(result.citations), durationMs: retrievalWindow(result.upstreamRetrieval) },
@@ -1299,7 +1330,7 @@ Deno.serve(async (req: Request) => {
       evaluationSnapshot: result.allowed ? result.snapshot : null,
           privateEvaluationEvidence: result.allowed && result.privateCapture ? result.upstreamRetrieval : undefined,
       draftEvaluation: result.draftEvaluation,
-      timings: { serverProcessingMs: totalMs, evaluationMs: result.nodeTrace.filter(n => /evaluation/.test(n.node)).reduce((a, n) => a + n.durationMs, 0), retrievalMs: retrievalWindow(result.upstreamRetrieval) },
+      timings: { serverProcessingMs: totalMs, evaluationMs: measuredEvaluationMs(result), retrievalMs: retrievalWindow(result.upstreamRetrieval) },
       orchestrationProof: result.orchestrationProof,
       followUps: result.followUps,
       retrieval: { ...retrievalEvidence(result.citations), durationMs: retrievalWindow(result.upstreamRetrieval) },

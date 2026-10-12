@@ -7,7 +7,7 @@ export function evaluateCase(test, payload, elapsedMs) {
   let snapshot = e.evaluationSnapshot ?? null;
   const privateCaptures = e.privateEvaluationEvidence ?? [];
   if (snapshot && privateCaptures.length) {
-    snapshot = { ...snapshot, contexts: privateCaptures.flatMap(c => c.passages.map(p => ({ id: p.id, rank: p.rank, label: p.label, url: null, text: p.text }))), contextOrigin: 'generator-passages' };
+    snapshot = { ...snapshot, contexts: privateCaptures.filter(c => c.stage !== 'draft').flatMap(c => c.passages.map(p => ({ id: p.id, rank: p.rank, label: p.label, url: null, text: p.text }))), contextOrigin: 'generator-passages' };
   }
   const metrics = [];
   const failures = [];
@@ -16,6 +16,8 @@ export function evaluateCase(test, payload, elapsedMs) {
   evaluated('retrieval_ms', e.retrieval?.durationMs, 'retrieval-span-v1', 'Missing retrieval-only span is not estimated from generation time', 'ms');
   evaluated('first_answer_text_ms', e.timings?.firstAnswerTextMs, 'first-answer-content-v1', 'JSON transport cannot measure first streamed answer text', 'ms');
   evaluated('evaluation_ms', e.timings?.evaluationMs ?? judge?.durationMs, 'server-evaluator-span-v1', 'Includes blocking checks when captured', 'ms');
+  evaluated('repair_input_tokens', snapshot?.repair?.inputTokens, 'provider-repair-usage', 'Repair generation only; not total request usage', 'count');
+  evaluated('repair_output_tokens', snapshot?.repair?.outputTokens, 'provider-repair-usage', 'Repair generation only; not total request usage', 'count');
   for (const [name, key] of [['lexical_grounding', 'grounding'], ['citation_validity', 'citationValidity'], ['citation_coverage', 'citationCoverage'], ['lexical_question_overlap', 'answerRelevance'], ['lexical_intent_coverage', 'intentCoverage']]) {
     evaluated(name, q.executed ? q[key] : null, q.method ?? 'deterministic-v1', q.reason ?? 'Deterministic check not executed');
   }

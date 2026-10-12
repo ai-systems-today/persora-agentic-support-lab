@@ -17,11 +17,12 @@ describe("upstream evidence trust and timing", () => {
   });
   it("uses elapsed parallel retrieval time rather than summing overlapping durations", () => {
     const captures = [
-      { retrievalStartedAt: "2026-10-12T00:00:00.000Z", retrievalFinishedAt: "2026-10-12T00:00:01.000Z" },
-      { retrievalStartedAt: "2026-10-12T00:00:00.500Z", retrievalFinishedAt: "2026-10-12T00:00:01.500Z" },
+      { retrievalMs: 1000, retrievalStartedAt: "2026-10-12T00:00:00.000Z", retrievalFinishedAt: "2026-10-12T00:00:01.000Z" },
+      { retrievalMs: 1000, retrievalStartedAt: "2026-10-12T00:00:00.500Z", retrievalFinishedAt: "2026-10-12T00:00:01.500Z" },
     ] as UpstreamRetrievalEvidence[];
     expect(retrievalWindow(captures)).toBe(1500);
     expect(retrievalWindow([captures[0], { ...captures[1], retrievalStartedAt: null }])).toBeNull();
     expect(retrievalWindow([])).toBeNull();
+    expect(retrievalWindow([{ ...captures[0], stage: "draft" }, { ...captures[1], stage: "final", retrievalStartedAt: "2026-10-12T00:00:10.000Z", retrievalFinishedAt: "2026-10-12T00:00:11.000Z" }])).toBe(2000);
   });
 });

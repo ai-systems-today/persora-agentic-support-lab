@@ -6,6 +6,7 @@ export type UpstreamRetrievalEvidence = {
   retrievalMs: number | null; embeddingMs: number | null; documentSearchMs: number | null;
   backendVersion: string | null; corpusVersion: string | null;
   retrievalStartedAt?: string | null; retrievalFinishedAt?: string | null;
+  stage?: "draft" | "final";
 };
 export function allowServerCapture(header: string | null, key: string | undefined, requested: unknown): boolean {
   if (requested !== true || !key || !header) return false;
@@ -26,7 +27,12 @@ export async function parseUpstreamEvidence(value: unknown, expectedId?: string)
   return hash === r.generatorContextHash ? r : null;
 }
 export function retrievalWindow(captures: UpstreamRetrievalEvidence[]): number | null {
-  if (captures.length === 1) return captures[0].retrievalMs;
+  if (captures.some(c => c.stage)) {
+    const stages = [...new Set(captures.map(c => c.stage ?? "initial"))];
+    const windows = stages.map(stage => retrievalWindow(captures.filter(c => (c.stage ?? "initial") === stage).map(({ stage: _stage, ...c }) => c)));
+    return windows.every((v): v is number => v !== null) ? windows.reduce((a, b) => a + b, 0) : null;
+  }
+  if (captures.length === 1) return typeof captures[0].retrievalMs === "number" && Number.isFinite(captures[0].retrievalMs) && captures[0].retrievalMs >= 0 ? captures[0].retrievalMs : null;
   if (!captures.length) return null;
   const starts = captures.map(c => c.retrievalStartedAt ? Date.parse(c.retrievalStartedAt) : NaN);
   const ends = captures.map(c => c.retrievalFinishedAt ? Date.parse(c.retrievalFinishedAt) : NaN);

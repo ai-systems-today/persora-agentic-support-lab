@@ -5,6 +5,7 @@ export function publicReport(report) {
     datasetVersion: report.datasetVersion, sourceVersion: report.sourceVersion, applicationVersion: report.applicationVersion,
     evaluatorVersion: report.evaluatorVersion, scope: report.scope, status: report.status, projection: 'public-summary',
     comparisonWarnings: [...(report.comparisonWarnings ?? []), 'Public summary omits full source passages and private execution payloads'],
+    gateFailures: (report.gateFailures ?? []).map(redact),
     cases: report.cases.map(c => ({ caseId: c.caseId, question: redact(c.question), category: c.category, runId: c.runId,
       status: c.status, answer: redact(c.answer), metrics: c.metrics.map(m => ({ name: m.name, value: m.value, unit: m.unit, status: m.status, method: m.method, reason: redact(m.reason) })),
       failures: c.failures.map(redact), evidence: null, sources: c.sources.map(s => ({ label: redact(s.label), url: s.url && /^https:\/\/help\.netflix\.com\//.test(s.url) ? s.url : null, text: '' })),
