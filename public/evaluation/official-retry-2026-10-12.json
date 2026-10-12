@@ -1,0 +1,475 @@
+{
+  "schemaVersion": "1.0",
+  "runId": "14c17596-1aac-4c10-8d1f-74d3e4f6a57e",
+  "createdAt": "2026-10-12T10:45:41.369Z",
+  "datasetVersion": "netflix-regression-30-2026-10-12.source-reviewed-1.multiissue-evaluator-retry-1",
+  "sourceVersion": "78a8cdb457c179cff99581aa86c3d09deb17af60a56cbe567bff9f70bbf93e28",
+  "applicationVersion": "device-label-candidate-2026-10-12",
+  "evaluatorVersion": "2026-10-12.2",
+  "scope": "fresh-application",
+  "status": "failed",
+  "projection": "public-summary",
+  "comparisonWarnings": [
+    "Public summary omits full source passages and private execution payloads",
+    "Independent fresh retry run; scores do not replace errors recorded for the earlier answer."
+  ],
+  "gateFailures": [
+    "Release quality thresholds remain pending calibration"
+  ],
+  "cases": [
+    {
+      "caseId": "multi-issue-account",
+      "question": "My account is billed in another country, household verification fails, and I cannot access my original email. What should I do?",
+      "category": "knowledge",
+      "runId": "52494b26-bc5b-4399-b2cd-b6ebc7aeb393",
+      "status": "passed",
+      "answer": "## Billing Country for Netflix Accounts\n\nNetflix charges your account in the currency of the country where you originally signed up. If you have moved to a new country and want to update your billing to reflect the new location, here’s what you need to know:\n\n1. **Changing Your Billing Country**: \n   - Netflix does not automatically adjust the billing country when you relocate. You must cancel your current membership and then restart it in your new country to align with the local pricing, currency, and payment methods. Until this is done, you will continue to be charged in the currency of the original signup country[#8].\n\n2. **Implications of Billing in the Original Country**:\n   - Your subscription pricing, taxes, and payment methods may not align with the options available in your new country[#8].\n\nIf you are considering this change and need assistance, you can refer to Netflix’s Help Center or contact authenticated Netflix support for further guidance.\n\nIf you are experiencing issues with verifying your Netflix Household, here’s how you can troubleshoot and resolve the problem:\n\n---\n\n## Steps to Resolve Household Verification Failures\n\n1. **Verify Email or Text Delivery**\n   - Netflix will send a verification link to the email address or phone number associated with the account. Ensure that you are checking the correct email inbox or phone.\n   - If you don’t receive the verification link via email, use the \"Resend Email\" option or choose to receive the link via text instead. Note that verification links expire after 15 minutes, so act promptly upon receiving them [#9][#14].\n\n2. **Confirm the Device is Part of Your Netflix Household**\n   - If you see a message like \"Your TV/device isn’t part of the Netflix Household,\" it means Netflix is unable to associate the device with your household.\n   - To fix this, update your Netflix Household by selecting **Update Netflix Household** on a device connected to your home internet. A verification link will be sent to confirm the update [#11][#14].\n\n3. **Check for Unauthorized Devices**\n   - Sometimes, other devices linked to your account (e.g., from a hotel stay or another household) may cause issues.\n   - Visit [Netflix’s Manage Account Access page](https://www.netflix.com/manageaccountaccess) to check which devices are signed in to your account. Sign out of unrecognized devices or choose **Sign out of all devices**. Then, retry the household verification process [#14][#11].\n\n4. **Ensure a Stable Internet Connection**\n   - The device performing the verification must be connected to your Netflix Household’s primary internet connection. Unstable connections or VPNs can interfere with the verification process [#14].\n\n5. **If You're Traveling**\n   - If you’re away from home, you can request temporary access for your device. When prompted, select **I’m Traveling** or **Watch Temporarily** on your TV. Netflix will send a four-digit temporary access code to your registered email or phone, which you can use to watch temporarily [#14].\n\n---\n\nIf these steps don’t resolve the issue, there might be account-specific concerns that need to be addressed directly with Netflix. For further assistance, please contact Netflix Support at [Netflix Help Center](https://help.netflix.com/contactus).\n\n## If You Can't Access Your Original Email Address\n\nIf you no longer have access to the email address linked to your Netflix account, follow these steps to recover your account:\n\n1. **Use the \"I don't remember my email or phone\" option:**\n   - Go to the [Netflix login page](https://www.netflix.com/).\n   - Select **\"Need help?\"** or **\"Forgot email/password?\"**.\n   - Choose the option **\"I don't remember my email or phone\"** and fill out the required form. This will help Netflix locate your account based on other details.\n\n2. **Check your billing provider:**\n   - If you're billed through another company (e.g., your internet provider or a third-party service), search for the service provider in the [Netflix Help Center](https://help.netflix.com/). Then, look for the specific article about signing in through that provider.\n\n3. **Contact Netflix Support:**\n   - If you're still unable to access your account after trying the steps above, you'll need to contact Netflix's customer support directly. They can help verify your identity and assist with account recovery. Go to the [Netflix Contact Us page](https://help.netflix.com/contactus) for support options.\n\nIf you have more questions or need further guidance, let me know!",
+      "metrics": [
+        {
+          "name": "total_answer_ms",
+          "value": 25145,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "client-monotonic-clock-v1",
+          "reason": "Request start through complete response"
+        },
+        {
+          "name": "retrieval_ms",
+          "value": 3025,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "retrieval-span-v1",
+          "reason": "Missing retrieval-only span is not estimated from generation time"
+        },
+        {
+          "name": "first_answer_text_ms",
+          "value": 25139,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "first-answer-content-v1",
+          "reason": "JSON transport cannot measure first streamed answer text"
+        },
+        {
+          "name": "evaluation_ms",
+          "value": 3797,
+          "unit": "ms",
+          "status": "evaluated",
+          "method": "server-evaluator-span-v1",
+          "reason": "Includes blocking checks when captured"
+        },
+        {
+          "name": "repair_input_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-repair-usage",
+          "reason": "Repair generation only; not total request usage"
+        },
+        {
+          "name": "repair_output_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-repair-usage",
+          "reason": "Repair generation only; not total request usage"
+        },
+        {
+          "name": "lexical_grounding",
+          "value": 0.243,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "citation_validity",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "citation_coverage",
+          "value": 0.432,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "lexical_question_overlap",
+          "value": 0.818,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "lexical_intent_coverage",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "deterministic-grounding-v5-negative-claim",
+          "reason": "One or more substantive claims lacked a citation or enough lexical support in the referenced source text."
+        },
+        {
+          "name": "custom_faithfulness",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The answer accurately reflects the necessary steps for changing billing country and resolving household verification issues as outlined in the contexts."
+        },
+        {
+          "name": "custom_answer_relevancy",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "The answer directly addresses the user's concerns about billing in another country, household verification failures, and accessing their original email."
+        },
+        {
+          "name": "custom_context_relevance_fraction",
+          "value": 0.2,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "2026-10-12.2",
+          "reason": "All provided contexts are relevant and useful for answering the question. Contract normalization computed 5/25 relevant supplied contexts."
+        },
+        {
+          "name": "custom_context_recall",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "2026-10-12.2",
+          "reason": "No applicable custom judgement"
+        },
+        {
+          "name": "custom_factual_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "2026-10-12.2",
+          "reason": "No applicable custom judgement"
+        },
+        {
+          "name": "unsupported_claims",
+          "value": 0,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "custom-judge",
+          "reason": "Count is diagnostic; empty list does not override a failing faithfulness score"
+        },
+        {
+          "name": "precision_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "recall_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "ndcg_at_k",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "reviewed-document-labels-v1",
+          "reason": "Reviewed relevant document labels unavailable"
+        },
+        {
+          "name": "request_success",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "http-application-v1",
+          "reason": "Successful transport does not prove relevant retrieval"
+        },
+        {
+          "name": "required_filter_compliance",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "case-filter-contract-v1",
+          "reason": "Actual upstream request and reviewed required filters must both be captured"
+        },
+        {
+          "name": "query_intent_preservation",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "review-required",
+          "reason": "Actual query and semantic intent assessment not captured"
+        },
+        {
+          "name": "authorization_scope_compliance",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "returned-row-scope-membership-v1",
+          "reason": "Checks returned row membership against the actual scoped request; does not replace an authorization security audit"
+        },
+        {
+          "name": "returned_count",
+          "value": 20,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "returned-citations-v1",
+          "reason": "Returned citations may be a subset of retrieval results"
+        },
+        {
+          "name": "unique_document_count",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "captured-document-ids-v1",
+          "reason": "Requires actual document IDs; chunk IDs are not counted as distinct documents"
+        },
+        {
+          "name": "policy_compliance",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "case-behaviour-contract-v1",
+          "reason": "Only the explicitly asserted behaviour is covered"
+        },
+        {
+          "name": "tool_correctness",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "tool-trajectory-v1",
+          "reason": "Complete tool arguments/results are not captured by the public evidence contract"
+        },
+        {
+          "name": "task_success",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "case-observable-outcome-v1",
+          "reason": "Knowledge task success requires reviewed required facts"
+        },
+        {
+          "name": "answer_transformation_count",
+          "value": 0,
+          "unit": "count",
+          "status": "evaluated",
+          "method": "decision-v1",
+          "reason": "Count of fallback/qualification transformations; not a model repair count"
+        },
+        {
+          "name": "input_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "output_tokens",
+          "value": null,
+          "unit": "count",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "total_cost",
+          "value": null,
+          "unit": "USD",
+          "status": "not-evaluated",
+          "method": "provider-observation-usage",
+          "reason": "Only captured usage; absent values are not zero"
+        },
+        {
+          "name": "required_fact_coverage",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "contradicted_claims",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "citation_semantic_support",
+          "value": null,
+          "unit": "ratio",
+          "status": "not-evaluated",
+          "method": "offline-reviewed-reference",
+          "reason": "Run the offline evaluator; reference-dependent metrics require approved expectations"
+        },
+        {
+          "name": "ragas_faithfulness",
+          "value": 1,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "ragas-0.4.3-collections-retry-4096tokens-120s",
+          "reason": "Scored the report's captured contexts; inspect contextOrigin and generatorContextCaptured for evidence scope"
+        },
+        {
+          "name": "ragas_context_precision",
+          "value": 0.07142857142142857,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "ragas-0.4.3-collections-retry-4096tokens-120s",
+          "reason": "Scored the report's captured contexts; inspect contextOrigin and generatorContextCaptured for evidence scope"
+        },
+        {
+          "name": "ragas_context_recall",
+          "value": 0.8,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "ragas-0.4.3-collections-retry-4096tokens-120s",
+          "reason": "Scored the report's captured contexts; inspect contextOrigin and generatorContextCaptured for evidence scope"
+        },
+        {
+          "name": "ragas_factual_correctness",
+          "value": 0.68,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "ragas-0.4.3-collections-retry-4096tokens-120s",
+          "reason": "Scored the report's captured contexts; inspect contextOrigin and generatorContextCaptured for evidence scope"
+        },
+        {
+          "name": "ragas_answer_relevancy",
+          "value": 0.5328928040766604,
+          "unit": "ratio",
+          "status": "evaluated",
+          "method": "ragas-0.4.3-collections-retry-4096tokens-120s",
+          "reason": "Scored the report's captured contexts; inspect contextOrigin and generatorContextCaptured for evidence scope"
+        }
+      ],
+      "failures": [],
+      "evidence": null,
+      "sources": [
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/129273",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": null,
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/124410",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": null,
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/54896",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": null,
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/1019",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/50068",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/128339",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/128339",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/127200",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/116036",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/114277",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": null,
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/129642",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/124478",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/113283",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/100775",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/56461",
+          "text": ""
+        },
+        {
+          "label": "Source",
+          "url": "https://help.netflix.com/en/node/111784",
+          "text": ""
+        }
+      ],
+      "expectedFacts": [
+        "Distinguish relocation from temporary travel",
+        "Country change: cancel, wait until membership ends, restart in new country",
+        "Household: primary home internet",
+        "SMS reset requires already-linked phone number",
+        "Use official support if account contact methods are inaccessible",
+        "No real mutation or sensitive credential collection"
+      ],
+      "reviewStatus": "approved",
+      "reviewKind": "ai-source",
+      "reviewer": "Codex",
+      "langfuseExported": true
+    }
+  ]
+}
