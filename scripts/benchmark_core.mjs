@@ -32,7 +32,8 @@ export function evaluateCase(test, payload, elapsedMs) {
   const scopes = privateCaptures.flatMap(c => c.searches.map(s => s.scopeValid));
   evaluated('authorization_scope_compliance', scopes.length && scopes.every(v => typeof v === 'boolean') ? Number(scopes.every(Boolean)) : null, 'returned-row-scope-membership-v1', 'Checks returned row membership against the actual scoped request; does not replace an authorization security audit');
   evaluated('returned_count', e.retrieval?.returnedCount, 'returned-citations-v1', 'Returned citations may be a subset of retrieval results', 'count');
-  evaluated('unique_document_count', snapshot ? new Set(ids).size : null, 'captured-document-ids-v1', 'Only stable upstream IDs can support cross-run document labels', 'count');
+  const documentIds = privateCaptures.flatMap(c => c.passages.map(p => p.documentId));
+  evaluated('unique_document_count', documentIds.length && documentIds.every(id => typeof id === 'string') ? new Set(documentIds).size : null, 'captured-document-ids-v1', 'Requires actual document IDs; chunk IDs are not counted as distinct documents', 'count');
   let behaviour = true;
   for (const [actual, expected, label] of [[e.guardrail?.decision, test.expected.guardrail, 'guardrail'], [e.handoff?.status, test.expected.handoff, 'handoff']]) {
     if (expected !== undefined && actual !== expected) { behaviour = false; failures.push(`${label}: expected ${expected}, received ${actual ?? 'not captured'}`); }
