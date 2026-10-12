@@ -206,3 +206,16 @@ describe("live exact-run RAG evaluation", () => {
     expect(result.error).toContain("503");
   });
 });
+
+it("rejects unexplained low faithfulness and retries the same exact evidence", async () => {
+  const complete = { faithfulness: 1, responseRelevancy: 1, contextPrecision: 1, contextRecall: null, factualCorrectness: null,
+    reasons: { faithfulness: "The exact source statement is supported", responseRelevancy: "Direct answer", contextPrecision: "Relevant source" },
+    unsupportedClaims: [], relevantContextIndices: [1] };
+  const fetcher = vi.fn().mockResolvedValueOnce(jsonResponse({ ...complete, faithfulness: 0 }))
+    .mockResolvedValueOnce(jsonResponse(complete));
+  const result = await evaluateExactRun({ question: "What does the source instruct?", answer: "Select Watch Temporarily.", contexts: ["Select Watch Temporarily."],
+    endpoint: "https://test.openai.azure.com", apiKey: "test", fetcher });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(result.status).toBe("passed");
+  expect(result.metrics.faithfulness).toBe(1);
+});
