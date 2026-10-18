@@ -35,7 +35,7 @@ These identifiers are not authorization substitutes. The Edge Functions must con
 - In-memory Edge Function rate limiting is best effort, not globally distributed abuse protection.
 - Public deployment can consume downstream quotas; retain platform quotas, origin validation and gateway protections.
 - Published identifiers reveal integration structure even though they do not grant server privileges.
-- No `LICENSE` file is currently present; public visibility does not grant reuse rights.
+- The public Lab source is licensed under [Apache License 2.0](../LICENSE); the license does not grant rights to third-party trademarks, including the Netflix name and logo, or to private Persora commercial source code.
 - The Netflix name and logo are third-party marks used for an independent technical demonstration.
 
 ## Release checklist
