@@ -122,7 +122,9 @@ For a short, reliable product walkthrough, use the [interview demonstration runb
 
 The repository contains browser-safe public identifiers but no service-role, Azure OpenAI, Langfuse-secret or Playwright-MCP credentials. See [Public safety](docs/PUBLIC_SAFETY.md) and [Security policy](SECURITY.md).
 
-The repository is public for inspection and currently has no open-source `LICENSE`. Public visibility does not grant permission to reuse the code or brand assets.
+The source code in this public Agentic Support Lab repository is licensed under the [Apache License, Version 2.0](LICENSE). See the license for permissions and conditions. Third-party materials, including Netflix names and marks, remain subject to their respective owners' rights; Persora names and brand assets are not granted as trademarks by the Apache license.
+
+This license applies only to this standalone public Lab repository. It does **not** apply to the private Persora commercial application (`agent.persora.ai`) or its source code.
 
 
 ## Fresh-answer evaluation
